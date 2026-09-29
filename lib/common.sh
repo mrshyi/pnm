@@ -242,6 +242,9 @@ pnm_main() {
             }
             pnm_check
             ;;
+        node)
+            pnm_node_command "${args[@]}"
+            ;;
         install)
             pnm_install "${args[@]}"
             ;;

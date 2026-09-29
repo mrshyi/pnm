@@ -73,6 +73,22 @@ pnm_print_help() {
             printf '%s\n' 'Usage: pnm [--json|--quiet] check' '' 'Run read-only policy and health checks. Exit: 0 PASS, 1 WARN, 2 FAIL.'
             return 0
             ;;
+        node)
+            printf '%s\n' \
+                'Usage: pnm node <init|change|show|validate>' \
+                '       pnm node add [options]' \
+                '       pnm node info' '' \
+                'Manage the one desired node configuration on this VPS.' \
+                'init/add creates it; change replaces an uncommitted configuration.' \
+                'Put global --json before node show/validate for machine-readable output.' '' \
+                'Init/change options:' \
+                '  --region NAME --timezone ZONE --server-name NAME --target HOST:PORT' \
+                '  --xray-port PORT --hy2-port PORT --tls-mode selfsigned-pin|external-ca' \
+                '  --xray-version VERSION --xray-sha256 SHA256' \
+                '  --hy2-version VERSION --hy2-sha256 SHA256' \
+                '  --force       Allow init to replace an uncommitted configuration.'
+            return 0
+            ;;
         install)
             printf '%s\n' 'Usage: pnm install [--dry-run]' '       pnm install --apply --yes' '' 'Install the approved Xray and Hysteria2 cores using the configured node state.'
             return 0
@@ -100,6 +116,9 @@ Implemented:
   version              Show PNM version
   status               Show Xray and Hysteria2 status
   check                Run read-only health and policy checks
+  node init            Initialize the single VPS node configuration
+  node show            Show the node configuration without secrets
+  node validate        Validate node.conf and versions.conf
   install              Install both approved proxy cores
   restart <core>       Restart xray or hy2
   log <core>           Read or follow one Core's systemd journal

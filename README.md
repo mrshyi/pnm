@@ -15,6 +15,10 @@ Supported platforms: Debian 12/13 and Ubuntu 22.04/24.04, amd64, with systemd.
 
 - `pnm status [--json]`: read-only Xray and Hysteria2 status
 - `pnm check [--quiet|--json]`: read-only proxy health checks
+- `pnm node init`: interactively initialize the single VPS node
+- `pnm node change`: replace an uncommitted single-node configuration
+- `pnm --json node show`: show the desired node state without secrets
+- `pnm --json node validate`: validate both desired-state files
 - `pnm install --apply --yes`: install/configure both cores using approved versions
 - `pnm apply xray|hy2`: transactionally apply one rendered configuration
 - `pnm restart xray|hy2`, `pnm log xray|hy2`: operate on one core only
@@ -28,11 +32,27 @@ Each update changes one core per command. Failed configuration changes and updat
 ## Run from source
 
 ```bash
+sudo ./bin/pnm node init
 sudo ./bin/pnm install --apply --yes
 ./bin/pnm check
 ```
 
 The command above runs PNM from a source checkout. It requires a clean supported host, root privileges, and the fixed asset versions in `versions.conf`. It does not modify SSH or UFW. Use `pnm install --dry-run` first when you need to review the preflight and installation plan.
+
+## Configure one node
+
+PNM manages one node per VPS. Initialize its desired state before the first core installation:
+
+```bash
+sudo pnm node init
+sudo pnm node validate
+sudo pnm install --dry-run
+sudo pnm install --apply --yes
+```
+
+`pnm node init` prompts for the region, timezone, REALITY server name and target, listen ports, TLS mode, and the exact pinned Xray/Hysteria2 versions with their independently verified SHA-256 values. It writes `/etc/pnm/node.conf` and `/etc/pnm/versions.conf` transactionally with mode `0600`. Do not enter placeholders such as `<VERSION>` or `<SHA256>`; angle brackets are intentionally rejected as unsafe configuration values.
+
+For automation, pass the same values as flags. `pnm node add` is an alias for `init`; `pnm node info` is an alias for `show`. `pnm node change` only replaces a node that has not yet been committed by a successful installation. After the node is marked configured, use the core-specific `apply`/`update` workflow or a reviewed backup rather than editing the desired state behind the running services.
 
 ## Install PNM on a VPS
 
@@ -44,7 +64,7 @@ curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
   --output /tmp/pnm-install.sh && sudo bash /tmp/pnm-install.sh
 ```
 
-The installer downloads the repository archive from `PNM_REF` (default: `main`). For a reproducible deployment, set `PNM_REF` to a reviewed tag or commit and inspect the downloaded script before running it. After installation, run `sudo pnm install --apply --yes` to configure both proxy cores.
+The installer downloads the repository archive from `PNM_REF` (default: `main`). For a reproducible deployment, set `PNM_REF` to a reviewed tag or commit and inspect the downloaded script before running it. After installation, run `sudo pnm node init`, validate the generated configuration, then run `sudo pnm install --apply --yes` to configure both proxy cores.
 
 ## Tests
 

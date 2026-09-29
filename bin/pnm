@@ -17,6 +17,8 @@ source "$PNM_LIB_DIR/common.sh"
 source "$PNM_LIB_DIR/output.sh"
 # shellcheck source=../lib/config.sh
 source "$PNM_LIB_DIR/config.sh"
+# shellcheck source=../lib/node.sh
+source "$PNM_LIB_DIR/node.sh"
 # shellcheck source=../lib/lock.sh
 source "$PNM_LIB_DIR/lock.sh"
 # shellcheck source=../lib/transaction.sh
