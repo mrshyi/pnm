@@ -94,7 +94,7 @@ pnm_check_platform() {
     if pnm_platform_supported; then
         pnm_check_add platform OK 'Supported platform' "$summary"
     else
-        pnm_check_add platform FAIL 'Unsupported platform' "expected Debian 13 amd64; got $summary"
+        pnm_check_add platform FAIL 'Unsupported platform' "expected $(pnm_platform_support_policy); got $summary"
     fi
 }
 

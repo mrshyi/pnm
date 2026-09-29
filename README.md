@@ -1,13 +1,15 @@
 # Proxy Node Manager
 
-**Release status: 0.16.0-rc.1 (release candidate).** The automated checks pass, but production readiness still requires a Debian 13 deployment, reboot-persistence checks, and external tests of both protocols.
+**Release status: 0.16.0-rc.1 (release candidate).** The automated checks pass, but production readiness still requires a supported-distribution deployment, reboot-persistence checks, and external tests of both protocols.
 
-PNM manages the lifecycle of two independent proxy cores on one Debian 13 VPS:
+PNM manages the lifecycle of two independent proxy cores on one supported Debian or Ubuntu VPS:
 
 - Xray-core: VLESS + REALITY on TCP/443
 - Official Hysteria2: QUIC on UDP/8443
 
 PNM does not forward traffic. It installs pinned binaries, renders and validates each configuration, controls the corresponding systemd service, and manages secret-bearing backups.
+
+Supported platforms: Debian 12/13 and Ubuntu 22.04/24.04, amd64, with systemd.
 
 ## Commands
 
@@ -30,7 +32,7 @@ sudo ./bin/pnm install --apply --yes
 ./bin/pnm check
 ```
 
-The command above runs PNM from a source checkout. It requires a clean Debian 13 host, root privileges, and the fixed asset versions in `versions.conf`. It does not modify SSH or UFW. Use `pnm install --dry-run` first when you need to review the preflight and installation plan.
+The command above runs PNM from a source checkout. It requires a clean supported host, root privileges, and the fixed asset versions in `versions.conf`. It does not modify SSH or UFW. Use `pnm install --dry-run` first when you need to review the preflight and installation plan.
 
 ## Install PNM on a VPS
 
@@ -57,7 +59,7 @@ make release-check
 - Read [SECURITY.md](SECURITY.md) before reporting a vulnerability.
 - Review [CHANGELOG.md](CHANGELOG.md) for release changes and [docs/RELEASING.md](docs/RELEASING.md) before creating a tag.
 - Backups contain credentials and private keys. Keep them out of GitHub issues, pull requests, and source control.
-- PNM is intended for Debian 13 with systemd. The test suite does not replace live VPS or external client acceptance tests.
+- PNM is intended for the supported Debian/Ubuntu versions above with systemd. The test suite does not replace live VPS or external client acceptance tests.
 
 Default configuration paths:
 

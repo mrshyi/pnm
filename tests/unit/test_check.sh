@@ -20,7 +20,7 @@ run_fake_pnm() {
         PNM_TEST_SYSTEMD=1 \
         PNM_FAKE_PROFILE="${PNM_FAKE_PROFILE:-pass}" \
         PNM_CONFIG_DIR="$TEST_ROOT/fixtures/config-valid" \
-        PNM_OS_RELEASE_FILE="$TEST_ROOT/fixtures/os-release-debian13" \
+        PNM_OS_RELEASE_FILE="${PNM_OS_RELEASE_FILE:-$TEST_ROOT/fixtures/os-release-debian-13}" \
         PNM_XRAY_CONFIG="$TEST_ROOT/fixtures/xray-config.json" \
         PNM_HY2_CONFIG="$TEST_ROOT/fixtures/hysteria-config.yaml" \
         "$PROJECT_ROOT/bin/pnm" "$@"
@@ -48,8 +48,18 @@ test_json_contains_no_fixture_password() {
     assert_not_contains "$RUN_OUTPUT" 'REDACTED_FIXTURE'
 }
 
+test_supported_platform_matrix() {
+    local fixture
+
+    for fixture in os-release-debian-12 os-release-debian-13 os-release-ubuntu-22.04 os-release-ubuntu-24.04; do
+        PNM_OS_RELEASE_FILE="$TEST_ROOT/fixtures/$fixture" PNM_FAKE_PROFILE=pass run_capture run_fake_pnm --quiet check
+        assert_eq 0 "$RUN_RC" "supported platform fixture should pass: $fixture" || return 1
+    done
+}
+
 run_test 'fully healthy fixture returns PASS JSON' test_passing_check_json
 run_test 'FAIL takes exit-code precedence' test_failure_exit_precedence
 run_test 'quiet mode emits no stdout' test_quiet_has_no_stdout
 run_test 'check output does not expose config secret fixture' test_json_contains_no_fixture_password
+run_test 'supported Debian and Ubuntu platform matrix passes' test_supported_platform_matrix
 finish_tests

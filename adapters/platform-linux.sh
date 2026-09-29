@@ -45,8 +45,20 @@ pnm_platform_summary() {
     printf '%s %s (%s)\n' "$id" "$version" "$arch"
 }
 
+pnm_platform_support_policy() {
+    printf '%s\n' 'Debian 12/13 or Ubuntu 22.04/24.04 amd64'
+}
+
 pnm_platform_supported() {
-    [[ "$(pnm_platform_id 2>/dev/null || true)" == "debian" ]] || return 1
-    [[ "$(pnm_platform_version_id 2>/dev/null || true)" == "13" ]] || return 1
-    [[ "$(pnm_platform_arch 2>/dev/null || true)" == "x86_64" ]]
+    local id version arch
+
+    id="$(pnm_platform_id 2>/dev/null || true)"
+    version="$(pnm_platform_version_id 2>/dev/null || true)"
+    arch="$(pnm_platform_arch 2>/dev/null || true)"
+
+    [[ "$arch" == 'x86_64' ]] || return 1
+    case "$id:$version" in
+        debian:12 | debian:13 | ubuntu:22.04 | ubuntu:24.04) return 0 ;;
+        *) return 1 ;;
+    esac
 }

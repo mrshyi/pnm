@@ -50,7 +50,7 @@ pnm_preflight_platform() {
     if pnm_platform_supported; then
         pnm_preflight_add platform OK 'Supported installation platform' "$(pnm_platform_summary)"
     else
-        pnm_preflight_add platform FAIL 'Unsupported installation platform' "expected Debian 13 amd64; got $(pnm_platform_summary)"
+        pnm_preflight_add platform FAIL 'Unsupported installation platform' "expected $(pnm_platform_support_policy); got $(pnm_platform_summary)"
     fi
 }
 

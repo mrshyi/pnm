@@ -31,8 +31,8 @@ source "$PNM_LIB_DIR/service.sh"
 source "$PNM_LIB_DIR/tls.sh"
 # shellcheck source=../lib/sandbox-install.sh
 source "$PNM_LIB_DIR/sandbox-install.sh"
-# shellcheck source=../adapters/platform-debian.sh
-source "$PNM_ADAPTER_DIR/platform-debian.sh"
+# shellcheck source=../adapters/platform-linux.sh
+source "$PNM_ADAPTER_DIR/platform-linux.sh"
 # shellcheck source=../adapters/systemd.sh
 source "$PNM_ADAPTER_DIR/systemd.sh"
 # shellcheck source=../lib/lifecycle.sh
