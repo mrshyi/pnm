@@ -1,5 +1,113 @@
 #!/usr/bin/env bash
 
+readonly PNM_NODE_DEFAULT_REGION='vps'
+readonly PNM_NODE_DEFAULT_TIMEZONE='UTC'
+readonly PNM_NODE_DEFAULT_XRAY_SERVER_NAME='www.microsoft.com'
+readonly PNM_NODE_DEFAULT_XRAY_TARGET='www.microsoft.com:443'
+readonly PNM_NODE_DEFAULT_XRAY_PORT='443'
+readonly PNM_NODE_DEFAULT_HY2_PORT='8443'
+readonly PNM_NODE_DEFAULT_HY2_TLS_MODE='selfsigned-pin'
+
+declare -Ag PNM_NODE_LATEST_VERSIONS=()
+
+pnm_node_fetch_url() {
+    local url="${1:?URL required}"
+    local destination="${2:?destination required}"
+
+    pnm_command_exists curl || return "$PNM_EXIT_UNAVAILABLE"
+    curl --fail --silent --show-error --location \
+        --proto '=https' --tlsv1.2 --connect-timeout 15 --retry 2 \
+        --header 'Accept: application/vnd.github+json' \
+        --header 'User-Agent: pnm-node-init' \
+        "$url" --output "$destination"
+}
+
+pnm_node_parse_release_tag() {
+    local json_file="${1:?release metadata file required}"
+
+    [[ -r "$json_file" ]] || return "$PNM_EXIT_CONFIG"
+    sed 's/[{},]/\n/g' "$json_file" |
+        awk -F '"' '$2 == "tag_name" { print $4; exit }'
+}
+
+pnm_node_parse_xray_sha256() {
+    local digest_file="${1:?Xray digest file required}"
+
+    [[ -r "$digest_file" ]] || return "$PNM_EXIT_CONFIG"
+    awk -F '=' 'tolower($1) ~ /256/ {
+        gsub(/[[:space:]\r]/, "", $2)
+        print tolower($2)
+        exit
+    }' "$digest_file"
+}
+
+pnm_node_parse_hysteria_sha256() {
+    local digest_file="${1:?Hysteria2 hash file required}"
+    local asset_name='hysteria-linux-amd64'
+
+    [[ -r "$digest_file" ]] || return "$PNM_EXIT_CONFIG"
+    awk -v asset="$asset_name" '
+        {
+            line=$0
+            gsub(/\r/, "", line)
+            file=$NF
+            sub(/^\*/, "", file)
+            sub(/^.*\//, "", file)
+            if (file == asset) {
+                print tolower($1)
+                exit
+            }
+            if (index(line, "(" asset ")") && line ~ /=/) {
+                sub(/^.*=[[:space:]]*/, "", line)
+                print tolower(line)
+                exit
+            }
+        }
+    ' "$digest_file"
+}
+
+pnm_node_fetch_latest_versions() {
+    local temp_dir xray_metadata hysteria_metadata xray_digest hysteria_digest
+    local xray_tag hysteria_tag xray_version hysteria_version xray_sha256 hysteria_sha256
+    local release_channel='latest'
+    local xray_api_url="https://api.github.com/repos/XTLS/Xray-core/releases/${release_channel}"
+    local hysteria_api_url="https://api.github.com/repos/apernet/hysteria/releases/${release_channel}"
+
+    PNM_NODE_LATEST_VERSIONS=()
+    temp_dir="$(pnm_make_temp_dir)" || return $?
+    xray_metadata="$temp_dir/xray-release.json"
+    hysteria_metadata="$temp_dir/hysteria-release.json"
+    xray_digest="$temp_dir/xray.dgst"
+    hysteria_digest="$temp_dir/hysteria.hashes"
+
+    pnm_node_fetch_url "$xray_api_url" "$xray_metadata" || return "$PNM_EXIT_UNAVAILABLE"
+    xray_tag="$(pnm_node_parse_release_tag "$xray_metadata")" || return "$PNM_EXIT_CONFIG"
+    [[ "$xray_tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([._+-][A-Za-z0-9.-]+)?$ ]] || return "$PNM_EXIT_CONFIG"
+    xray_version="$xray_tag"
+    pnm_node_fetch_url \
+        "https://github.com/XTLS/Xray-core/releases/download/${xray_version}/Xray-linux-64.zip.dgst" \
+        "$xray_digest" || return "$PNM_EXIT_UNAVAILABLE"
+    xray_sha256="$(pnm_node_parse_xray_sha256 "$xray_digest")" || return "$PNM_EXIT_CONFIG"
+    pnm_validate_sha256 "$xray_sha256" || return "$PNM_EXIT_CONFIG"
+
+    pnm_node_fetch_url "$hysteria_api_url" "$hysteria_metadata" || return "$PNM_EXIT_UNAVAILABLE"
+    hysteria_tag="$(pnm_node_parse_release_tag "$hysteria_metadata")" || return "$PNM_EXIT_CONFIG"
+    hysteria_version="${hysteria_tag##*/}"
+    [[ "$hysteria_version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([._+-][A-Za-z0-9.-]+)?$ ]] || return "$PNM_EXIT_CONFIG"
+    pnm_node_fetch_url \
+        "https://github.com/apernet/hysteria/releases/download/app%2F${hysteria_version}/hashes.txt" \
+        "$hysteria_digest" || return "$PNM_EXIT_UNAVAILABLE"
+    hysteria_sha256="$(pnm_node_parse_hysteria_sha256 "$hysteria_digest")" || return "$PNM_EXIT_CONFIG"
+    pnm_validate_sha256 "$hysteria_sha256" || return "$PNM_EXIT_CONFIG"
+
+    PNM_NODE_LATEST_VERSIONS=(
+        [XRAY_VERSION]="$xray_version"
+        [XRAY_SHA256]="$xray_sha256"
+        [HY2_VERSION]="$hysteria_version"
+        [HY2_SHA256]="$hysteria_sha256"
+    )
+}
+
 pnm_node_prompt() {
     local target_name="${1:?target variable required}"
     local prompt="${2:?prompt required}"
@@ -136,12 +244,31 @@ pnm_node_init() {
         [[ -n "$hy2_version" ]] || hy2_version="${existing_versions[HY2_VERSION]}"
         [[ -n "$hy2_sha256" ]] || hy2_sha256="${existing_versions[HY2_SHA256]}"
     fi
-    [[ -n "$timezone" ]] || timezone='UTC'
-    [[ -n "$xray_port" ]] || xray_port='443'
-    [[ -n "$hy2_port" ]] || hy2_port='8443'
-    [[ -n "$tls_mode" ]] || tls_mode='selfsigned-pin'
+    [[ -n "$region" ]] || region="$PNM_NODE_DEFAULT_REGION"
+    [[ -n "$timezone" ]] || timezone="$PNM_NODE_DEFAULT_TIMEZONE"
+    [[ -n "$xray_port" ]] || xray_port="$PNM_NODE_DEFAULT_XRAY_PORT"
+    [[ -n "$server_name" ]] || server_name="$PNM_NODE_DEFAULT_XRAY_SERVER_NAME"
+    [[ -n "$target" ]] || target="$PNM_NODE_DEFAULT_XRAY_TARGET"
+    [[ -n "$hy2_port" ]] || hy2_port="$PNM_NODE_DEFAULT_HY2_PORT"
+    [[ -n "$tls_mode" ]] || tls_mode="$PNM_NODE_DEFAULT_HY2_TLS_MODE"
 
     if pnm_is_tty; then
+        if { [[ -z "$xray_version" && -z "$xray_sha256" ]] ||
+            [[ -z "$hy2_version" && -z "$hy2_sha256" ]]; }; then
+            if pnm_node_fetch_latest_versions; then
+                [[ -n "$xray_version" || -n "$xray_sha256" ]] || {
+                    xray_version="${PNM_NODE_LATEST_VERSIONS[XRAY_VERSION]}"
+                    xray_sha256="${PNM_NODE_LATEST_VERSIONS[XRAY_SHA256]}"
+                }
+                [[ -n "$hy2_version" || -n "$hy2_sha256" ]] || {
+                    hy2_version="${PNM_NODE_LATEST_VERSIONS[HY2_VERSION]}"
+                    hy2_sha256="${PNM_NODE_LATEST_VERSIONS[HY2_SHA256]}"
+                }
+                pnm_info 'Latest stable Core versions and official SHA-256 values loaded; pressing Enter keeps them pinned.'
+            else
+                pnm_warn 'Latest stable Core metadata could not be fetched; enter both pinned version and SHA-256 pairs manually.'
+            fi
+        fi
         pnm_node_prompt region 'Node region (lowercase, for example osaka)' "$region" || return $?
         pnm_node_prompt timezone 'Timezone' "$timezone" || return $?
         pnm_node_prompt server_name 'Xray REALITY server name' "$server_name" || return $?
@@ -149,10 +276,10 @@ pnm_node_init() {
         pnm_node_prompt xray_port 'Xray listen port' "$xray_port" || return $?
         pnm_node_prompt hy2_port 'Hysteria2 listen port' "$hy2_port" || return $?
         pnm_node_prompt tls_mode 'Hysteria2 TLS mode (selfsigned-pin|external-ca)' "$tls_mode" || return $?
-        pnm_node_prompt xray_version 'Pinned Xray version, for example v1.8.24' "$xray_version" || return $?
-        pnm_node_prompt xray_sha256 'Xray SHA-256' "$xray_sha256" || return $?
-        pnm_node_prompt hy2_version 'Pinned Hysteria2 version, for example v2.6.3' "$hy2_version" || return $?
-        pnm_node_prompt hy2_sha256 'Hysteria2 SHA-256' "$hy2_sha256" || return $?
+        pnm_node_prompt xray_version 'Pinned Xray version (latest stable if shown)' "$xray_version" || return $?
+        pnm_node_prompt xray_sha256 'Xray SHA-256 (official checksum if shown)' "$xray_sha256" || return $?
+        pnm_node_prompt hy2_version 'Pinned Hysteria2 version (latest stable if shown)' "$hy2_version" || return $?
+        pnm_node_prompt hy2_sha256 'Hysteria2 SHA-256 (official checksum if shown)' "$hy2_sha256" || return $?
     else
         pnm_node_require_value '--region' "$region" || return $?
         pnm_node_require_value '--server-name' "$server_name" || return $?
