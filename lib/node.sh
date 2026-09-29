@@ -9,6 +9,7 @@ readonly PNM_NODE_DEFAULT_HY2_PORT='8443'
 readonly PNM_NODE_DEFAULT_HY2_TLS_MODE='selfsigned-pin'
 
 declare -Ag PNM_NODE_LATEST_VERSIONS=()
+PNM_NODE_LATEST_ERROR=''
 
 pnm_node_fetch_url() {
     local url="${1:?URL required}"
@@ -66,39 +67,111 @@ pnm_node_parse_hysteria_sha256() {
     ' "$digest_file"
 }
 
+pnm_node_fetch_redirect_tag() {
+    local release_url="${1:?release URL required}"
+    local final_url tag
+
+    pnm_command_exists curl || return "$PNM_EXIT_UNAVAILABLE"
+    final_url="$(curl --fail --silent --show-error --location \
+        --proto '=https' --tlsv1.2 --connect-timeout 15 --retry 2 \
+        --header 'User-Agent: pnm-node-init' --write-out '%{url_effective}' \
+        --output /dev/null "$release_url")" || return "$PNM_EXIT_UNAVAILABLE"
+    case "$final_url" in
+        https://github.com/*/releases/tag/*)
+            tag="${final_url#*/releases/tag/}"
+            tag="${tag%%\?*}"
+            tag="${tag//%2F//}"
+            tag="${tag//%2f//}"
+            [[ -n "$tag" ]] || return "$PNM_EXIT_CONFIG"
+            printf '%s\n' "$tag"
+            ;;
+        *) return "$PNM_EXIT_CONFIG" ;;
+    esac
+}
+
+pnm_node_resolve_latest_tag() {
+    local api_url="${1:?API URL required}"
+    local release_url="${2:?release URL required}"
+    local metadata_file="${3:?metadata file required}"
+    local tag
+
+    # GitHub API is preferred because it returns structured metadata. The
+    # public release redirect is a rate-limit-resistant fallback for VPSes
+    # whose egress policy blocks or throttles unauthenticated API requests.
+    if pnm_node_fetch_url "$api_url" "$metadata_file" 2>/dev/null; then
+        tag="$(pnm_node_parse_release_tag "$metadata_file")" || true
+        [[ -n "$tag" ]] && {
+            printf '%s\n' "$tag"
+            return "$PNM_EXIT_OK"
+        }
+    fi
+    pnm_node_fetch_redirect_tag "$release_url"
+}
+
 pnm_node_fetch_latest_versions() {
     local temp_dir xray_metadata hysteria_metadata xray_digest hysteria_digest
     local xray_tag hysteria_tag xray_version hysteria_version xray_sha256 hysteria_sha256
     local release_channel='latest'
     local xray_api_url="https://api.github.com/repos/XTLS/Xray-core/releases/${release_channel}"
     local hysteria_api_url="https://api.github.com/repos/apernet/hysteria/releases/${release_channel}"
+    local xray_release_url="https://github.com/XTLS/Xray-core/releases/${release_channel}"
+    local hysteria_release_url="https://github.com/apernet/hysteria/releases/${release_channel}"
 
     PNM_NODE_LATEST_VERSIONS=()
+    PNM_NODE_LATEST_ERROR=''
     temp_dir="$(pnm_make_temp_dir)" || return $?
     xray_metadata="$temp_dir/xray-release.json"
     hysteria_metadata="$temp_dir/hysteria-release.json"
     xray_digest="$temp_dir/xray.dgst"
     hysteria_digest="$temp_dir/hysteria.hashes"
 
-    pnm_node_fetch_url "$xray_api_url" "$xray_metadata" || return "$PNM_EXIT_UNAVAILABLE"
-    xray_tag="$(pnm_node_parse_release_tag "$xray_metadata")" || return "$PNM_EXIT_CONFIG"
-    [[ "$xray_tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([._+-][A-Za-z0-9.-]+)?$ ]] || return "$PNM_EXIT_CONFIG"
+    xray_tag="$(pnm_node_resolve_latest_tag "$xray_api_url" "$xray_release_url" "$xray_metadata")" || {
+        PNM_NODE_LATEST_ERROR='Xray stable release metadata is unavailable'
+        return "$PNM_EXIT_UNAVAILABLE"
+    }
+    [[ "$xray_tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([._+-][A-Za-z0-9.-]+)?$ ]] || {
+        PNM_NODE_LATEST_ERROR='Xray stable release tag is invalid'
+        return "$PNM_EXIT_CONFIG"
+    }
     xray_version="$xray_tag"
     pnm_node_fetch_url \
         "https://github.com/XTLS/Xray-core/releases/download/${xray_version}/Xray-linux-64.zip.dgst" \
-        "$xray_digest" || return "$PNM_EXIT_UNAVAILABLE"
-    xray_sha256="$(pnm_node_parse_xray_sha256 "$xray_digest")" || return "$PNM_EXIT_CONFIG"
-    pnm_validate_sha256 "$xray_sha256" || return "$PNM_EXIT_CONFIG"
+        "$xray_digest" || {
+        PNM_NODE_LATEST_ERROR='Xray official SHA-256 file is unavailable'
+        return "$PNM_EXIT_UNAVAILABLE"
+    }
+    xray_sha256="$(pnm_node_parse_xray_sha256 "$xray_digest")" || {
+        PNM_NODE_LATEST_ERROR='Xray official SHA-256 file is invalid'
+        return "$PNM_EXIT_CONFIG"
+    }
+    pnm_validate_sha256 "$xray_sha256" || {
+        PNM_NODE_LATEST_ERROR='Xray official SHA-256 value is invalid'
+        return "$PNM_EXIT_CONFIG"
+    }
 
-    pnm_node_fetch_url "$hysteria_api_url" "$hysteria_metadata" || return "$PNM_EXIT_UNAVAILABLE"
-    hysteria_tag="$(pnm_node_parse_release_tag "$hysteria_metadata")" || return "$PNM_EXIT_CONFIG"
+    hysteria_tag="$(pnm_node_resolve_latest_tag "$hysteria_api_url" "$hysteria_release_url" "$hysteria_metadata")" || {
+        PNM_NODE_LATEST_ERROR='Hysteria2 stable release metadata is unavailable'
+        return "$PNM_EXIT_UNAVAILABLE"
+    }
     hysteria_version="${hysteria_tag##*/}"
-    [[ "$hysteria_version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([._+-][A-Za-z0-9.-]+)?$ ]] || return "$PNM_EXIT_CONFIG"
+    [[ "$hysteria_version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([._+-][A-Za-z0-9.-]+)?$ ]] || {
+        PNM_NODE_LATEST_ERROR='Hysteria2 stable release tag is invalid'
+        return "$PNM_EXIT_CONFIG"
+    }
     pnm_node_fetch_url \
         "https://github.com/apernet/hysteria/releases/download/app%2F${hysteria_version}/hashes.txt" \
-        "$hysteria_digest" || return "$PNM_EXIT_UNAVAILABLE"
-    hysteria_sha256="$(pnm_node_parse_hysteria_sha256 "$hysteria_digest")" || return "$PNM_EXIT_CONFIG"
-    pnm_validate_sha256 "$hysteria_sha256" || return "$PNM_EXIT_CONFIG"
+        "$hysteria_digest" || {
+        PNM_NODE_LATEST_ERROR='Hysteria2 official SHA-256 file is unavailable'
+        return "$PNM_EXIT_UNAVAILABLE"
+    }
+    hysteria_sha256="$(pnm_node_parse_hysteria_sha256 "$hysteria_digest")" || {
+        PNM_NODE_LATEST_ERROR='Hysteria2 official SHA-256 file is invalid'
+        return "$PNM_EXIT_CONFIG"
+    }
+    pnm_validate_sha256 "$hysteria_sha256" || {
+        PNM_NODE_LATEST_ERROR='Hysteria2 official SHA-256 value is invalid'
+        return "$PNM_EXIT_CONFIG"
+    }
 
     PNM_NODE_LATEST_VERSIONS=(
         [XRAY_VERSION]="$xray_version"
@@ -224,7 +297,7 @@ pnm_node_init() {
     fi
 
     if [[ -f "$node_file" && ! -L "$node_file" ]]; then
-        if pnm_load_node_config existing_node && pnm_validate_node_config existing_node; then
+        if pnm_load_node_config existing_node 2>/dev/null && pnm_validate_node_config existing_node; then
             [[ -n "$region" ]] || region="${existing_node[NODE_REGION]}"
             [[ -n "$timezone" ]] || timezone="${existing_node[TIMEZONE]}"
             [[ -n "$xray_port" ]] || xray_port="${existing_node[XRAY_PORT]}"
@@ -236,13 +309,19 @@ pnm_node_init() {
                 pnm_error 'The managed node is already configured; use core-specific apply commands or restore a reviewed backup.'
                 return "$PNM_EXIT_CONFIG"
             }
+        else
+            pnm_warn 'Existing node.conf is invalid; --force will replace it after successful validation.'
         fi
     fi
-    if [[ -f "$versions_file" && ! -L "$versions_file" ]] && pnm_load_versions_config existing_versions && pnm_validate_versions_config existing_versions; then
-        [[ -n "$xray_version" ]] || xray_version="${existing_versions[XRAY_VERSION]}"
-        [[ -n "$xray_sha256" ]] || xray_sha256="${existing_versions[XRAY_SHA256]}"
-        [[ -n "$hy2_version" ]] || hy2_version="${existing_versions[HY2_VERSION]}"
-        [[ -n "$hy2_sha256" ]] || hy2_sha256="${existing_versions[HY2_SHA256]}"
+    if [[ -f "$versions_file" && ! -L "$versions_file" ]]; then
+        if pnm_load_versions_config existing_versions 2>/dev/null && pnm_validate_versions_config existing_versions; then
+            [[ -n "$xray_version" ]] || xray_version="${existing_versions[XRAY_VERSION]}"
+            [[ -n "$xray_sha256" ]] || xray_sha256="${existing_versions[XRAY_SHA256]}"
+            [[ -n "$hy2_version" ]] || hy2_version="${existing_versions[HY2_VERSION]}"
+            [[ -n "$hy2_sha256" ]] || hy2_sha256="${existing_versions[HY2_SHA256]}"
+        else
+            pnm_warn 'Existing versions.conf is invalid; --force will replace it after successful validation.'
+        fi
     fi
     [[ -n "$region" ]] || region="$PNM_NODE_DEFAULT_REGION"
     [[ -n "$timezone" ]] || timezone="$PNM_NODE_DEFAULT_TIMEZONE"
@@ -266,7 +345,7 @@ pnm_node_init() {
                 }
                 pnm_info 'Latest stable Core versions and official SHA-256 values loaded; pressing Enter keeps them pinned.'
             else
-                pnm_warn 'Latest stable Core metadata could not be fetched; enter both pinned version and SHA-256 pairs manually.'
+                pnm_warn "${PNM_NODE_LATEST_ERROR:-Latest stable Core metadata could not be fetched}; enter both pinned version and SHA-256 pairs manually."
             fi
         fi
         pnm_node_prompt region 'Node region (lowercase, for example osaka)' "$region" || return $?
