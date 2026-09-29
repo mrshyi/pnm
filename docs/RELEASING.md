@@ -13,7 +13,7 @@
 
 A source release or passing local tests alone does not make a node production-ready. On a disposable Debian 13 VPS:
 
-1. Install PNM and both pinned Cores; apply Reality and Hysteria2 configuration.
+1. From the source checkout, run `sudo ./bin/pnm install --apply --yes` to install PNM and both pinned Cores; apply Reality and Hysteria2 configuration.
 2. Run `pnm check`, reboot, reconnect through the intended management path, and run `pnm check` again.
 3. Confirm TCP/443, UDP/8443, and SSH listeners; both Core services and required system units are active and enabled.
 4. Test VLESS REALITY and Hysteria2 from external clients.

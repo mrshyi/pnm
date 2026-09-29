@@ -37,6 +37,13 @@ test_core_help_hides_broad_entrypoints() {
     assert_not_contains "$RUN_OUTPUT" 'acceptance' || return 1
     assert_not_contains "$RUN_OUTPUT" 'tailscale'
 }
+
+test_installer_help() {
+    run_capture bash "$PROJECT_ROOT/install.sh" --help
+    assert_eq 0 "$RUN_RC" || return 1
+    assert_contains "$RUN_OUTPUT" 'Install the PNM CLI and runtime files'
+}
+
 test_non_tty_without_command() {
     run_capture "$PROJECT_ROOT/bin/pnm"
     assert_eq 64 "$RUN_RC" && assert_contains "$RUN_OUTPUT" 'Usage:'
@@ -58,6 +65,7 @@ run_test 'version command' test_version
 run_test 'unknown command returns usage' test_unknown_command
 run_test 'broad commands are removed from the CLI' test_removed_broad_commands_return_usage
 run_test 'help documents the dual-Core CLI' test_core_help_hides_broad_entrypoints
+run_test 'installer exposes usage information' test_installer_help
 run_test 'non-TTY no-argument call does not block' test_non_tty_without_command
 run_test 'json and quiet are mutually exclusive' test_json_quiet_conflict
 run_test 'status emits valid JSON' test_status_json

@@ -30,6 +30,20 @@ sudo ./bin/pnm install --apply --yes
 ./bin/pnm check
 ```
 
+The command above runs PNM from a source checkout. It requires a clean Debian 13 host, root privileges, and the fixed asset versions in `versions.conf`. It does not modify SSH or UFW. Use `pnm install --dry-run` first when you need to review the preflight and installation plan.
+
+## Install PNM on a VPS
+
+To install the PNM CLI and runtime library under `/usr/local/lib/pnm` and create `/usr/local/bin/pnm`, download the installer to a temporary file and execute it as root:
+
+```bash
+curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+  https://raw.githubusercontent.com/mrshyi/pnm/main/install.sh \
+  --output /tmp/pnm-install.sh && sudo bash /tmp/pnm-install.sh
+```
+
+The installer downloads the repository archive from `PNM_REF` (default: `main`). For a reproducible deployment, set `PNM_REF` to a reviewed tag or commit and inspect the downloaded script before running it. After installation, run `sudo pnm install --apply --yes` to configure both proxy cores.
+
 ## Tests
 
 ```bash
