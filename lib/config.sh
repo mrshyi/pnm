@@ -74,6 +74,12 @@ pnm_validate_port() {
     ((10#$value >= 1 && 10#$value <= 65535))
 }
 
+pnm_validate_node_address() {
+    local value="${1-}"
+
+    [[ "$value" =~ ^[A-Za-z0-9][A-Za-z0-9.-]{0,252}$ ]]
+}
+
 pnm_validate_sha256() {
     [[ "${1-}" =~ ^[a-fA-F0-9]{64}$ ]]
 }
@@ -89,6 +95,9 @@ pnm_validate_node_config() {
     [[ "${config[SCHEMA_VERSION]-}" == '1' ]] || return 1
     [[ "${config[PNM_CONFIGURED]-}" == 'yes' || "${config[PNM_CONFIGURED]-}" == 'no' ]] || return 1
     [[ "${config[NODE_REGION]-}" =~ ^[a-z0-9][a-z0-9-]{0,62}$ ]] || return 1
+    if [[ -n "${config[NODE_ADDRESS]-}" ]]; then
+        pnm_validate_node_address "${config[NODE_ADDRESS]}" || return 1
+    fi
     [[ "${config[TIMEZONE]-}" =~ ^[A-Za-z0-9._+-]+(/[A-Za-z0-9._+-]+)*$ ]] || return 1
     pnm_validate_port "${config[XRAY_PORT]-}" || return 1
     pnm_validate_port "${config[HY2_PORT]-}" || return 1
@@ -140,7 +149,7 @@ pnm_load_node_config() {
     local file="$PNM_CONFIG_DIR/node.conf"
 
     pnm_config_load "$file" "$target_name" \
-        SCHEMA_VERSION NODE_REGION TIMEZONE PNM_CONFIGURED \
+        SCHEMA_VERSION NODE_REGION NODE_ADDRESS TIMEZONE PNM_CONFIGURED \
         XRAY_PORT XRAY_SERVER_NAME XRAY_TARGET HY2_PORT HY2_TLS_MODE
 }
 

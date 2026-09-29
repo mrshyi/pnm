@@ -41,7 +41,7 @@ test_core_help_hides_broad_entrypoints() {
 test_node_help() {
     run_capture "$PROJECT_ROOT/bin/pnm" help node
     assert_eq 0 "$RUN_RC" || return 1
-    assert_contains "$RUN_OUTPUT" 'pnm node <init|change|show|validate>' || return 1
+    assert_contains "$RUN_OUTPUT" 'pnm node <init|change|show|links|validate>' || return 1
     assert_contains "$RUN_OUTPUT" '--xray-sha256 SHA256'
 }
 

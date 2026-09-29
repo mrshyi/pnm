@@ -12,5 +12,6 @@ Notable changes are recorded here for each release.
 - Support Debian 12/13 and Ubuntu 22.04/24.04 amd64 platform preflight checks.
 - Add transactional single-node initialization, change, show, and validation commands.
 - Use latest stable Core release metadata and official checksums as interactive `node init` defaults while persisting concrete pins.
+- Add explicit client share-link output for VLESS + REALITY and Hysteria2 after installation.
 
 This is a release candidate. Production readiness requires the live deployment and external protocol checks in [RELEASING.md](docs/RELEASING.md).

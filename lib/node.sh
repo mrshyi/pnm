@@ -67,6 +67,30 @@ pnm_node_parse_hysteria_sha256() {
     ' "$digest_file"
 }
 
+pnm_node_uri_encode() {
+    local value="${1-}"
+    local character index
+
+    local LC_ALL=C
+    for ((index = 0; index < ${#value}; index += 1)); do
+        character="${value:index:1}"
+        case "$character" in
+            [A-Za-z0-9._~-]) printf '%s' "$character" ;;
+            *) printf '%%%02X' "'${character}" ;;
+        esac
+    done
+}
+
+pnm_node_xray_reality_public_key() {
+    local private_key="${1:?REALITY private key required}"
+    local public_key
+
+    [[ -x "$PNM_XRAY_BIN" && ! -L "$PNM_XRAY_BIN" ]] || return "$PNM_EXIT_UNAVAILABLE"
+    public_key="$("$PNM_XRAY_BIN" x25519 -i "$private_key" 2>/dev/null | awk -F ': ' '$1 == "Public key" { print $2; exit }')" || return "$PNM_EXIT_CONFIG"
+    [[ "$public_key" =~ ^[A-Za-z0-9_-]{40,64}$ ]] || return "$PNM_EXIT_CONFIG"
+    printf '%s\n' "$public_key"
+}
+
 pnm_node_fetch_redirect_tag() {
     local release_url="${1:?release URL required}"
     local final_url tag
@@ -246,8 +270,8 @@ pnm_node_write_staged_files() {
     local -n node_ref="$node_name"
     local -n versions_ref="$versions_name"
 
-    printf 'SCHEMA_VERSION=1\nNODE_REGION=%s\nTIMEZONE=%s\nPNM_CONFIGURED=no\nXRAY_PORT=%s\nXRAY_SERVER_NAME=%s\nXRAY_TARGET=%s\nHY2_PORT=%s\nHY2_TLS_MODE=%s\n' \
-        "${node_ref[NODE_REGION]}" "${node_ref[TIMEZONE]}" "${node_ref[XRAY_PORT]}" \
+    printf 'SCHEMA_VERSION=1\nNODE_REGION=%s\nNODE_ADDRESS=%s\nTIMEZONE=%s\nPNM_CONFIGURED=no\nXRAY_PORT=%s\nXRAY_SERVER_NAME=%s\nXRAY_TARGET=%s\nHY2_PORT=%s\nHY2_TLS_MODE=%s\n' \
+        "${node_ref[NODE_REGION]}" "${node_ref[NODE_ADDRESS]}" "${node_ref[TIMEZONE]}" "${node_ref[XRAY_PORT]}" \
         "${node_ref[XRAY_SERVER_NAME]}" "${node_ref[XRAY_TARGET]}" "${node_ref[HY2_PORT]}" \
         "${node_ref[HY2_TLS_MODE]}" >"$directory/node.conf" || return "$PNM_EXIT_CANTCREAT"
     printf 'SCHEMA_VERSION=1\nXRAY_VERSION=%s\nXRAY_SHA256=%s\nHY2_VERSION=%s\nHY2_SHA256=%s\nAPPROVED=yes\n' \
@@ -259,7 +283,7 @@ pnm_node_write_staged_files() {
 pnm_node_init() {
     local replace_existing="${1:?replace mode required}"
     shift
-    local region='' timezone='' xray_port='' server_name='' target=''
+    local region='' address='' timezone='' xray_port='' server_name='' target=''
     local hy2_port='' tls_mode=''
     local xray_version='' xray_sha256='' hy2_version='' hy2_sha256=''
     local force=0 argument temp_dir node_stage versions_stage rc
@@ -273,6 +297,8 @@ pnm_node_init() {
         shift
         case "$argument" in
             --region) (($# > 0)) || { pnm_error '--region requires a value'; return "$PNM_EXIT_USAGE"; }; region="$1"; shift ;;
+            --address) (($# > 0)) || { pnm_error '--address requires a value'; return "$PNM_EXIT_USAGE"; }; address="$1"; shift ;;
+            --server-address) (($# > 0)) || { pnm_error '--server-address requires a value'; return "$PNM_EXIT_USAGE"; }; address="$1"; shift ;;
             --timezone) (($# > 0)) || { pnm_error '--timezone requires a value'; return "$PNM_EXIT_USAGE"; }; timezone="$1"; shift ;;
             --xray-port) (($# > 0)) || { pnm_error '--xray-port requires a value'; return "$PNM_EXIT_USAGE"; }; xray_port="$1"; shift ;;
             --server-name) (($# > 0)) || { pnm_error '--server-name requires a value'; return "$PNM_EXIT_USAGE"; }; server_name="$1"; shift ;;
@@ -299,6 +325,7 @@ pnm_node_init() {
     if [[ -f "$node_file" && ! -L "$node_file" ]]; then
         if pnm_load_node_config existing_node 2>/dev/null && pnm_validate_node_config existing_node; then
             [[ -n "$region" ]] || region="${existing_node[NODE_REGION]}"
+            [[ -n "$address" ]] || address="${existing_node[NODE_ADDRESS]-}"
             [[ -n "$timezone" ]] || timezone="${existing_node[TIMEZONE]}"
             [[ -n "$xray_port" ]] || xray_port="${existing_node[XRAY_PORT]}"
             [[ -n "$server_name" ]] || server_name="${existing_node[XRAY_SERVER_NAME]}"
@@ -349,6 +376,8 @@ pnm_node_init() {
             fi
         fi
         pnm_node_prompt region 'Node region (lowercase, for example osaka)' "$region" || return $?
+        pnm_node_prompt address 'VPS public address (IPv4 or hostname; used in share links)' "$address" || return $?
+        pnm_node_require_value '--address' "$address" || return $?
         pnm_node_prompt timezone 'Timezone' "$timezone" || return $?
         pnm_node_prompt server_name 'Xray REALITY server name' "$server_name" || return $?
         pnm_node_prompt target 'Xray REALITY target host:port' "$target" || return $?
@@ -361,6 +390,7 @@ pnm_node_init() {
         pnm_node_prompt hy2_sha256 'Hysteria2 SHA-256 (official checksum if shown)' "$hy2_sha256" || return $?
     else
         pnm_node_require_value '--region' "$region" || return $?
+        pnm_node_require_value '--address' "$address" || return $?
         pnm_node_require_value '--server-name' "$server_name" || return $?
         pnm_node_require_value '--target' "$target" || return $?
         pnm_node_require_value '--xray-version' "$xray_version" || return $?
@@ -372,7 +402,7 @@ pnm_node_init() {
     pnm_node_prepare_config_dir || return $?
 
     node_config=(
-        [SCHEMA_VERSION]=1 [NODE_REGION]="$region" [TIMEZONE]="$timezone" [PNM_CONFIGURED]=no
+        [SCHEMA_VERSION]=1 [NODE_REGION]="$region" [NODE_ADDRESS]="$address" [TIMEZONE]="$timezone" [PNM_CONFIGURED]=no
         [XRAY_PORT]="$xray_port" [XRAY_SERVER_NAME]="$server_name" [XRAY_TARGET]="$target"
         [HY2_PORT]="$hy2_port" [HY2_TLS_MODE]="$tls_mode"
     )
@@ -420,23 +450,109 @@ pnm_node_show() {
     pnm_validate_versions_config versions_config || { pnm_error 'Version manifest values are invalid.'; return "$PNM_EXIT_CONFIG"; }
 
     if [[ "$PNM_OUTPUT_MODE" == json ]]; then
-        printf '{"schema":"pnm.node.v1","config_dir":%s,"node":{"region":%s,"timezone":%s,"configured":%s,"xray_port":%s,"server_name":%s,"target":%s,"hy2_port":%s,"tls_mode":%s},"versions":{"xray":%s,"xray_sha256":%s,"hysteria2":%s,"hysteria2_sha256":%s}}\n' \
+        printf '{"schema":"pnm.node.v1","config_dir":%s,"node":{"region":%s,"address":%s,"timezone":%s,"configured":%s,"xray_port":%s,"server_name":%s,"target":%s,"hy2_port":%s,"tls_mode":%s},"versions":{"xray":%s,"xray_sha256":%s,"hysteria2":%s,"hysteria2_sha256":%s}}\n' \
             "$(pnm_json_string "$PNM_CONFIG_DIR")" "$(pnm_json_string "${node_config[NODE_REGION]}")" \
-            "$(pnm_json_string "${node_config[TIMEZONE]}")" "$(pnm_json_string "${node_config[PNM_CONFIGURED]}")" \
-            "$(pnm_json_string "${node_config[XRAY_PORT]}")" "$(pnm_json_string "${node_config[XRAY_SERVER_NAME]}")" \
-            "$(pnm_json_string "${node_config[XRAY_TARGET]}")" "$(pnm_json_string "${node_config[HY2_PORT]}")" \
-            "$(pnm_json_string "${node_config[HY2_TLS_MODE]}")" "$(pnm_json_string "${versions_config[XRAY_VERSION]}")" \
-            "$(pnm_json_string "${versions_config[XRAY_SHA256]}")" "$(pnm_json_string "${versions_config[HY2_VERSION]}")" \
-            "$(pnm_json_string "${versions_config[HY2_SHA256]}")"
+            "$(pnm_json_string "${node_config[NODE_ADDRESS]-}")" "$(pnm_json_string "${node_config[TIMEZONE]}")" \
+            "$(pnm_json_string "${node_config[PNM_CONFIGURED]}")" "$(pnm_json_string "${node_config[XRAY_PORT]}")" \
+            "$(pnm_json_string "${node_config[XRAY_SERVER_NAME]}")" "$(pnm_json_string "${node_config[XRAY_TARGET]}")" \
+            "$(pnm_json_string "${node_config[HY2_PORT]}")" "$(pnm_json_string "${node_config[HY2_TLS_MODE]}")" \
+            "$(pnm_json_string "${versions_config[XRAY_VERSION]}")" "$(pnm_json_string "${versions_config[XRAY_SHA256]}")" \
+            "$(pnm_json_string "${versions_config[HY2_VERSION]}")" "$(pnm_json_string "${versions_config[HY2_SHA256]}")"
         return 0
     fi
 
     printf 'PNM node\n'
-    printf '  region: %s\n  timezone: %s\n  configured: %s\n' \
-        "${node_config[NODE_REGION]}" "${node_config[TIMEZONE]}" "${node_config[PNM_CONFIGURED]}"
+    printf '  region: %s\n  address: %s\n  timezone: %s\n  configured: %s\n' \
+        "${node_config[NODE_REGION]}" "${node_config[NODE_ADDRESS]-not-set}" \
+        "${node_config[TIMEZONE]}" "${node_config[PNM_CONFIGURED]}"
     printf '  xray: %s -> %s (%s)\n' "${node_config[XRAY_PORT]}" "${node_config[XRAY_SERVER_NAME]}" "${node_config[XRAY_TARGET]}"
     printf '  hysteria2: %s (%s)\n' "${node_config[HY2_PORT]}" "${node_config[HY2_TLS_MODE]}"
     printf '  versions: xray %s; hysteria2 %s\n' "${versions_config[XRAY_VERSION]}" "${versions_config[HY2_VERSION]}"
+}
+
+pnm_node_links() {
+    local address='' argument xray_public_key xray_link hy2_link xray_label hy2_label
+    local -A node_config=() reality_secret=() hysteria_secret=()
+
+    while (($# > 0)); do
+        argument="$1"
+        shift
+        case "$argument" in
+            --address | --server-address)
+                (($# > 0)) || { pnm_error "$argument requires a value"; return "$PNM_EXIT_USAGE"; }
+                address="$1"
+                shift
+                ;;
+            -h | --help)
+                printf '%s\n' 'Usage: pnm node links [--address IPv4-or-hostname]' \
+                    'Print client import links. Links contain credentials and must be handled as secrets.'
+                return "$PNM_EXIT_OK"
+                ;;
+            *) pnm_error "Unknown node links option: $argument"; return "$PNM_EXIT_USAGE" ;;
+        esac
+    done
+
+    pnm_require_root || return $?
+    pnm_load_node_config node_config || {
+        pnm_error "Node configuration is missing or unreadable: $PNM_CONFIG_DIR/node.conf"
+        return "$PNM_EXIT_CONFIG"
+    }
+    pnm_validate_node_config node_config || {
+        pnm_error 'Node configuration values are invalid.'
+        return "$PNM_EXIT_CONFIG"
+    }
+    [[ "${node_config[PNM_CONFIGURED]}" == yes ]] || {
+        pnm_error 'Node is not installed yet; run sudo pnm install --apply --yes first.'
+        return "$PNM_EXIT_CONFIG"
+    }
+    [[ -n "$address" ]] || address="${node_config[NODE_ADDRESS]-}"
+    if [[ -z "$address" ]]; then
+        pnm_error 'A VPS public address is required. Use pnm node links --address ADDRESS.'
+        return "$PNM_EXIT_CONFIG"
+    fi
+    pnm_validate_node_address "$address" || {
+        pnm_error 'Share-link address must be an IPv4 address or hostname.'
+        return "$PNM_EXIT_CONFIG"
+    }
+    pnm_load_reality_secret reality_secret || {
+        pnm_error 'REALITY credentials are missing.'
+        return "$PNM_EXIT_CONFIG"
+    }
+    pnm_validate_reality_secret_config reality_secret || {
+        pnm_error 'REALITY credentials are invalid.'
+        return "$PNM_EXIT_CONFIG"
+    }
+    pnm_load_hysteria_secret hysteria_secret || {
+        pnm_error 'Hysteria2 credentials are missing.'
+        return "$PNM_EXIT_CONFIG"
+    }
+    pnm_validate_hysteria_secret_config hysteria_secret || {
+        pnm_error 'Hysteria2 credentials are invalid.'
+        return "$PNM_EXIT_CONFIG"
+    }
+
+    xray_public_key="$(pnm_node_xray_reality_public_key "${reality_secret[XRAY_REALITY_PRIVATE_KEY]}")" || {
+        pnm_error "Unable to derive the REALITY public key from $PNM_XRAY_BIN."
+        return "$PNM_EXIT_UNAVAILABLE"
+    }
+    xray_label="$(pnm_node_uri_encode "PNM-${node_config[NODE_REGION]}-Xray")"
+    hy2_label="$(pnm_node_uri_encode "PNM-${node_config[NODE_REGION]}-Hysteria2")"
+    xray_link="vless://$(pnm_node_uri_encode "${reality_secret[XRAY_UUID]}")@$address:${node_config[XRAY_PORT]}?encryption=none&flow=xtls-rprx-vision&security=reality&sni=$(pnm_node_uri_encode "${node_config[XRAY_SERVER_NAME]}")&fp=chrome&pbk=$(pnm_node_uri_encode "$xray_public_key")&sid=$(pnm_node_uri_encode "${reality_secret[XRAY_REALITY_SHORT_ID]}")&type=tcp&headerType=none#$xray_label"
+    hy2_link="hysteria2://$(pnm_node_uri_encode "${hysteria_secret[HY2_AUTH_PASSWORD]}")@$address:${node_config[HY2_PORT]}/?sni=$(pnm_node_uri_encode "${node_config[XRAY_SERVER_NAME]}")"
+    if [[ "${node_config[HY2_TLS_MODE]}" == selfsigned-pin ]]; then
+        hy2_link+="&insecure=1&pinSHA256=$(pnm_node_uri_encode "${hysteria_secret[HY2_TLS_PIN_SHA256]}")"
+    fi
+    hy2_link+="#$hy2_label"
+
+    if [[ "$PNM_OUTPUT_MODE" == json ]]; then
+        printf '{"schema":"pnm.node-links.v1","address":%s,"xray_vless_reality":%s,"hysteria2":%s}\n' \
+            "$(pnm_json_string "$address")" "$(pnm_json_string "$xray_link")" "$(pnm_json_string "$hy2_link")"
+        return "$PNM_EXIT_OK"
+    fi
+    printf 'PNM client share links (sensitive)\n'
+    printf '  Xray VLESS + REALITY:\n%s\n' "$xray_link"
+    printf '  Hysteria2:\n%s\n' "$hy2_link"
+    pnm_warn 'These links contain client credentials. Store and transmit them as secrets.'
 }
 
 pnm_node_validate() {
@@ -470,6 +586,9 @@ pnm_node_command() {
         show | info)
             (($# == 0)) || { pnm_error 'Usage: pnm node show'; return "$PNM_EXIT_USAGE"; }
             pnm_node_show
+            ;;
+        links | share)
+            pnm_node_links "$@"
             ;;
         validate | check)
             (($# == 0)) || { pnm_error 'Usage: pnm node validate'; return "$PNM_EXIT_USAGE"; }

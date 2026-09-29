@@ -76,7 +76,11 @@ pnm_install() {
 
     if ((apply_requested == 1)); then
         pnm_deploy_apply
-        return $?
+        rc=$?
+        if ((rc == 0)); then
+            pnm_info 'Next: sudo pnm node links'
+        fi
+        return "$rc"
     fi
     return 0
 }

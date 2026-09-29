@@ -18,6 +18,7 @@ Supported platforms: Debian 12/13 and Ubuntu 22.04/24.04, amd64, with systemd.
 - `pnm node init`: interactively initialize the single VPS node
 - `pnm node change`: replace an uncommitted single-node configuration
 - `pnm --json node show`: show the desired node state without secrets
+- `pnm node links`: print VLESS + REALITY and Hysteria2 client import links
 - `pnm --json node validate`: validate both desired-state files
 - `pnm install --apply --yes`: install/configure both cores using approved versions
 - `pnm apply xray|hy2`: transactionally apply one rendered configuration
@@ -50,7 +51,7 @@ sudo pnm install --dry-run
 sudo pnm install --apply --yes
 ```
 
-`pnm node init` prompts for the region, timezone, REALITY server name and target, listen ports, TLS mode, and the exact pinned Xray/Hysteria2 versions with their independently verified SHA-256 values. It writes `/etc/pnm/node.conf` and `/etc/pnm/versions.conf` transactionally with mode `0600`. Do not enter placeholders such as `<VERSION>` or `<SHA256>`; angle brackets are intentionally rejected as unsafe configuration values.
+`pnm node init` prompts for the VPS public address, region, timezone, REALITY server name and target, listen ports, TLS mode, and the exact pinned Xray/Hysteria2 versions with their independently verified SHA-256 values. It writes `/etc/pnm/node.conf` and `/etc/pnm/versions.conf` transactionally with mode `0600`. Do not enter placeholders such as `<VERSION>` or `<SHA256>`; angle brackets are intentionally rejected as unsafe configuration values.
 
 The wizard defaults to `vps`, `UTC`, `www.microsoft.com` with target `www.microsoft.com:443`, Xray TCP/443, Hysteria2 UDP/8443, and `selfsigned-pin`. It also queries the latest stable Xray and Hysteria2 release metadata and official SHA-256 files, then displays concrete version/hash values as defaults. Press Enter to accept them, or override them with the corresponding option. The saved `versions.conf` always contains concrete pinned values; the moving `latest` label is never used as an asset URL or written to disk.
 
@@ -68,7 +69,7 @@ curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
   --output /tmp/pnm-install.sh && sudo bash /tmp/pnm-install.sh
 ```
 
-The installer downloads the repository archive from `PNM_REF` (default: `main`). For a reproducible deployment, set `PNM_REF` to a reviewed tag or commit and inspect the downloaded script before running it. After installation, run `sudo pnm node init`, validate the generated configuration, then run `sudo pnm install --apply --yes` to configure both proxy cores.
+The installer downloads the repository archive from `PNM_REF` (default: `main`). For a reproducible deployment, set `PNM_REF` to a reviewed tag or commit and inspect the downloaded script before running it. After installation, run `sudo pnm node init`, validate the generated configuration, then run `sudo pnm install --apply --yes` to configure both proxy cores. Once installation commits successfully, run `sudo pnm node links` to print client import links. The links contain credentials; transmit them only as secrets.
 
 ## Tests
 

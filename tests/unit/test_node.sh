@@ -33,6 +33,28 @@ test_show_hides_secrets_and_exposes_node() {
     assert_not_contains "$RUN_OUTPUT" 'REDACTED_FIXTURE'
 }
 
+test_node_links_render_client_import_uris() {
+    local temp_dir fake_xray old_xray_bin
+    temp_dir="$(mktemp -d)"
+    fake_xray="$temp_dir/xray"
+    old_xray_bin="$PNM_XRAY_BIN"
+    printf '#!/usr/bin/env bash\nprintf "Private key: fixture-private\\nPublic key: FixturePublicKey_1234567890123456789012345678901234567890\\n"\n' >"$fake_xray"
+    chmod 0755 -- "$fake_xray"
+    PNM_CONFIG_DIR="$TEST_ROOT/fixtures/config-secrets"
+    PNM_XRAY_BIN="$fake_xray"
+    PNM_OUTPUT_MODE=text
+    pnm_require_root() { return 0; }
+    run_capture pnm_node_links --address 203.0.113.10
+    PNM_XRAY_BIN="$old_xray_bin"
+    rm -rf -- "$temp_dir"
+    assert_eq 0 "$RUN_RC" || return 1
+    assert_contains "$RUN_OUTPUT" 'vless://11111111-2222-4333-8444-555555555555@203.0.113.10:443' || return 1
+    assert_contains "$RUN_OUTPUT" 'pbk=FixturePublicKey_1234567890123456789012345678901234567890' || return 1
+    assert_contains "$RUN_OUTPUT" 'hysteria2://abcdefghijklmnopqrstuvwxyz012345@203.0.113.10:8443/' || return 1
+    assert_contains "$RUN_OUTPUT" 'pinSHA256=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA%3D' || return 1
+    assert_not_contains "$RUN_OUTPUT" 'fixture-private'
+}
+
 test_invalid_node_is_rejected() {
     run_capture env PNM_CONFIG_DIR="$TEST_ROOT/fixtures/config-invalid" "$PROJECT_ROOT/bin/pnm" node validate
     assert_eq 78 "$RUN_RC"
@@ -115,6 +137,7 @@ test_init_writes_valid_files_transactionally() {
         return 0
     fi
     if pnm_node_init 0 \
+        --address 203.0.113.10 \
         --xray-version v1.8.24 --xray-sha256 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
         --hy2-version v2.6.3 --hy2-sha256 bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb; then
         rc=0
@@ -130,6 +153,7 @@ test_init_writes_valid_files_transactionally() {
     pnm_load_versions_config versions_config && pnm_validate_versions_config versions_config
     rc=$?
     [[ "${node_config[NODE_REGION]}" == vps ]] || return 1
+    [[ "${node_config[NODE_ADDRESS]}" == 203.0.113.10 ]] || return 1
     [[ "${node_config[TIMEZONE]}" == UTC ]] || return 1
     [[ "${node_config[XRAY_SERVER_NAME]}" == www.microsoft.com ]] || return 1
     [[ "${node_config[XRAY_TARGET]}" == www.microsoft.com:443 ]] || return 1
@@ -141,6 +165,7 @@ test_init_writes_valid_files_transactionally() {
 
 run_test 'node validation accepts a complete configuration' test_validate_existing_node
 run_test 'node show reports only non-secret desired state' test_show_hides_secrets_and_exposes_node
+run_test 'node links render client import URIs without private keys' test_node_links_render_client_import_uris
 run_test 'node validation rejects invalid values' test_invalid_node_is_rejected
 run_test 'latest release metadata parsers return pinned values' test_release_metadata_parsers
 run_test 'latest lookup returns concrete pinned versions and hashes' test_latest_version_lookup_persists_concrete_values

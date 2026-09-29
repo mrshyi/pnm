@@ -75,14 +75,16 @@ pnm_print_help() {
             ;;
         node)
             printf '%s\n' \
-                'Usage: pnm node <init|change|show|validate>' \
+                'Usage: pnm node <init|change|show|links|validate>' \
                 '       pnm node add [options]' \
-                '       pnm node info' '' \
+                '       pnm node info' \
+                '       pnm node links [--address IPv4-or-hostname]' '' \
                 'Manage the one desired node configuration on this VPS.' \
                 'init/add creates it; change replaces an uncommitted configuration.' \
-                'Put global --json before node show/validate for machine-readable output.' '' \
+                'Put global --json before node show/validate/links for machine-readable output.' '' \
                 'Init/change options:' \
-                '  --region NAME --timezone ZONE --server-name NAME --target HOST:PORT' \
+                '  --region NAME --address IPv4-or-hostname --timezone ZONE' \
+                '  --server-name NAME --target HOST:PORT' \
                 '  --xray-port PORT --hy2-port PORT --tls-mode selfsigned-pin|external-ca' \
                 '  --xray-version VERSION --xray-sha256 SHA256' \
                 '  --hy2-version VERSION --hy2-sha256 SHA256' \
@@ -123,6 +125,7 @@ Implemented:
   check                Run read-only health and policy checks
   node init            Initialize the single VPS node configuration
   node show            Show the node configuration without secrets
+  node links           Print VLESS and Hysteria2 client import links
   node validate        Validate node.conf and versions.conf
   install              Install both approved proxy cores
   restart <core>       Restart xray or hy2
