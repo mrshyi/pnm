@@ -1,0 +1,85 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+command_name="$(basename -- "$0")"
+profile="${PNM_FAKE_PROFILE:-pass}"
+
+case "$command_name" in
+    uname)
+        printf 'x86_64\n'
+        ;;
+    systemctl)
+        action="${1-}"
+        shift || true
+        case "$action" in
+            show)
+                property=''
+                while (($# > 0)); do
+                    case "$1" in
+                        --property) property="${2-}"; shift 2 ;;
+                        --value) shift ;;
+                        *) shift ;;
+                    esac
+                done
+                case "$property" in
+                    LoadState) printf 'loaded\n' ;;
+                    ActiveState) [[ "$profile" == fail ]] && printf 'failed\n' || printf 'active\n' ;;
+                    SubState) [[ "$profile" == fail ]] && printf 'failed\n' || printf 'running\n' ;;
+                    *) printf 'unknown\n' ;;
+                esac
+                ;;
+            is-enabled)
+                [[ "$profile" == fail ]] && { printf 'disabled\n'; exit 1; }
+                printf 'enabled\n'
+                ;;
+            list-units)
+                [[ "$profile" == fail ]] && printf 'xray.service loaded failed failed Xray\n'
+                exit 0
+                ;;
+            *) exit 1 ;;
+        esac
+        ;;
+    timedatectl)
+        [[ "$profile" == fail ]] && printf 'no\n' || printf 'yes\n'
+        ;;
+    ss)
+        if [[ "$profile" == preflight-ready ]]; then
+            exit 0
+        fi
+        case "${1-}" in
+            *t*) printf 'LISTEN 0 4096 0.0.0.0:443 0.0.0.0:*\n' ;;
+            *u*) printf 'UNCONN 0 0 0.0.0.0:8443 0.0.0.0:*\n' ;;
+            *) exit 1 ;;
+        esac
+        ;;
+    xray)
+        if [[ "${1-}" == version ]]; then
+            printf 'Xray 1.8.0\n'
+        elif [[ "${1-}" == run ]]; then
+            [[ "$profile" == fail ]] && exit 23
+            printf 'Configuration OK.\n'
+        else
+            exit 1
+        fi
+        ;;
+    hysteria)
+        [[ "${1-}" == version ]] || exit 1
+        printf 'Version v2.6.4\n'
+        ;;
+    apt-get)
+        printf '0 upgraded, 0 newly installed, 0 to remove.\n'
+        ;;
+    stat)
+        target="${!#}"
+        case "$target" in
+            *xray-config.json) printf '640|root|xray\n' ;;
+            *hysteria-config.yaml) printf '600|hysteria|hysteria\n' ;;
+            */secrets) printf '700|root|root\n' ;;
+            *) exec /usr/bin/stat "$@" ;;
+        esac
+        ;;
+    *)
+        printf 'Unsupported fake command: %s\n' "$command_name" >&2
+        exit 127
+        ;;
+esac

@@ -1,0 +1,6 @@
+# PNM composes the CLI from modules at runtime. Variables shared between
+# those modules are intentionally global, so ShellCheck cannot determine
+# their uses when inspecting an individual source file.
+shell=bash
+external-sources=true
+disable=SC1091,SC2034

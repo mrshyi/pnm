@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+IFS=$'\n\t'
+
+readonly PNM_BIN_PATH="${BASH_SOURCE[0]}"
+PNM_SOURCE_ROOT="$(cd -- "$(dirname -- "$PNM_BIN_PATH")/.." && pwd -P)"
+readonly PNM_SOURCE_ROOT
+
+PNM_LIB_DIR="${PNM_LIB_DIR:-$PNM_SOURCE_ROOT/lib}"
+PNM_ADAPTER_DIR="${PNM_ADAPTER_DIR:-$PNM_SOURCE_ROOT/adapters}"
+PNM_VERSION_FILE="${PNM_VERSION_FILE:-$PNM_SOURCE_ROOT/VERSION}"
+
+# These are trusted program libraries, not data configuration files.
+# shellcheck source=../lib/common.sh
+source "$PNM_LIB_DIR/common.sh"
+# shellcheck source=../lib/output.sh
+source "$PNM_LIB_DIR/output.sh"
+# shellcheck source=../lib/config.sh
+source "$PNM_LIB_DIR/config.sh"
+# shellcheck source=../lib/lock.sh
+source "$PNM_LIB_DIR/lock.sh"
+# shellcheck source=../lib/transaction.sh
+source "$PNM_LIB_DIR/transaction.sh"
+# shellcheck source=../lib/accounts.sh
+source "$PNM_LIB_DIR/accounts.sh"
+# shellcheck source=../lib/render.sh
+source "$PNM_LIB_DIR/render.sh"
+# shellcheck source=../lib/service.sh
+source "$PNM_LIB_DIR/service.sh"
+# shellcheck source=../lib/tls.sh
+source "$PNM_LIB_DIR/tls.sh"
+# shellcheck source=../lib/sandbox-install.sh
+source "$PNM_LIB_DIR/sandbox-install.sh"
+# shellcheck source=../adapters/platform-debian.sh
+source "$PNM_ADAPTER_DIR/platform-debian.sh"
+# shellcheck source=../adapters/systemd.sh
+source "$PNM_ADAPTER_DIR/systemd.sh"
+# shellcheck source=../lib/lifecycle.sh
+source "$PNM_LIB_DIR/lifecycle.sh"
+# shellcheck source=../adapters/network.sh
+source "$PNM_ADAPTER_DIR/network.sh"
+# shellcheck source=../adapters/assets.sh
+source "$PNM_ADAPTER_DIR/assets.sh"
+# shellcheck source=../lib/deploy.sh
+source "$PNM_LIB_DIR/deploy.sh"
+# shellcheck source=../lib/apply-gate.sh
+source "$PNM_LIB_DIR/apply-gate.sh"
+# shellcheck source=../lib/host-apply.sh
+source "$PNM_LIB_DIR/host-apply.sh"
+# shellcheck source=../lib/preflight.sh
+source "$PNM_LIB_DIR/preflight.sh"
+# shellcheck source=../lib/install.sh
+source "$PNM_LIB_DIR/install.sh"
+# shellcheck source=../lib/status.sh
+source "$PNM_LIB_DIR/status.sh"
+# shellcheck source=../lib/check.sh
+source "$PNM_LIB_DIR/check.sh"
+# shellcheck source=../lib/core-ops.sh
+source "$PNM_LIB_DIR/core-ops.sh"
+# shellcheck source=../lib/menu.sh
+source "$PNM_LIB_DIR/menu.sh"
+
+pnm_init_runtime
+pnm_main "$@"
