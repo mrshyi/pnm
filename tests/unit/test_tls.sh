@@ -43,6 +43,28 @@ test_mismatched_pair_is_rejected() {
     [[ "$rc" != 0 ]]
 }
 
+test_certificate_check_reports_valid_expired_unreadable_and_skipped_modes() {
+    local temp_dir certificate private_key expired_certificate expired_key status
+    temp_dir="$(mktemp -d)"
+    certificate="$temp_dir/valid.crt"; private_key="$temp_dir/valid.key"
+    expired_certificate="$temp_dir/expired.crt"; expired_key="$temp_dir/expired.key"
+    openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj '/CN=valid.example' \
+        -keyout "$private_key" -out "$certificate" >/dev/null 2>&1 || { rm -rf -- "$temp_dir"; return 1; }
+    openssl req -x509 -newkey rsa:2048 -nodes -days 0 -subj '/CN=expired.example' \
+        -keyout "$expired_key" -out "$expired_certificate" >/dev/null 2>&1 || { rm -rf -- "$temp_dir"; return 1; }
+    status="$(pnm_tls_certificate_check selfsigned-pin "$certificate")" || { rm -rf -- "$temp_dir"; return 1; }
+    assert_contains "$status" 'OK|' || { rm -rf -- "$temp_dir"; return 1; }
+    status="$(pnm_tls_certificate_check external-ca "$expired_certificate")" || { rm -rf -- "$temp_dir"; return 1; }
+    assert_contains "$status" 'FAIL|' || { rm -rf -- "$temp_dir"; return 1; }
+    assert_contains "$status" 'expired' || { rm -rf -- "$temp_dir"; return 1; }
+    status="$(pnm_tls_certificate_check selfsigned-pin "$temp_dir/missing.crt")" || { rm -rf -- "$temp_dir"; return 1; }
+    assert_contains "$status" 'WARN|' || { rm -rf -- "$temp_dir"; return 1; }
+    status="$(pnm_tls_certificate_check acme-runtime "$temp_dir/missing.crt")" || { rm -rf -- "$temp_dir"; return 1; }
+    rm -rf -- "$temp_dir"
+    assert_contains "$status" 'SKIP|'
+}
+
 run_test 'self-signed certificate pair is valid and produces Base64 pin' test_selfsigned_pair_is_valid_and_pinned
 run_test 'certificate/private-key mismatch is rejected' test_mismatched_pair_is_rejected
+run_test 'TLS certificate check reports valid, expired, unreadable, and skipped modes' test_certificate_check_reports_valid_expired_unreadable_and_skipped_modes
 finish_tests

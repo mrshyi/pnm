@@ -66,6 +66,13 @@ case "$command_name" in
         [[ "${1-}" == version ]] || exit 1
         printf 'Version v2.6.4\n'
         ;;
+    openssl)
+        [[ "${PNM_FAKE_PROFILE:-pass}" == expired-cert ]] && {
+            printf 'notBefore=2000-01-01T00:00:00Z\nnotAfter=2001-01-01T00:00:00Z\n'
+            exit 0
+        }
+        printf 'notBefore=2020-01-01T00:00:00Z\nnotAfter=2099-01-01T00:00:00Z\n'
+        ;;
     apt-get)
         printf '0 upgraded, 0 newly installed, 0 to remove.\n'
         ;;

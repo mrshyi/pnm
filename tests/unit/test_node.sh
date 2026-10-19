@@ -48,7 +48,7 @@ test_show_hides_secrets_and_exposes_node() {
 }
 
 test_node_links_render_client_import_uris() {
-    local temp_dir fake_xray runtime_config old_xray_bin old_xray_config old_config_dir
+    local temp_dir fake_xray runtime_config runtime_hy2_config old_xray_bin old_xray_config old_hy2_config old_config_dir
     temp_dir="$(mktemp -d)"
     mkdir -p -- "$temp_dir/config/secrets"
     cp -- "$TEST_ROOT/fixtures/config-secrets/node.conf" "$temp_dir/config/node.conf"
@@ -58,23 +58,30 @@ test_node_links_render_client_import_uris() {
     sed -i 's/^XRAY_SERVER_NAME=.*/XRAY_SERVER_NAME=front.example.com/;s/^XRAY_TARGET=.*/XRAY_TARGET=edge.example.net:8443/' "$temp_dir/config/node.conf"
     fake_xray="$temp_dir/xray"
     runtime_config="$temp_dir/xray-config.json"
+    runtime_hy2_config="$temp_dir/hysteria-config.yaml"
     old_xray_bin="$PNM_XRAY_BIN"
     old_xray_config="$PNM_XRAY_CONFIG"
+    old_hy2_config="$PNM_HY2_CONFIG"
     old_config_dir="$PNM_CONFIG_DIR"
     printf '#!/usr/bin/env bash\nprintf "PrivateKey: fixture-private\\nPassword (PublicKey): AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\\nHash32: ignored\\n"\n' >"$fake_xray"
     chmod 0755 -- "$fake_xray"
     PNM_CONFIG_DIR="$temp_dir/config"
     PNM_XRAY_BIN="$fake_xray"
     PNM_XRAY_CONFIG="$runtime_config"
+    PNM_HY2_CONFIG="$runtime_hy2_config"
     declare -gA NODE=() REALITY=()
+    declare -gA HYSTERIA=()
     pnm_load_node_config NODE && pnm_load_reality_secret REALITY || return 1
+    pnm_load_hysteria_secret HYSTERIA || return 1
     pnm_render_xray_config NODE REALITY >"$runtime_config" || return 1
+    pnm_render_hysteria_config NODE HYSTERIA >"$runtime_hy2_config" || return 1
     PNM_OUTPUT_MODE=text
     pnm_require_root() { return 0; }
     pnm_systemd_active_state() { printf 'active\n'; }
     run_capture pnm_node_links --address 203.0.113.10
     PNM_XRAY_BIN="$old_xray_bin"
     PNM_XRAY_CONFIG="$old_xray_config"
+    PNM_HY2_CONFIG="$old_hy2_config"
     PNM_CONFIG_DIR="$old_config_dir"
     rm -rf -- "$temp_dir"
     assert_eq 0 "$RUN_RC" || return 1
@@ -87,6 +94,100 @@ test_node_links_render_client_import_uris() {
     assert_not_contains "$RUN_OUTPUT" '\\'
     assert_eq 'A%2FB%2BC%3D' "$(pnm_node_uri_encode 'A/B+C=')" || return 1
     assert_not_contains "$RUN_OUTPUT" 'fixture-private'
+}
+
+test_node_links_omit_hy2_when_runtime_port_drifts() {
+    local temp_dir runtime_config hy2_config fake_xray old_xray_bin old_xray_config old_hy2_config old_config_dir
+    temp_dir="$(mktemp -d)"
+    mkdir -p -- "$temp_dir/config/secrets"
+    cp -- "$TEST_ROOT/fixtures/config-secrets/node.conf" "$temp_dir/config/node.conf"
+    cp -- "$TEST_ROOT/fixtures/config-secrets/secrets/reality.env" "$temp_dir/config/secrets/reality.env"
+    cp -- "$TEST_ROOT/fixtures/config-secrets/secrets/hysteria.env" "$temp_dir/config/secrets/hysteria.env"
+    runtime_config="$temp_dir/xray-config.json"; hy2_config="$temp_dir/hysteria-config.yaml"
+    fake_xray="$temp_dir/xray"
+    old_xray_bin="$PNM_XRAY_BIN"; old_xray_config="$PNM_XRAY_CONFIG"
+    old_hy2_config="$PNM_HY2_CONFIG"; old_config_dir="$PNM_CONFIG_DIR"
+    printf '#!/usr/bin/env bash\nprintf "PrivateKey: fixture-private\\nPassword (PublicKey): AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\\n"\n' >"$fake_xray"
+    chmod 0755 -- "$fake_xray"
+    PNM_CONFIG_DIR="$temp_dir/config"; PNM_XRAY_BIN="$fake_xray"
+    PNM_XRAY_CONFIG="$runtime_config"; PNM_HY2_CONFIG="$hy2_config"
+    declare -gA NODE=() REALITY=() HYSTERIA=()
+    pnm_load_node_config NODE && pnm_load_reality_secret REALITY && pnm_load_hysteria_secret HYSTERIA || return 1
+    pnm_render_xray_config NODE REALITY >"$runtime_config" || return 1
+    pnm_render_hysteria_config NODE HYSTERIA >"$hy2_config" || return 1
+    sed -i 's/^listen: :8443$/listen: :9443/' "$hy2_config"
+    pnm_require_root() { return 0; }
+    run_capture pnm_node_links --address 203.0.113.10
+    PNM_XRAY_BIN="$old_xray_bin"; PNM_XRAY_CONFIG="$old_xray_config"
+    PNM_HY2_CONFIG="$old_hy2_config"; PNM_CONFIG_DIR="$old_config_dir"
+    rm -rf -- "$temp_dir"
+    assert_eq 0 "$RUN_RC" || return 1
+    assert_contains "$RUN_OUTPUT" 'vless://11111111-2222-4333-8444-555555555555@203.0.113.10:443' || return 1
+    assert_not_contains "$RUN_OUTPUT" 'hysteria2://' || return 1
+    assert_contains "$RUN_OUTPUT" 'Hysteria2 link omitted' || assert_contains "$RUN_ERROR" 'Hysteria2 link omitted'
+}
+
+test_node_links_omit_hy2_when_runtime_auth_drifts_without_leaking_password() {
+    local temp_dir runtime_config hy2_config fake_xray old_xray_bin old_xray_config old_hy2_config old_config_dir rc
+    temp_dir="$(mktemp -d)"
+    mkdir -p -- "$temp_dir/config/secrets"
+    cp -- "$TEST_ROOT/fixtures/config-secrets/node.conf" "$temp_dir/config/node.conf"
+    cp -- "$TEST_ROOT/fixtures/config-secrets/secrets/reality.env" "$temp_dir/config/secrets/reality.env"
+    cp -- "$TEST_ROOT/fixtures/config-secrets/secrets/hysteria.env" "$temp_dir/config/secrets/hysteria.env"
+    runtime_config="$temp_dir/xray-config.json"; hy2_config="$temp_dir/hysteria-config.yaml"
+    fake_xray="$temp_dir/xray"
+    old_xray_bin="$PNM_XRAY_BIN"; old_xray_config="$PNM_XRAY_CONFIG"
+    old_hy2_config="$PNM_HY2_CONFIG"; old_config_dir="$PNM_CONFIG_DIR"
+    printf '#!/usr/bin/env bash\nprintf "PrivateKey: fixture-private\\nPassword (PublicKey): AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\\n"\n' >"$fake_xray"
+    chmod 0755 -- "$fake_xray"
+    PNM_CONFIG_DIR="$temp_dir/config"; PNM_XRAY_BIN="$fake_xray"
+    PNM_XRAY_CONFIG="$runtime_config"; PNM_HY2_CONFIG="$hy2_config"
+    declare -gA NODE=() REALITY=() HYSTERIA=()
+    pnm_load_node_config NODE && pnm_load_reality_secret REALITY && pnm_load_hysteria_secret HYSTERIA || return 1
+    pnm_render_xray_config NODE REALITY >"$runtime_config" || return 1
+    pnm_render_hysteria_config NODE HYSTERIA >"$hy2_config" || return 1
+    sed -i 's/abcdefghijklmnopqrstuvwxyz012345/zyxwvutsrqponmlkjihgfedcba654321/' "$temp_dir/config/secrets/hysteria.env"
+    pnm_require_root() { return 0; }
+    run_capture pnm_node_links --address 203.0.113.10
+    rc=$RUN_RC
+    PNM_XRAY_BIN="$old_xray_bin"; PNM_XRAY_CONFIG="$old_xray_config"
+    PNM_HY2_CONFIG="$old_hy2_config"; PNM_CONFIG_DIR="$old_config_dir"
+    rm -rf -- "$temp_dir"
+    assert_eq 0 "$rc" || return 1
+    assert_contains "$RUN_OUTPUT" 'vless://' || return 1
+    assert_not_contains "$RUN_OUTPUT" 'hysteria2://' || return 1
+    assert_not_contains "$RUN_OUTPUT$RUN_ERROR" 'zyxwvutsrqponmlkjihgfedcba654321' || return 1
+    assert_contains "$RUN_OUTPUT$RUN_ERROR" 'Hysteria2 link omitted'
+}
+
+test_node_links_omit_hy2_for_damaged_runtime_config() {
+    local temp_dir runtime_config hy2_config fake_xray old_xray_bin old_xray_config old_hy2_config old_config_dir
+    temp_dir="$(mktemp -d)"
+    mkdir -p -- "$temp_dir/config/secrets"
+    cp -- "$TEST_ROOT/fixtures/config-secrets/node.conf" "$temp_dir/config/node.conf"
+    cp -- "$TEST_ROOT/fixtures/config-secrets/secrets/reality.env" "$temp_dir/config/secrets/reality.env"
+    cp -- "$TEST_ROOT/fixtures/config-secrets/secrets/hysteria.env" "$temp_dir/config/secrets/hysteria.env"
+    runtime_config="$temp_dir/xray-config.json"; hy2_config="$temp_dir/hysteria-config.yaml"
+    fake_xray="$temp_dir/xray"
+    printf '#!/usr/bin/env bash\nprintf "PrivateKey: fixture-private\\nPassword (PublicKey): AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\\n"\n' >"$fake_xray"
+    chmod 0755 -- "$fake_xray"
+    old_xray_bin="$PNM_XRAY_BIN"; old_xray_config="$PNM_XRAY_CONFIG"
+    old_hy2_config="$PNM_HY2_CONFIG"; old_config_dir="$PNM_CONFIG_DIR"
+    PNM_CONFIG_DIR="$temp_dir/config"; PNM_XRAY_BIN="$fake_xray"
+    PNM_XRAY_CONFIG="$runtime_config"; PNM_HY2_CONFIG="$hy2_config"
+    declare -gA NODE=() REALITY=() HYSTERIA=()
+    pnm_load_node_config NODE && pnm_load_reality_secret REALITY && pnm_load_hysteria_secret HYSTERIA || return 1
+    pnm_render_xray_config NODE REALITY >"$runtime_config" || return 1
+    printf 'not: valid: [\n' >"$hy2_config"
+    pnm_require_root() { return 0; }
+    run_capture pnm_node_links --address 203.0.113.10
+    PNM_XRAY_BIN="$old_xray_bin"; PNM_XRAY_CONFIG="$old_xray_config"
+    PNM_HY2_CONFIG="$old_hy2_config"; PNM_CONFIG_DIR="$old_config_dir"
+    rm -rf -- "$temp_dir"
+    assert_eq 0 "$RUN_RC" || return 1
+    assert_contains "$RUN_OUTPUT" 'vless://' || return 1
+    assert_not_contains "$RUN_OUTPUT" 'hysteria2://' || return 1
+    assert_contains "$RUN_OUTPUT$RUN_ERROR" 'Hysteria2 link omitted'
 }
 
 test_node_validation_rejects_single_label_reality_sni() {
@@ -288,6 +389,9 @@ test_init_writes_valid_files_transactionally() {
 run_test 'node validation accepts a complete configuration' test_validate_existing_node
 run_test 'node show reports only non-secret desired state' test_show_hides_secrets_and_exposes_node
 run_test 'node links render client import URIs without private keys' test_node_links_render_client_import_uris
+run_test 'node links omit HY2 URI but retain REALITY URI on HY2 port drift' test_node_links_omit_hy2_when_runtime_port_drifts
+run_test 'node links omit HY2 URI without exposing credentials on auth drift' test_node_links_omit_hy2_when_runtime_auth_drifts_without_leaking_password
+run_test 'node links omit HY2 URI for malformed runtime config while retaining REALITY' test_node_links_omit_hy2_for_damaged_runtime_config
 run_test 'node validation rejects a single-label REALITY SNI' test_node_validation_rejects_single_label_reality_sni
 run_test 'node links refuse a VPS hostname as REALITY SNI' test_node_links_refuse_single_label_reality_sni
 run_test 'node show reports an invalid REALITY SNI for diagnosis' test_node_show_reports_invalid_reality_sni

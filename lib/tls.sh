@@ -31,6 +31,42 @@ pnm_tls_validate_pair() {
     [[ -n "$certificate_pin" && "$certificate_pin" == "$key_pin" ]]
 }
 
+pnm_tls_certificate_check() {
+    local mode="${1:?TLS mode required}"
+    local certificate="${2:?certificate path required}"
+    local dates not_before not_after not_before_epoch not_after_epoch now
+
+    case "$mode" in
+        selfsigned-pin | external-ca) ;;
+        *) printf 'SKIP|TLS certificate is managed outside the configured static certificate modes\n'; return 0 ;;
+    esac
+    if ! pnm_command_exists openssl || ! pnm_command_exists date ||
+        [[ ! -f "$certificate" || -L "$certificate" || ! -r "$certificate" ]]; then
+        printf 'WARN|TLS certificate cannot be read or validity cannot be determined\n'
+        return 0
+    fi
+    if ! dates="$(openssl x509 -in "$certificate" -noout -startdate -enddate -dateopt iso_8601 2>/dev/null)"; then
+        printf 'WARN|TLS certificate is unreadable or invalid\n'
+        return 0
+    fi
+    not_before="$(sed -n 's/^notBefore=//p' <<<"$dates")"
+    not_after="$(sed -n 's/^notAfter=//p' <<<"$dates")"
+    if [[ -z "$not_before" || -z "$not_after" ]] ||
+        ! not_before_epoch="$(date -u -d "$not_before" +%s 2>/dev/null)" ||
+        ! not_after_epoch="$(date -u -d "$not_after" +%s 2>/dev/null)" ||
+        ! now="$(date -u +%s 2>/dev/null)"; then
+        printf 'WARN|TLS certificate validity dates cannot be determined\n'
+        return 0
+    fi
+    if ((now < not_before_epoch)); then
+        printf 'FAIL|TLS certificate is not yet valid\n'
+    elif ((now >= not_after_epoch)); then
+        printf 'FAIL|TLS certificate is expired\n'
+    else
+        printf 'OK|TLS certificate is currently valid; expires %s\n' "$not_after"
+    fi
+}
+
 pnm_tls_generate_selfsigned() {
     local certificate="${1:?certificate destination required}"
     local private_key="${2:?private key destination required}"

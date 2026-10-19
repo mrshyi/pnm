@@ -15,6 +15,8 @@ source "$PNM_LIB_DIR/config.sh"
 source "$PNM_LIB_DIR/node.sh"
 # shellcheck source=../../lib/render.sh
 source "$PNM_LIB_DIR/render.sh"
+# shellcheck source=../../lib/tls.sh
+source "$PNM_LIB_DIR/tls.sh"
 # shellcheck source=../../lib/core-ops.sh
 source "$PNM_LIB_DIR/core-ops.sh"
 # shellcheck source=../testlib.sh
@@ -149,6 +151,26 @@ test_xray_apply_is_stable_when_repeated() {
     assert_eq 0 "$rc"
 }
 
+test_hysteria_apply_rejects_unreadable_tls_before_apply() {
+    local original rc old_hy2_config
+    pnm_test_apply_setup || return 1
+    mkdir -p -- "$PNM_CONFIG_DIR/secrets"
+    cp -- "$TEST_ROOT/fixtures/config-secrets/secrets/hysteria.env" "$PNM_CONFIG_DIR/secrets/hysteria.env"
+    sed -i 's#^HY2_TLS_CERT_PATH=.*#HY2_TLS_CERT_PATH=/tmp/pnm-test-certificate-does-not-exist#' \
+        "$PNM_CONFIG_DIR/secrets/hysteria.env"
+    old_hy2_config="$PNM_HY2_CONFIG"
+    mkdir -p -- "$PNM_TEST_APPLY_ROOT/hysteria"
+    PNM_HY2_CONFIG="$PNM_TEST_APPLY_ROOT/hysteria/config.yaml"
+    printf 'previous-runtime-config\n' >"$PNM_HY2_CONFIG"
+    original="$(<"$PNM_HY2_CONFIG")"
+    if pnm_core_apply_config hy2; then rc=0; else rc=$?; fi
+    assert_eq 78 "$rc" || { PNM_HY2_CONFIG="$old_hy2_config"; pnm_test_apply_cleanup; return 1; }
+    assert_eq "$original" "$(<"$PNM_HY2_CONFIG")" || { PNM_HY2_CONFIG="$old_hy2_config"; pnm_test_apply_cleanup; return 1; }
+    assert_eq 0 "$PNM_TEST_APPLY_RESTARTS" || { PNM_HY2_CONFIG="$old_hy2_config"; pnm_test_apply_cleanup; return 1; }
+    PNM_HY2_CONFIG="$old_hy2_config"
+    pnm_test_apply_cleanup
+}
+
 test_core_mapping_is_fixed() {
     pnm_core_resolve xray || return 1
     assert_eq xray "$PNM_CORE_ID" || return 1
@@ -192,4 +214,5 @@ run_test 'invalid Xray candidate leaves current runtime config untouched' test_x
 run_test 'Xray restart failure restores previous config and service' test_xray_apply_restart_failure_restores_previous_config_and_service
 run_test 'Xray health-check failure restores previous config and service' test_xray_apply_health_failure_restores_previous_config_and_service
 run_test 'repeated Xray apply produces stable runtime config' test_xray_apply_is_stable_when_repeated
+run_test 'Hysteria2 apply rejects invalid TLS before changing runtime config' test_hysteria_apply_rejects_unreadable_tls_before_apply
 finish_tests

@@ -546,7 +546,7 @@ pnm_node_show() {
 }
 
 pnm_node_links() {
-    local address='' argument xray_public_key xray_link hy2_link xray_label hy2_label rc
+    local address='' argument xray_public_key xray_link hy2_link='' xray_label hy2_label rc hy2_omission_reason=''
     local -A node_config=() reality_secret=() hysteria_secret=()
 
     while (($# > 0)); do
@@ -601,14 +601,6 @@ pnm_node_links() {
         pnm_error 'REALITY credentials are invalid.'
         return "$PNM_EXIT_CONFIG"
     }
-    pnm_load_hysteria_secret hysteria_secret || {
-        pnm_error 'Hysteria2 credentials are missing.'
-        return "$PNM_EXIT_CONFIG"
-    }
-    pnm_validate_hysteria_secret_config hysteria_secret || {
-        pnm_error 'Hysteria2 credentials are invalid.'
-        return "$PNM_EXIT_CONFIG"
-    }
     if pnm_xray_config_matches_node node_config reality_secret; then
         :
     else
@@ -621,27 +613,52 @@ pnm_node_links() {
         return "$rc"
     fi
 
+    if ! pnm_load_hysteria_secret hysteria_secret || ! pnm_validate_hysteria_secret_config hysteria_secret; then
+        hy2_omission_reason='Hysteria2 credentials are missing or invalid'
+    elif pnm_hysteria_config_matches_node node_config hysteria_secret; then
+        :
+    else
+        rc=$?
+        if ((rc == 1 || rc == PNM_EXIT_CONFIG)); then
+            hy2_omission_reason='runtime configuration differs from PNM settings or is damaged'
+        else
+            hy2_omission_reason='runtime configuration is unavailable and could not be verified'
+        fi
+    fi
+
     xray_public_key="$(pnm_node_xray_reality_public_key "${reality_secret[XRAY_REALITY_PRIVATE_KEY]}")" || {
         pnm_error "Unable to derive the REALITY public key from $PNM_XRAY_BIN."
         return "$PNM_EXIT_UNAVAILABLE"
     }
     xray_label="$(pnm_node_uri_encode "PNM-${node_config[NODE_REGION]}-Xray")"
-    hy2_label="$(pnm_node_uri_encode "PNM-${node_config[NODE_REGION]}-Hysteria2")"
     xray_link="vless://$(pnm_node_uri_encode "${reality_secret[XRAY_UUID]}")@$address:${node_config[XRAY_PORT]}?encryption=none&flow=xtls-rprx-vision&security=reality&sni=$(pnm_node_uri_encode "${node_config[XRAY_SERVER_NAME]}")&fp=chrome&pbk=$(pnm_node_uri_encode "$xray_public_key")&sid=$(pnm_node_uri_encode "${reality_secret[XRAY_REALITY_SHORT_ID]}")&type=tcp&headerType=none#$xray_label"
-    hy2_link="hysteria2://$(pnm_node_uri_encode "${hysteria_secret[HY2_AUTH_PASSWORD]}")@$address:${node_config[HY2_PORT]}/?sni=$(pnm_node_uri_encode "${node_config[XRAY_SERVER_NAME]}")"
-    if [[ "${node_config[HY2_TLS_MODE]}" == selfsigned-pin ]]; then
-        hy2_link+="&insecure=1&pinSHA256=$(pnm_node_uri_encode "${hysteria_secret[HY2_TLS_PIN_SHA256]}")"
+    if [[ -z "$hy2_omission_reason" ]]; then
+        hy2_label="$(pnm_node_uri_encode "PNM-${node_config[NODE_REGION]}-Hysteria2")"
+        hy2_link="hysteria2://$(pnm_node_uri_encode "${hysteria_secret[HY2_AUTH_PASSWORD]}")@$address:${node_config[HY2_PORT]}/?sni=$(pnm_node_uri_encode "${node_config[XRAY_SERVER_NAME]}")"
+        if [[ "${node_config[HY2_TLS_MODE]}" == selfsigned-pin ]]; then
+            hy2_link+="&insecure=1&pinSHA256=$(pnm_node_uri_encode "${hysteria_secret[HY2_TLS_PIN_SHA256]}")"
+        fi
+        hy2_link+="#$hy2_label"
     fi
-    hy2_link+="#$hy2_label"
 
     if [[ "$PNM_OUTPUT_MODE" == json ]]; then
-        printf '{"schema":"pnm.node-links.v1","address":%s,"xray_vless_reality":%s,"hysteria2":%s}\n' \
-            "$(pnm_json_string "$address")" "$(pnm_json_string "$xray_link")" "$(pnm_json_string "$hy2_link")"
+        if [[ -n "$hy2_omission_reason" ]]; then
+            printf '{"schema":"pnm.node-links.v1","address":%s,"xray_vless_reality":%s,"hysteria2":null,"hysteria2_status":"omitted"}\n' \
+                "$(pnm_json_string "$address")" "$(pnm_json_string "$xray_link")"
+            pnm_error "Hysteria2 link omitted: $hy2_omission_reason."
+        else
+            printf '{"schema":"pnm.node-links.v1","address":%s,"xray_vless_reality":%s,"hysteria2":%s}\n' \
+                "$(pnm_json_string "$address")" "$(pnm_json_string "$xray_link")" "$(pnm_json_string "$hy2_link")"
+        fi
         return "$PNM_EXIT_OK"
     fi
     printf 'PNM client share links (sensitive)\n'
     printf '  Xray VLESS + REALITY:\n%s\n' "$xray_link"
-    printf '  Hysteria2:\n%s\n' "$hy2_link"
+    if [[ -n "$hy2_omission_reason" ]]; then
+        pnm_warn "Hysteria2 link omitted: $hy2_omission_reason."
+    else
+        printf '  Hysteria2:\n%s\n' "$hy2_link"
+    fi
     pnm_warn 'These links contain client credentials. Store and transmit them as secrets.'
 }
 

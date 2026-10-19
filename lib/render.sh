@@ -140,6 +140,42 @@ masquerade:
 EOF
 }
 
+# Hysteria v2.13.0 has no independent config-check command. Require exact
+# output from PNM's validated deterministic renderer; this avoids starting a
+# server or binding a port and deliberately rejects custom YAML.
+pnm_hysteria_config_validate_candidate() {
+    local candidate="${1:?candidate config required}"
+    local node_name="${2:?node config array required}"
+    local hysteria_name="${3:?hysteria secret array required}"
+    local -n node="$node_name"
+    local -n hysteria="$hysteria_name"
+    local -a lines=()
+
+    [[ -f "$candidate" && ! -L "$candidate" && -r "$candidate" ]] || return "$PNM_EXIT_CONFIG"
+    pnm_validate_node_config "$node_name" && pnm_validate_hysteria_secret_config "$hysteria_name" || return "$PNM_EXIT_CONFIG"
+    mapfile -t lines <"$candidate" || return "$PNM_EXIT_CONFIG"
+    ((${#lines[@]} == 11)) || return "$PNM_EXIT_CONFIG"
+    [[ "${lines[0]}" == "listen: :${node[HY2_PORT]}" &&
+        "${lines[1]}" == 'tls:' &&
+        "${lines[2]}" == "  cert: $(pnm_yaml_scalar "${hysteria[HY2_TLS_CERT_PATH]}")" &&
+        "${lines[3]}" == "  key: $(pnm_yaml_scalar "${hysteria[HY2_TLS_KEY_PATH]}")" &&
+        "${lines[4]}" == 'auth:' &&
+        "${lines[5]}" == '  type: password' &&
+        "${lines[6]}" == "  password: $(pnm_yaml_scalar "${hysteria[HY2_AUTH_PASSWORD]}")" &&
+        "${lines[7]}" == 'masquerade:' &&
+        "${lines[8]}" == '  type: proxy' &&
+        "${lines[9]}" == '  proxy:' &&
+        "${lines[10]}" == "    url: $(pnm_yaml_scalar "https://${node[XRAY_SERVER_NAME]}")" ]]
+}
+
+pnm_hysteria_config_matches_node() {
+    local node_name="${1:?node config array required}"
+    local hysteria_name="${2:?hysteria secret array required}"
+
+    [[ -f "$PNM_HY2_CONFIG" && ! -L "$PNM_HY2_CONFIG" && -r "$PNM_HY2_CONFIG" ]] || return "$PNM_EXIT_UNAVAILABLE"
+    pnm_hysteria_config_validate_candidate "$PNM_HY2_CONFIG" "$node_name" "$hysteria_name"
+}
+
 pnm_render_reality_secret_config() {
     local reality_name="${1:?reality secret array required}"
     local -n reality="$reality_name"

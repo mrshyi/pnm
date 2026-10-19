@@ -192,11 +192,24 @@ pnm_sandbox_step_secrets() {
 pnm_sandbox_step_configs() {
     local xray_staged="$PNM_SANDBOX_STAGING/config/xray.json"
     local hy2_staged="$PNM_SANDBOX_STAGING/config/hysteria.yaml"
-    local xray_target hy2_target
+    local xray_target hy2_target cert key tls_check tls_status tls_detail
 
     pnm_mkdir_mode 0700 "$PNM_SANDBOX_STAGING/config" || return "$PNM_EXIT_CANTCREAT"
     pnm_render_xray_config PNM_SANDBOX_NODE PNM_SANDBOX_REALITY >"$xray_staged" || return $?
     pnm_render_hysteria_config PNM_SANDBOX_NODE PNM_SANDBOX_HYSTERIA >"$hy2_staged" || return $?
+    pnm_hysteria_config_validate_candidate "$hy2_staged" PNM_SANDBOX_NODE PNM_SANDBOX_HYSTERIA || {
+        pnm_error 'Generated Hysteria2 configuration failed PNM candidate validation; it was not written to the runtime path.'
+        return "$PNM_EXIT_CONFIG"
+    }
+    cert="$(pnm_sandbox_path /etc/hysteria/tls/server.crt)" || return $?
+    key="$(pnm_sandbox_path /etc/hysteria/tls/server.key)" || return $?
+    pnm_tls_validate_pair "$cert" "$key" || return $?
+    tls_check="$(pnm_tls_certificate_check "${PNM_SANDBOX_NODE[HY2_TLS_MODE]}" "$cert")"
+    IFS='|' read -r tls_status tls_detail <<<"$tls_check"
+    if [[ "$tls_status" != OK ]]; then
+        pnm_error "Hysteria2 TLS certificate check returned $tls_status ($tls_detail); config was not written to the runtime path."
+        return "$PNM_EXIT_CONFIG"
+    fi
     xray_target="$(pnm_sandbox_path /usr/local/etc/xray/config.json)" || return $?
     hy2_target="$(pnm_sandbox_path /etc/hysteria/config.yaml)" || return $?
     pnm_tx_write_file "$xray_staged" "$xray_target" xray_config 0640 || return $?

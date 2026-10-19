@@ -31,6 +31,7 @@ pnm_check_add() {
 
     case "$status" in
         OK) ;;
+        SKIP) ;;
         WARN) ((PNM_CHECK_WARN_COUNT += 1)) ;;
         FAIL) ((PNM_CHECK_FAIL_COUNT += 1)) ;;
         UNKNOWN) ((PNM_CHECK_UNKNOWN_COUNT += 1)) ;;
@@ -211,6 +212,29 @@ pnm_check_hysteria() {
     pnm_check_add hysteria2 OK 'Hysteria2 local checks passed' "$version; UDP/8443 listening; external QUIC test still required"
 }
 
+pnm_check_hysteria_tls() {
+    local result status detail
+    local -A hysteria_secret=()
+
+    if ((PNM_CHECK_CONFIGURED == 0)); then
+        pnm_check_add hysteria_tls SKIP 'TLS certificate check skipped' 'PNM node is not configured'
+        return 0
+    fi
+    if ! pnm_load_hysteria_secret hysteria_secret || ! pnm_validate_hysteria_secret_config hysteria_secret; then
+        pnm_check_add hysteria_tls WARN 'TLS certificate validity cannot be determined' 'Hysteria2 credentials or certificate path are unavailable'
+        return 0
+    fi
+
+    result="$(pnm_tls_certificate_check "${PNM_NODE_CONFIG[HY2_TLS_MODE]}" "${hysteria_secret[HY2_TLS_CERT_PATH]}")" || result='WARN|TLS certificate validity cannot be determined'
+    IFS='|' read -r status detail <<<"$result"
+    case "$status" in
+        OK) pnm_check_add hysteria_tls OK 'TLS certificate is within its validity period' "$detail" ;;
+        FAIL) pnm_check_add hysteria_tls FAIL 'TLS certificate is outside its validity period' "$detail" ;;
+        SKIP) pnm_check_add hysteria_tls SKIP 'TLS certificate check skipped' "$detail" ;;
+        *) pnm_check_add hysteria_tls WARN 'TLS certificate validity cannot be determined' "$detail" ;;
+    esac
+}
+
 pnm_check_core_failed_units() {
     local output line unit
     local -a failed=()
@@ -260,6 +284,7 @@ pnm_check_collect() {
     pnm_check_systemd_runtime
     pnm_check_xray
     pnm_check_hysteria
+    pnm_check_hysteria_tls
     pnm_check_file_metadata xray_permissions "$PNM_XRAY_CONFIG" 640 root xray
     pnm_check_file_metadata hysteria_permissions "$PNM_HY2_CONFIG" 600 hysteria hysteria
     pnm_check_file_metadata secret_directory "$PNM_CONFIG_DIR/secrets" 700 root root

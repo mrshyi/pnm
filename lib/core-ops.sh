@@ -103,7 +103,7 @@ pnm_core_apply_rollback() {
 }
 
 pnm_core_apply_config() {
-    local core=$1 rc stage config validation_output
+    local core=$1 rc stage config validation_output tls_check tls_status tls_detail
     local node_name=PNM_CORE_NODE secret_name=PNM_CORE_SECRET
     local -A PNM_CORE_NODE=() PNM_CORE_SECRET=()
     pnm_core_resolve "$core" || return $?
@@ -135,6 +135,20 @@ pnm_core_apply_config() {
         fi
     else
         pnm_render_hysteria_config "$node_name" "$secret_name" >"$config" || return $?
+        if ! pnm_hysteria_config_validate_candidate "$config" "$node_name" "$secret_name"; then
+            pnm_error 'Generated Hysteria2 configuration failed PNM candidate validation; the current runtime config was not changed.'
+            return "$PNM_EXIT_CONFIG"
+        fi
+        if ! pnm_tls_validate_pair "${PNM_CORE_SECRET[HY2_TLS_CERT_PATH]}" "${PNM_CORE_SECRET[HY2_TLS_KEY_PATH]}"; then
+            pnm_error 'Hysteria2 TLS certificate and private key could not be validated; the current runtime config was not changed.'
+            return "$PNM_EXIT_CONFIG"
+        fi
+        tls_check="$(pnm_tls_certificate_check "${PNM_CORE_NODE[HY2_TLS_MODE]}" "${PNM_CORE_SECRET[HY2_TLS_CERT_PATH]}")"
+        IFS='|' read -r tls_status tls_detail <<<"$tls_check"
+        if [[ "$tls_status" != OK ]]; then
+            pnm_error "Hysteria2 TLS certificate check returned $tls_status ($tls_detail); the current runtime config was not changed."
+            return "$PNM_EXIT_CONFIG"
+        fi
     fi
     chmod 0600 -- "$config"
     pnm_core_lifecycle_snapshot "$core" || return $?

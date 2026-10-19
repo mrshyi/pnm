@@ -66,6 +66,21 @@ test_hysteria_render_does_not_disable_tls_verification() {
     assert_contains "$output" 'listen: :8443' && assert_contains "$output" 'type: password' && assert_not_contains "$output" 'insecure:'
 }
 
+test_hysteria_candidate_validation_accepts_only_rendered_yaml() {
+    local temp_dir candidate
+    temp_dir="$(mktemp -d)"
+    candidate="$temp_dir/hysteria.yaml"
+    load_render_fixtures || { rm -rf -- "$temp_dir"; return 1; }
+    pnm_render_hysteria_config NODE HYSTERIA >"$candidate" || { rm -rf -- "$temp_dir"; return 1; }
+    pnm_hysteria_config_validate_candidate "$candidate" NODE HYSTERIA || { rm -rf -- "$temp_dir"; return 1; }
+    printf 'invalid: [\n' >"$candidate"
+    if pnm_hysteria_config_validate_candidate "$candidate" NODE HYSTERIA; then
+        rm -rf -- "$temp_dir"
+        return 1
+    fi
+    rm -rf -- "$temp_dir"
+}
+
 test_render_write_is_atomic_mode_600() {
     local temp_dir destination mode
     temp_dir="$(mktemp -d)"
@@ -82,5 +97,6 @@ run_test 'Xray renderer keeps REALITY target and SNI independent' test_xray_rend
 run_test 'runtime Xray parser exposes public REALITY values only' test_runtime_xray_config_exposes_only_public_reality_values
 run_test 'REALITY Short ID rejects odd hex length' test_reality_short_id_requires_even_hex_length
 run_test 'Hysteria renderer keeps TLS verification enabled' test_hysteria_render_does_not_disable_tls_verification
+run_test 'Hysteria candidate validation rejects non-rendered or damaged YAML' test_hysteria_candidate_validation_accepts_only_rendered_yaml
 run_test 'rendered files are atomically written with mode 600' test_render_write_is_atomic_mode_600
 finish_tests
