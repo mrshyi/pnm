@@ -94,8 +94,16 @@ pnm_core_restore_config() {
     return "$rc"
 }
 
+pnm_core_apply_rollback() {
+    if pnm_tx_rollback; then
+        return 0
+    fi
+    pnm_error 'Configuration rollback failed; inspect PNM transaction recovery state before retrying.'
+    return "$PNM_EXIT_SOFTWARE"
+}
+
 pnm_core_apply_config() {
-    local core=$1 rc stage config
+    local core=$1 rc stage config validation_output
     local node_name=PNM_CORE_NODE secret_name=PNM_CORE_SECRET
     local -A PNM_CORE_NODE=() PNM_CORE_SECRET=()
     pnm_core_resolve "$core" || return $?
@@ -107,6 +115,13 @@ pnm_core_apply_config() {
     [[ "${PNM_CORE_NODE[PNM_CONFIGURED]}" == yes ]] || return "$PNM_EXIT_CONFIG"
     if [[ "$core" == xray ]]; then
         pnm_load_reality_secret "$secret_name" && pnm_validate_reality_secret_config "$secret_name" || return "$PNM_EXIT_CONFIG"
+        if pnm_node_xray_reality_public_key "${PNM_CORE_SECRET[XRAY_REALITY_PRIVATE_KEY]}" >/dev/null; then
+            :
+        else
+            rc=$?
+            pnm_error 'REALITY private key is invalid or Xray could not derive its public key.'
+            return "$rc"
+        fi
     else
         pnm_load_hysteria_secret "$secret_name" && pnm_validate_hysteria_secret_config "$secret_name" || return "$PNM_EXIT_CONFIG"
     fi
@@ -114,8 +129,10 @@ pnm_core_apply_config() {
     config="$stage/config"
     if [[ "$core" == xray ]]; then
         pnm_render_xray_config "$node_name" "$secret_name" >"$config" || return $?
-        local validation_output
-        pnm_capture validation_output "$PNM_XRAY_BIN" run -test -config "$config" || return "$PNM_EXIT_CONFIG"
+        if ! pnm_capture validation_output "$PNM_XRAY_BIN" run -test -config "$config"; then
+            pnm_error 'Generated Xray configuration failed `xray run -test`; the current runtime config was not changed.'
+            return "$PNM_EXIT_CONFIG"
+        fi
     else
         pnm_render_hysteria_config "$node_name" "$secret_name" >"$config" || return $?
     fi
@@ -125,12 +142,37 @@ pnm_core_apply_config() {
     pnm_tx_begin "core-config-$core" || return $?
     pnm_tx_add_rollback pnm_core_restore_config || { pnm_tx_close; return "$PNM_EXIT_SOFTWARE"; }
     pnm_tx_write_file "$config" "$PNM_CORE_CONFIG" core_config "$([[ "$core" == xray ]] && printf 0640 || printf 0600)" || {
-        rc=$?; pnm_tx_rollback || true; pnm_tx_close; return "$rc";
+        rc=$?; pnm_core_apply_rollback || true; pnm_tx_close; return "$rc";
     }
-    pnm_core_fix_owner "$core" "$PNM_CORE_CONFIG" || { pnm_tx_rollback || true; pnm_tx_close; return "$PNM_EXIT_NOPERM"; }
-    pnm_systemctl restart "$PNM_CORE_UNIT" || { rc=$?; pnm_tx_rollback || true; pnm_tx_close; return "$rc"; }
-    pnm_systemd_unit_healthy "$PNM_CORE_UNIT" || { pnm_tx_rollback || true; pnm_tx_close; return "$PNM_EXIT_CONFIG"; }
-    pnm_tx_commit || { rc=$?; pnm_tx_rollback || true; pnm_tx_close; return "$rc"; }
+    pnm_core_fix_owner "$core" "$PNM_CORE_CONFIG" || { pnm_core_apply_rollback || true; pnm_tx_close; return "$PNM_EXIT_NOPERM"; }
+    if pnm_systemctl restart "$PNM_CORE_UNIT"; then
+        :
+    else
+        rc=$?
+        pnm_error "$core service restart failed; restoring the previous runtime configuration."
+        pnm_core_apply_rollback || true
+        pnm_tx_close
+        return "$rc"
+    fi
+    if pnm_systemd_unit_healthy "$PNM_CORE_UNIT"; then
+        :
+    else
+        rc=$?
+        pnm_error "$core service did not become healthy after restart; restoring the previous runtime configuration."
+        pnm_core_apply_rollback || true
+        pnm_tx_close
+        return "$rc"
+    fi
+    if [[ "$core" == xray ]]; then
+        if ! cmp -s -- "$config" "$PNM_CORE_CONFIG" ||
+            ! pnm_capture validation_output "$PNM_XRAY_BIN" run -test -config "$PNM_CORE_CONFIG"; then
+            pnm_error 'Xray restarted, but the active configuration does not match the validated candidate; restoring the previous configuration.'
+            pnm_core_apply_rollback || true
+            pnm_tx_close
+            return "$PNM_EXIT_CONFIG"
+        fi
+    fi
+    pnm_tx_commit || { rc=$?; pnm_core_apply_rollback || true; pnm_tx_close; return "$rc"; }
     pnm_tx_close
     pnm_success "$core configuration applied."
 }

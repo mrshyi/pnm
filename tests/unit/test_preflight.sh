@@ -26,7 +26,8 @@ DEPLOY_STARTED=0
 pnm_platform_supported() { return 0; }
 pnm_platform_summary() { printf 'test platform\n'; }
 pnm_systemd_available() { return 0; }
-pnm_command_exists() { [[ "$1" != unzip ]]; }
+PNM_MISSING_TOOL=unzip
+pnm_command_exists() { [[ "$1" != "$PNM_MISSING_TOOL" ]]; }
 LISTENER_PRESENT=0
 pnm_listener_present() { ((LISTENER_PRESENT == 1)); }
 pnm_deploy_apply() { DEPLOY_STARTED=1; return 0; }
@@ -168,7 +169,23 @@ test_missing_unzip_fails_install_dry_run_before_apply() {
     assert_eq 0 "$DEPLOY_STARTED"
 }
 
+test_missing_python3_fails_install_dry_run_before_apply() {
+    local rc
+    PNM_MISSING_TOOL=python3
+    PNM_DRY_RUN=0
+    PNM_ASSUME_YES=0
+    run_capture pnm_install --dry-run
+    rc="$RUN_RC"
+    PNM_MISSING_TOOL=unzip
+    PNM_DRY_RUN=0
+    PNM_ASSUME_YES=0
+    assert_eq 2 "$rc" || return 1
+    assert_contains "$RUN_OUTPUT" 'missing: python3' || return 1
+    assert_eq 0 "$DEPLOY_STARTED" || return 1
+}
+
 run_test 'missing unzip fails dry-run preflight before installation starts' test_missing_unzip_fails_install_dry_run_before_apply
+run_test 'missing python3 fails dry-run preflight before installation starts' test_missing_python3_fails_install_dry_run_before_apply
 run_test 'port preflight allows only a verified PNM recovery listener' test_port_preflight_allows_only_verified_recovery_listener
 run_test 'unknown and committed service listeners are not recovery-authorized' test_committed_or_ambiguous_service_is_not_recovery_authorized
 run_test 'repeat install refuses a previously configured node' test_repeat_install_refuses_a_committed_node

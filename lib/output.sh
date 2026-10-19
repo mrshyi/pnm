@@ -89,7 +89,7 @@ pnm_print_help() {
                 '  --xray-version VERSION --xray-sha256 SHA256' \
                 '  --hy2-version VERSION --hy2-sha256 SHA256' \
                 '  --force       Allow init to replace an uncommitted configuration.' '' \
-                'Defaults: region vps; timezone UTC; REALITY www.microsoft.com:443;' \
+                "Defaults: region vps; timezone UTC; REALITY ${PNM_NODE_DEFAULT_XRAY_SERVER_NAME}:${PNM_NODE_DEFAULT_XRAY_TARGET_PORT};" \
                 'Xray TCP/443; Hysteria2 UDP/8443; self-signed TLS.' \
                 'Interactive init fetches latest stable versions and official SHA-256 values.' \
                 'If lookup fails, enter both pinned version/hash pairs manually.' \

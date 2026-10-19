@@ -2,9 +2,9 @@
 
 readonly PNM_NODE_DEFAULT_REGION='vps'
 readonly PNM_NODE_DEFAULT_TIMEZONE='UTC'
-readonly PNM_NODE_DEFAULT_XRAY_SERVER_NAME='www.microsoft.com'
-readonly PNM_NODE_DEFAULT_XRAY_TARGET='www.microsoft.com:443'
+readonly PNM_NODE_DEFAULT_XRAY_SERVER_NAME='www.cloudflare.com'
 readonly PNM_NODE_DEFAULT_XRAY_PORT='443'
+readonly PNM_NODE_DEFAULT_XRAY_TARGET_PORT='443'
 readonly PNM_NODE_DEFAULT_HY2_PORT='8443'
 readonly PNM_NODE_DEFAULT_HY2_TLS_MODE='selfsigned-pin'
 
@@ -354,7 +354,7 @@ pnm_node_init() {
     [[ -n "$timezone" ]] || timezone="$PNM_NODE_DEFAULT_TIMEZONE"
     [[ -n "$xray_port" ]] || xray_port="$PNM_NODE_DEFAULT_XRAY_PORT"
     [[ -n "$server_name" ]] || server_name="$PNM_NODE_DEFAULT_XRAY_SERVER_NAME"
-    [[ -n "$target" ]] || target="$PNM_NODE_DEFAULT_XRAY_TARGET"
+    [[ -n "$target" ]] || target="${server_name}:$PNM_NODE_DEFAULT_XRAY_TARGET_PORT"
     [[ -n "$hy2_port" ]] || hy2_port="$PNM_NODE_DEFAULT_HY2_PORT"
     [[ -n "$tls_mode" ]] || tls_mode="$PNM_NODE_DEFAULT_HY2_TLS_MODE"
 
@@ -440,7 +440,9 @@ pnm_node_init() {
 }
 
 pnm_node_show() {
-    local reality_server_name reality_sni_valid=1
+    local reality_server_name reality_sni_valid=1 runtime_consistency=not-applied
+    local runtime_port='' runtime_target='' runtime_server_names='' runtime_network=''
+    local xray_service_state=unknown runtime_summary='' consistency_rc
     local -A node_config=() versions_config=()
 
     pnm_load_node_config node_config || {
@@ -468,17 +470,49 @@ pnm_node_show() {
     fi
     pnm_validate_versions_config versions_config || { pnm_error 'Version manifest values are invalid.'; return "$PNM_EXIT_CONFIG"; }
 
+    xray_service_state="$(pnm_systemd_active_state xray.service 2>/dev/null || printf unknown)"
+    if [[ "${node_config[PNM_CONFIGURED]}" == yes ]] && ((reality_sni_valid == 1)); then
+        local -A reality_secret=()
+        if pnm_load_reality_secret reality_secret && pnm_validate_reality_secret_config reality_secret; then
+            if runtime_summary="$(pnm_xray_config_runtime_values "$PNM_XRAY_CONFIG" 2>/dev/null)"; then
+                IFS=$'\t' read -r runtime_port runtime_target runtime_server_names runtime_network <<<"$runtime_summary"
+                if pnm_xray_config_matches_node node_config reality_secret; then
+                    runtime_consistency=consistent
+                else
+                    consistency_rc=$?
+                    if ((consistency_rc == 1)); then runtime_consistency=drift; else runtime_consistency=unavailable; fi
+                fi
+            else
+                runtime_consistency=unavailable
+            fi
+        else
+            runtime_consistency=unavailable
+        fi
+    fi
+
     if [[ "$PNM_OUTPUT_MODE" == json ]]; then
-        printf '{"schema":"pnm.node.v1","config_dir":%s,"node":{"region":%s,"address":%s,"timezone":%s,"configured":%s,"xray_port":%s,"server_name":%s,"target":%s,"hy2_port":%s,"tls_mode":%s},"versions":{"xray":%s,"xray_sha256":%s,"hysteria2":%s,"hysteria2_sha256":%s}}\n' \
+        printf '{"schema":"pnm.node.v1","config_dir":%s,"node":{"region":%s,"address":%s,"timezone":%s,"configured":%s,"xray_port":%s,"server_name":%s,"target":%s,"hy2_port":%s,"tls_mode":%s},"runtime":{"xray_service":%s,"xray_port":%s,"xray_server_names":%s,"xray_target":%s,"xray_network":%s,"configuration_consistency":%s},"versions":{"xray":%s,"xray_sha256":%s,"hysteria2":%s,"hysteria2_sha256":%s}}\n' \
             "$(pnm_json_string "$PNM_CONFIG_DIR")" "$(pnm_json_string "${node_config[NODE_REGION]}")" \
             "$(pnm_json_string "${node_config[NODE_ADDRESS]-}")" "$(pnm_json_string "${node_config[TIMEZONE]}")" \
             "$(pnm_json_string "${node_config[PNM_CONFIGURED]}")" "$(pnm_json_string "${node_config[XRAY_PORT]}")" \
             "$(pnm_json_string "${node_config[XRAY_SERVER_NAME]}")" "$(pnm_json_string "${node_config[XRAY_TARGET]}")" \
             "$(pnm_json_string "${node_config[HY2_PORT]}")" "$(pnm_json_string "${node_config[HY2_TLS_MODE]}")" \
+            "$(pnm_json_string "$xray_service_state")" "$(pnm_json_string "$runtime_port")" \
+            "$(pnm_json_string "$runtime_server_names")" "$(pnm_json_string "$runtime_target")" \
+            "$(pnm_json_string "$runtime_network")" \
+            "$(pnm_json_string "$runtime_consistency")" \
             "$(pnm_json_string "${versions_config[XRAY_VERSION]}")" "$(pnm_json_string "${versions_config[XRAY_SHA256]}")" \
             "$(pnm_json_string "${versions_config[HY2_VERSION]}")" "$(pnm_json_string "${versions_config[HY2_SHA256]}")"
         if ((reality_sni_valid == 0)); then
             pnm_warn 'Saved REALITY SNI is not a fully qualified DNS name; do not use the VPS hostname.'
+            return "$PNM_EXIT_CONFIG"
+        fi
+        if [[ "$runtime_consistency" == drift ]]; then
+            pnm_error 'Persistent node.conf differs from the runtime Xray configuration; apply the desired settings with `sudo pnm apply xray`.'
+            return "$PNM_EXIT_CONFIG"
+        fi
+        if [[ "$runtime_consistency" == unavailable ]]; then
+            pnm_error 'Runtime Xray configuration is unavailable or invalid; consistency could not be verified.'
             return "$PNM_EXIT_CONFIG"
         fi
         return 0
@@ -488,17 +522,31 @@ pnm_node_show() {
     printf '  region: %s\n  address: %s\n  timezone: %s\n  configured: %s\n' \
         "${node_config[NODE_REGION]}" "${node_config[NODE_ADDRESS]-not-set}" \
         "${node_config[TIMEZONE]}" "${node_config[PNM_CONFIGURED]}"
-    printf '  xray: %s -> %s (%s)\n' "${node_config[XRAY_PORT]}" "${node_config[XRAY_SERVER_NAME]}" "${node_config[XRAY_TARGET]}"
+    printf '  xray: %s -> %s (%s) [persisted]\n' "${node_config[XRAY_PORT]}" "${node_config[XRAY_SERVER_NAME]}" "${node_config[XRAY_TARGET]}"
+    printf '  xray runtime: service=%s config=%s' "$xray_service_state" "$runtime_consistency"
+    if [[ -n "$runtime_port" ]]; then
+        printf ' port=%s sni=%s target=%s transport=%s' \
+            "$runtime_port" "$runtime_server_names" "$runtime_target" "$runtime_network"
+    fi
+    printf '\n'
     printf '  hysteria2: %s (%s)\n' "${node_config[HY2_PORT]}" "${node_config[HY2_TLS_MODE]}"
     printf '  versions: xray %s; hysteria2 %s\n' "${versions_config[XRAY_VERSION]}" "${versions_config[HY2_VERSION]}"
     if ((reality_sni_valid == 0)); then
         pnm_warn 'Saved REALITY SNI is not a fully qualified DNS name; do not use the VPS hostname.'
         return "$PNM_EXIT_CONFIG"
     fi
+    if [[ "$runtime_consistency" == drift ]]; then
+        pnm_error 'Persistent node.conf differs from the runtime Xray configuration; apply the desired settings with `sudo pnm apply xray`.'
+        return "$PNM_EXIT_CONFIG"
+    fi
+    if [[ "$runtime_consistency" == unavailable ]]; then
+        pnm_error 'Runtime Xray configuration is unavailable or invalid; consistency could not be verified.'
+        return "$PNM_EXIT_CONFIG"
+    fi
 }
 
 pnm_node_links() {
-    local address='' argument xray_public_key xray_link hy2_link xray_label hy2_label
+    local address='' argument xray_public_key xray_link hy2_link xray_label hy2_label rc
     local -A node_config=() reality_secret=() hysteria_secret=()
 
     while (($# > 0)); do
@@ -561,6 +609,17 @@ pnm_node_links() {
         pnm_error 'Hysteria2 credentials are invalid.'
         return "$PNM_EXIT_CONFIG"
     }
+    if pnm_xray_config_matches_node node_config reality_secret; then
+        :
+    else
+        rc=$?
+        if ((rc == 1)); then
+            pnm_error 'Runtime Xray configuration differs from node.conf; refusing to emit potentially stale links. Apply the desired settings with `sudo pnm apply xray`.'
+            return "$PNM_EXIT_CONFIG"
+        fi
+        pnm_error 'Runtime Xray configuration could not be verified; refusing to emit links.'
+        return "$rc"
+    fi
 
     xray_public_key="$(pnm_node_xray_reality_public_key "${reality_secret[XRAY_REALITY_PRIVATE_KEY]}")" || {
         pnm_error "Unable to derive the REALITY public key from $PNM_XRAY_BIN."

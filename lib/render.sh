@@ -55,6 +55,68 @@ pnm_render_xray_config() {
 EOF
 }
 
+pnm_xray_config_matches_node() {
+    local node_name="${1:?node config array required}"
+    local reality_name="${2:?REALITY secret array required}"
+    local expected rc
+
+    [[ -f "$PNM_XRAY_CONFIG" && ! -L "$PNM_XRAY_CONFIG" ]] || return "$PNM_EXIT_UNAVAILABLE"
+    expected="$(mktemp -- "${TMPDIR:-/tmp}/pnm-xray-config.XXXXXXXX")" || return "$PNM_EXIT_CANTCREAT"
+    chmod 0600 -- "$expected" || { rm -f -- "$expected"; return "$PNM_EXIT_NOPERM"; }
+    if pnm_render_xray_config "$node_name" "$reality_name" >"$expected"; then
+        if cmp -s -- "$expected" "$PNM_XRAY_CONFIG"; then rc=0; else rc=1; fi
+    else
+        rc="$PNM_EXIT_CONFIG"
+    fi
+    rm -f -- "$expected"
+    return "$rc"
+}
+
+pnm_xray_config_runtime_values() {
+    local config_file="${1:?Xray config path required}"
+
+    [[ -f "$config_file" && ! -L "$config_file" && -r "$config_file" ]] || return "$PNM_EXIT_CONFIG"
+    python3 - "$config_file" <<'PY'
+import json
+import sys
+
+def safe(value):
+    return isinstance(value, str) and not any(ord(char) < 32 or ord(char) == 127 for char in value)
+
+try:
+    with open(sys.argv[1], encoding="utf-8") as source:
+        config = json.load(source)
+    reality_inbounds = [
+        inbound for inbound in config.get("inbounds", [])
+        if isinstance(inbound, dict)
+        and isinstance(inbound.get("streamSettings"), dict)
+        and inbound["streamSettings"].get("security") == "reality"
+    ]
+    if len(reality_inbounds) != 1:
+        raise ValueError("expected exactly one REALITY inbound")
+    inbound = reality_inbounds[0]
+    stream = inbound["streamSettings"]
+    reality = stream.get("realitySettings", {})
+    names = reality.get("serverNames", [])
+    port = inbound.get("port")
+    destination = reality.get("dest")
+    network = stream.get("network")
+    values = [str(port), destination, ",".join(names), network]
+    if not isinstance(port, int) or isinstance(port, bool) or not 1 <= port <= 65535:
+        raise ValueError("invalid REALITY port")
+    if not isinstance(names, list) or not names or not all(safe(name) and name and "," not in name for name in names):
+        raise ValueError("invalid serverNames")
+    if not isinstance(destination, str) or not destination or not isinstance(network, str) or not network:
+        raise ValueError("invalid REALITY destination or network")
+    if not all(safe(value) for value in values):
+        raise ValueError("invalid public REALITY fields")
+    print("\t".join(values))
+except (OSError, UnicodeError, ValueError, TypeError, AttributeError, json.JSONDecodeError) as error:
+    print(f"invalid Xray runtime configuration: {error}", file=sys.stderr)
+    sys.exit(1)
+PY
+}
+
 pnm_render_hysteria_config() {
     local node_name="${1:?node config array required}"
     local hysteria_name="${2:?hysteria secret array required}"

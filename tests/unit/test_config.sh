@@ -51,6 +51,17 @@ test_invalid_typed_values_rejected() {
     return 0
 }
 
+test_reality_target_and_sni_are_independent_but_validated() {
+    declare -A node_config=()
+    PNM_CONFIG_DIR="$TEST_ROOT/fixtures/config-valid"
+    pnm_load_node_config node_config || return 1
+    node_config[XRAY_SERVER_NAME]='front.example.com'
+    node_config[XRAY_TARGET]='edge.example.net:8443'
+    pnm_validate_node_config node_config || return 1
+    node_config[XRAY_TARGET]='edge.example.net:70000'
+    ! pnm_validate_node_config node_config
+}
+
 test_versions_manifest_validation() {
     declare -A versions=()
     PNM_CONFIG_DIR="$TEST_ROOT/fixtures/config-valid"
@@ -73,6 +84,7 @@ run_test 'valid node configuration parses as data' test_valid_config
 run_test 'command substitution is rejected and not executed' test_unsafe_config_rejected
 run_test 'duplicate configuration keys are rejected' test_duplicate_config_rejected
 run_test 'invalid typed configuration values are rejected' test_invalid_typed_values_rejected
+run_test 'REALITY target host and SNI are separate validated values' test_reality_target_and_sni_are_independent_but_validated
 run_test 'approved versions manifest validates' test_versions_manifest_validation
 run_test 'symlink configuration is rejected' test_symlink_config_rejected
 finish_tests

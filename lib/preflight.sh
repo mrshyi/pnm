@@ -66,11 +66,11 @@ pnm_preflight_runtime() {
         pnm_preflight_add systemd FAIL 'systemd is unavailable' 'PNM installation requires systemd'
     fi
 
-    for command_name in apt-get awk curl flock install sha256sum ss unzip; do
+    for command_name in apt-get awk curl flock install python3 sha256sum ss unzip; do
         pnm_command_exists "$command_name" || missing+=("$command_name")
     done
     if ((${#missing[@]} == 0)); then
-        pnm_preflight_add tools OK 'Required local tools are available' 'apt-get, awk, curl, flock, install, sha256sum, ss, unzip'
+        pnm_preflight_add tools OK 'Required local tools are available' 'apt-get, awk, curl, flock, install, python3, sha256sum, ss, unzip'
     else
         pnm_preflight_add tools FAIL 'Required local tools are unavailable' "missing: ${missing[*]}"
     fi

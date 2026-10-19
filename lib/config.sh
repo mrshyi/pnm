@@ -87,6 +87,15 @@ pnm_validate_reality_server_name() {
         "$value" =~ ^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$ ]]
 }
 
+pnm_validate_reality_target() {
+    local value="${1-}" hostname port
+
+    [[ "$value" =~ ^([A-Za-z0-9.-]+):([0-9]{1,5})$ ]] || return 1
+    hostname="${BASH_REMATCH[1]}"
+    port="${BASH_REMATCH[2]}"
+    pnm_validate_reality_server_name "$hostname" && pnm_validate_port "$port"
+}
+
 pnm_validate_sha256() {
     [[ "${1-}" =~ ^[a-fA-F0-9]{64}$ ]]
 }
@@ -109,8 +118,7 @@ pnm_validate_node_config() {
     pnm_validate_port "${config[XRAY_PORT]-}" || return 1
     pnm_validate_port "${config[HY2_PORT]-}" || return 1
     pnm_validate_reality_server_name "${config[XRAY_SERVER_NAME]-}" || return 1
-    [[ "${config[XRAY_TARGET]-}" =~ ^[A-Za-z0-9.-]+:[0-9]{1,5}$ ]] || return 1
-    pnm_validate_port "${config[XRAY_TARGET]##*:}" || return 1
+    pnm_validate_reality_target "${config[XRAY_TARGET]-}" || return 1
     [[ "${config[HY2_TLS_MODE]-}" == 'selfsigned-pin' || "${config[HY2_TLS_MODE]-}" == 'external-ca' ]]
 }
 
@@ -137,7 +145,7 @@ pnm_validate_reality_secret_config() {
     [[ "${config[SCHEMA_VERSION]-}" == '1' ]] || return 1
     pnm_validate_uuid "${config[XRAY_UUID]-}" || return 1
     [[ "${config[XRAY_REALITY_PRIVATE_KEY]-}" =~ ^[A-Za-z0-9_-]{40,64}$ ]] || return 1
-    [[ "${config[XRAY_REALITY_SHORT_ID]-}" =~ ^[a-fA-F0-9]{2,16}$ ]]
+    [[ "${config[XRAY_REALITY_SHORT_ID]-}" =~ ^([a-fA-F0-9]{2}){1,8}$ ]]
 }
 
 pnm_validate_hysteria_secret_config() {
