@@ -575,12 +575,19 @@ pnm_tx_restore_written_files() {
 pnm_tx_run() {
     local step="${1:?step required}"
     local apply_function="${2:?apply function required}"
-    local rollback_function="${3-}"
+    local rollback_function=''
     local rc
+
+    if (($# > 2)) && declare -F "${3-}" >/dev/null 2>&1; then
+        rollback_function="$3"
+        shift 3
+    else
+        shift 2
+    fi
 
     ((PNM_TX_ACTIVE == 1)) || return "$PNM_EXIT_SOFTWARE"
     pnm_tx_journal STEP_BEGIN "$step" || return "$PNM_EXIT_CANTCREAT"
-    if "$apply_function"; then
+    if "$apply_function" "$@"; then
         rc=0
     else
         rc=$?

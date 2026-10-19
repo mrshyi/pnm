@@ -20,6 +20,7 @@ source "$TEST_ROOT/testlib.sh"
 
 TX_FIXTURE_TARGET=''
 TX_FIXTURE_EXPECTED=''
+TX_APPLY_ARGS=()
 
 tx_restore_fixture() {
     pnm_tx_restore_file "$TX_FIXTURE_TARGET" fixture "$TX_FIXTURE_EXPECTED"
@@ -31,6 +32,10 @@ tx_fail_apply() {
 
 tx_unexpected_apply() {
     TX_APPLY_CALLED=1
+}
+
+tx_capture_apply_args() {
+    TX_APPLY_ARGS=("$@")
 }
 
 tx_fail_rollback() {
@@ -135,6 +140,26 @@ test_transaction_surfaces_rollback_failure() {
     assert_eq 70 "$rc" || { rm -rf -- "$temp_dir"; return 1; }
     assert_contains "$(<"$journal")" $'RECOVERY_REQUIRED\t'
     rm -rf -- "$temp_dir"
+}
+
+test_transaction_forwards_apply_arguments() {
+    local temp_dir rc
+    temp_dir="$(mktemp -d)"
+    PNM_STATE_DIR="$temp_dir/state"
+    PNM_LOCK_FILE="$temp_dir/pnm.lock"
+    PNM_TX_ID_OVERRIDE='unit-apply-args'
+    PNM_DRY_RUN=0
+    TX_APPLY_ARGS=()
+
+    pnm_tx_begin install || { rm -rf -- "$temp_dir"; return 1; }
+    if pnm_tx_run apply_args tx_capture_apply_args first second; then rc=0; else rc=$?; fi
+    pnm_tx_commit || { pnm_tx_close || true; rm -rf -- "$temp_dir"; return 1; }
+    pnm_tx_close || { rm -rf -- "$temp_dir"; return 1; }
+    rm -rf -- "$temp_dir"
+    assert_eq 0 "$rc" || return 1
+    assert_eq 2 "${#TX_APPLY_ARGS[@]}" || return 1
+    assert_eq first "${TX_APPLY_ARGS[0]}" || return 1
+    assert_eq second "${TX_APPLY_ARGS[1]}"
 }
 
 test_transaction_ids_are_unique_and_deploy_bound() {
@@ -329,6 +354,7 @@ run_test 'dry-run transaction creates no state directory' test_dry_run_transacti
 run_test 'snapshot restore is guarded by expected written hash' test_snapshot_restore_uses_expected_written_hash
 run_test 'snapshot restore refuses manual drift' test_snapshot_restore_refuses_manual_drift
 run_test 'transaction surfaces rollback failure' test_transaction_surfaces_rollback_failure
+run_test 'transaction forwards apply arguments' test_transaction_forwards_apply_arguments
 run_test 'transaction IDs are unique and transactions link to deployment' test_transaction_ids_are_unique_and_deploy_bound
 run_test 'transaction refuses to replace a dangling symlink' test_transaction_refuses_to_replace_dangling_symlink
 run_test 'transaction stops before apply when journal write fails' test_transaction_stops_before_apply_if_journal_fails

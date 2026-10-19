@@ -83,6 +83,8 @@ test_sandbox_install_commits_all_resources() {
     root="$temp_dir/root"
     archive="$temp_dir/xray.zip"
     mkdir -m 0700 -- "$root"
+    mkdir -p -- "$root/usr/local/bin" "$root/etc/systemd/system"
+    chmod 0750 -- "$root/usr/local/bin" "$root/etc/systemd/system"
     make_xray_archive "$archive" pass
     prepare_sandbox_inputs "$temp_dir"
     PNM_SANDBOX_XRAY_ARCHIVE="$archive"
@@ -92,6 +94,11 @@ test_sandbox_install_commits_all_resources() {
     [[ -f "$root/etc/hysteria/config.yaml" && -f "$root/etc/hysteria/tls/server.key" ]] || { rm -rf -- "$temp_dir"; return 1; }
     [[ -f "$root/etc/systemd/system/xray.service" && -f "$root/etc/systemd/system/hysteria-server.service" ]] || { rm -rf -- "$temp_dir"; return 1; }
     [[ ! -e "$root/.pnm-staging" ]] || { rm -rf -- "$temp_dir"; return 1; }
+    [[ ! -e "$PNM_SANDBOX_STAGING" ]] || { rm -rf -- "$temp_dir"; return 1; }
+    assert_eq 750 "$(stat -c '%a' "$root/usr/local/bin")" || { rm -rf -- "$temp_dir"; return 1; }
+    assert_eq 750 "$(stat -c '%a' "$root/etc/systemd/system")" || { rm -rf -- "$temp_dir"; return 1; }
+    assert_eq 700 "$(stat -c '%a' "$root/etc/pnm/secrets")" || { rm -rf -- "$temp_dir"; return 1; }
+    assert_eq 755 "$(stat -c '%a' "$root/etc/hysteria")" || { rm -rf -- "$temp_dir"; return 1; }
     pin="$(sed -n 's/^HY2_TLS_PIN_SHA256=//p' "$root/etc/pnm/secrets/hysteria.env")"
     pnm_validate_pin_sha256 "$pin" || { rm -rf -- "$temp_dir"; return 1; }
     assert_contains "$(<"$journal")" $'COMMIT\t'
@@ -113,6 +120,7 @@ test_sandbox_install_rolls_back_after_validation_failure() {
     journal="$PNM_STATE_DIR/transactions/sandbox-failure/journal.tsv"
     [[ "$rc" == 78 ]] || { rm -rf -- "$temp_dir"; return 1; }
     [[ ! -e "$root/usr/local/bin/xray" && ! -e "$root/etc/hysteria/config.yaml" ]] || { rm -rf -- "$temp_dir"; return 1; }
+    [[ ! -e "$PNM_SANDBOX_STAGING" ]] || { rm -rf -- "$temp_dir"; return 1; }
     assert_not_contains "$(<"$journal")" $'COMMIT\t'
     assert_contains "$(<"$journal")" $'RESTORED\t'
     rm -rf -- "$temp_dir"

@@ -47,7 +47,7 @@ test_host_resources_require_explicit_confirmation_before_accounts() {
     assert_eq 0 "$calls"
 }
 
-test_host_resources_require_fixed_verified_assets() {
+test_host_resources_require_fixed_verified_assets() (
     local temp_dir rc
     temp_dir="$(mktemp -d)"
     PNM_CONFIG_DIR="$PROJECT_ROOT/tests/fixtures/config-valid"
@@ -57,10 +57,11 @@ test_host_resources_require_fixed_verified_assets() {
     PNM_HOST_APPLY_CONFIRMED=yes
     PNM_ASSUME_YES=1
     PNM_DRY_RUN=0
+    pnm_require_root() { return 0; }
     if pnm_host_apply_resources_step; then rc=0; else rc=$?; fi
-    assert_eq 78 "$rc"
+    assert_eq 78 "$rc" || { rm -rf -- "$temp_dir"; return 1; }
     rm -rf -- "$temp_dir"
-}
+)
 
 test_deploy_root_resource_path_is_not_directly_reachable() {
     local rc
@@ -96,6 +97,131 @@ test_host_resources_download_fixed_assets_to_private_cache() {
     assert_eq '700' "$(stat -c '%a' "$PNM_HOST_ASSET_DIR")" || { rm -rf -- "$temp_dir"; return 1; }
     rm -rf -- "$temp_dir"
 }
+test_directory_helper_never_chmods_root() (
+    local path rc chmod_calls=0
+    mkdir() { return 0; }
+    chmod() { ((chmod_calls += 1)); }
+    for path in / // /./ /tmp/..; do
+        if pnm_mkdir_mode 0700 "$path"; then rc=0; else rc=$?; fi
+        assert_eq 78 "$rc" "root alias must be rejected: $path" || return 1
+    done
+    assert_eq 0 "$chmod_calls"
+)
+
+test_host_install_keeps_root_on_config_failure() (
+    local rc mutations=0
+    PNM_APPLY_GATE_ACTIVE=1
+    PNM_HOST_APPLY_CONFIRMED=yes
+    pnm_require_root() { return 0; }
+    pnm_mkdir_mode() { ((mutations += 1)); }
+    pnm_load_node_config() { return 78; }
+    if pnm_sandbox_install /; then rc=0; else rc=$?; fi
+    assert_eq 78 "$rc" || return 1
+    assert_eq 0 "$mutations" 'invalid configuration must not change directory modes' || return 1
+    assert_eq / "$PNM_SANDBOX_ROOT"
+)
+
+test_root_alias_cannot_bypass_host_gate() (
+    local path rc mutations=0
+    PNM_APPLY_GATE_ACTIVE=0
+    PNM_HOST_APPLY_CONFIRMED=no
+    pnm_mkdir_mode() { ((mutations += 1)); }
+    pnm_load_node_config() { return 78; }
+    for path in // /./ /tmp/..; do
+        if pnm_sandbox_install "$path"; then rc=0; else rc=$?; fi
+        [[ "$rc" == 77 || "$rc" == 78 ]] || return 1
+    done
+    assert_eq 0 "$mutations" 'root aliases must be rejected before filesystem changes'
+)
+
+# Exercise the host branch without writing any host resource or requiring root.
+run_host_install_safety_case() (
+    local failure="$1" temp_dir rc accounts=0 restored=0
+    temp_dir="$(mktemp -d)"
+    trap 'rm -rf -- "$temp_dir"' EXIT
+    PNM_APPLY_GATE_ACTIVE=1
+    PNM_HOST_APPLY_CONFIRMED=yes
+    PNM_DRY_RUN=0
+    pnm_require_root() { return 0; }
+    pnm_mkdir_mode() { return 99; }
+    pnm_load_node_config() { return 0; }
+    pnm_load_reality_secret() { return 0; }
+    pnm_load_hysteria_secret() { return 0; }
+    pnm_render_validate_inputs() { return 0; }
+    pnm_tx_begin() {
+        PNM_TX_ACTIVE=1
+        PNM_TX_COMMITTED=0
+        PNM_TX_ROLLED_BACK=0
+        PNM_TX_RECOVERY_REQUIRED=0
+        PNM_TX_ROLLBACKS=()
+        PNM_TX_PATH="$temp_dir/transaction"
+        mkdir -m 0700 -- "$PNM_TX_PATH"
+    }
+    pnm_service_accounts_step() { ((accounts += 1)); }
+    pnm_service_accounts_rollback() { return 0; }
+    pnm_tx_restore_written_files() {
+        ((restored += 1))
+        [[ "$failure" != rollback ]] || return 70
+    }
+    pnm_sandbox_prepare_dirs() {
+        assert_eq /etc/pnm "$(pnm_sandbox_path /etc/pnm)"
+    }
+    pnm_sandbox_step_assets() {
+        [[ "$PNM_SANDBOX_STAGING" == "$PNM_TX_PATH/staging" && -d "$PNM_SANDBOX_STAGING" ]]
+    }
+    pnm_sandbox_step_tls() { return 0; }
+    pnm_sandbox_step_secrets() { return 0; }
+    pnm_sandbox_step_configs() { assert_eq / "$PNM_SANDBOX_ROOT"; }
+    pnm_sandbox_step_units() { return 0; }
+    pnm_sandbox_step_validate() { [[ "$failure" != validate && "$failure" != rollback ]] || return 78; }
+    if [[ "$failure" == commit ]]; then
+        pnm_tx_commit() { return 73; }
+    fi
+    if pnm_sandbox_install /; then rc=0; else rc=$?; fi
+    case "$failure" in
+        none) assert_eq 0 "$rc" && assert_eq 0 "$restored" || return 1 ;;
+        validate) assert_eq 78 "$rc" && assert_eq 1 "$restored" || return 1 ;;
+        commit) assert_eq 73 "$rc" && assert_eq 1 "$restored" || return 1 ;;
+        rollback) assert_eq 70 "$rc" && assert_eq 1 "$restored" || return 1 ;;
+    esac
+    assert_eq 1 "$accounts" 'host branch must create service identities' || return 1
+    if [[ "$failure" == rollback ]]; then
+        [[ -d "$PNM_SANDBOX_STAGING" ]] || return 1
+    else
+        [[ ! -e "$PNM_SANDBOX_STAGING" ]] || return 1
+    fi
+    assert_eq 0 "$PNM_TX_ACTIVE"
+)
+
+test_host_install_safety() { run_host_install_safety_case none; }
+test_host_install_validation_rollback() { run_host_install_safety_case validate; }
+test_host_install_commit_rollback() { run_host_install_safety_case commit; }
+test_host_install_failed_rollback() { run_host_install_safety_case rollback; }
+
+test_staging_cleanup_rejects_other_directories() (
+    local temp_dir rc
+    temp_dir="$(mktemp -d)"
+    trap 'rm -rf -- "$temp_dir"' EXIT
+    mkdir -- "$temp_dir/outside"
+    PNM_TX_PATH="$temp_dir/transaction"
+    PNM_SANDBOX_STAGING="$temp_dir/outside"
+    if pnm_sandbox_cleanup_staging; then rc=0; else rc=$?; fi
+    assert_eq 78 "$rc" || return 1
+    [[ -d "$temp_dir/outside" ]] || return 1
+    PNM_TX_PATH=/
+    PNM_SANDBOX_STAGING=/staging
+    if pnm_sandbox_cleanup_staging; then rc=0; else rc=$?; fi
+    assert_eq 78 "$rc"
+)
+
+run_test 'directory helper refuses root and its aliases' test_directory_helper_never_chmods_root
+run_test 'host config failure leaves root permissions untouched' test_host_install_keeps_root_on_config_failure
+run_test 'root aliases cannot bypass the apply gate' test_root_alias_cannot_bypass_host_gate
+run_test 'host install keeps root identity and uses private transaction staging' test_host_install_safety
+run_test 'host validation failure rolls back and cleans staging' test_host_install_validation_rollback
+run_test 'host commit failure rolls back and cleans staging' test_host_install_commit_rollback
+run_test 'failed rollback retains staging without retrying compensation' test_host_install_failed_rollback
+run_test 'staging cleanup refuses directories outside the transaction' test_staging_cleanup_rejects_other_directories
 run_test 'host sandbox root requires apply gate' test_host_root_requires_apply_gate
 run_test 'host resources require explicit confirmation before accounts' test_host_resources_require_explicit_confirmation_before_accounts
 run_test 'host resources require fixed verified assets' test_host_resources_require_fixed_verified_assets

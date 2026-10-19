@@ -15,7 +15,10 @@ pnm_mkdir_mode() {
 
     mode="${1:?directory mode required}"
     directory="${2:?directory required}"
-    mkdir -p -- "$directory" && chmod "$mode" -- "$directory"
+    mkdir -p -- "$directory" || return "$PNM_EXIT_CANTCREAT"
+    # Compare directory identity so aliases such as // and /tmp/.. are covered.
+    [[ ! "$directory" -ef / ]] || return "$PNM_EXIT_CONFIG"
+    chmod "$mode" -- "$directory"
 }
 
 PNM_CONFIG_DIR="${PNM_CONFIG_DIR:-/etc/pnm}"

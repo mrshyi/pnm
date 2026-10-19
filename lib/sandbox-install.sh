@@ -8,6 +8,8 @@ declare -Ag PNM_SANDBOX_HYSTERIA=()
 
 pnm_sandbox_path() {
     local relative="${1:?absolute install-relative path required}"
+    local path component component_path
+    local -a path_components=()
 
     [[ "$relative" == /* && "$relative" != *'..'* && "$relative" != *$'\n'* ]] || return "$PNM_EXIT_CONFIG"
     if [[ "$PNM_SANDBOX_ROOT" == '/' ]]; then
@@ -15,20 +17,38 @@ pnm_sandbox_path() {
         [[ "${PNM_HOST_APPLY_CONFIRMED:-no}" == yes ]] || return "$PNM_EXIT_NOPERM"
     else
         [[ -n "$PNM_SANDBOX_ROOT" && "$PNM_SANDBOX_ROOT" == /* ]] || return "$PNM_EXIT_CONFIG"
+        # A pre-existing symlink below the sandbox root could redirect writes outside it.
+        path="${PNM_SANDBOX_ROOT%/}${relative}"
+        IFS='/' read -r -a path_components <<< "$path"
+        component_path=''
+        for component in "${path_components[@]}"; do
+            [[ -n "$component" && "$component" != '.' ]] || continue
+            component_path+="/$component"
+            [[ ! -L "$component_path" ]] || return "$PNM_EXIT_CONFIG"
+        done
     fi
     printf '%s%s\n' "${PNM_SANDBOX_ROOT%/}" "$relative"
 }
 
 pnm_sandbox_prepare_dirs() {
-    local relative
+    local relative destination
+
+    # Shared host directories may already have administrator-selected modes.
+    for relative in /usr/local/bin /etc/systemd/system; do
+        destination="$(pnm_sandbox_path "$relative")" || return $?
+        (umask 022; mkdir -p -- "$destination") || return "$PNM_EXIT_CANTCREAT"
+    done
 
     for relative in \
-        /usr/local/bin \
         /usr/local/etc/xray \
-        /etc/pnm/secrets \
-        /etc/hysteria/tls \
-        /etc/systemd/system; do
-        pnm_mkdir_mode 0755 "$(pnm_sandbox_path "$relative")" || return "$PNM_EXIT_CANTCREAT"
+        /etc/hysteria \
+        /etc/hysteria/tls; do
+        destination="$(pnm_sandbox_path "$relative")" || return $?
+        pnm_mkdir_mode 0755 "$destination" || return "$PNM_EXIT_CANTCREAT"
+    done
+    for relative in /etc/pnm /etc/pnm/secrets; do
+        destination="$(pnm_sandbox_path "$relative")" || return $?
+        pnm_mkdir_mode 0700 "$destination" || return "$PNM_EXIT_CANTCREAT"
     done
 }
 
@@ -141,39 +161,65 @@ pnm_sandbox_step_validate() {
 
 pnm_sandbox_abort() {
     local rc="${1:?sandbox failure code required}"
+    local commit_failed="${2:-0}"
 
-    pnm_sandbox_cleanup_staging || true
+    if ((PNM_TX_ACTIVE == 1 && PNM_TX_COMMITTED == 0 && PNM_TX_ROLLED_BACK == 0)) &&
+        ((PNM_TX_RECOVERY_REQUIRED == 0 || commit_failed == 1)); then
+        pnm_tx_rollback || rc="$PNM_EXIT_SOFTWARE"
+    fi
+    # Retain staging evidence when automatic recovery could not complete.
+    if ((PNM_TX_RECOVERY_REQUIRED == 0)); then
+        pnm_sandbox_cleanup_staging || true
+    fi
     pnm_tx_close
     return "$rc"
 }
 
 pnm_sandbox_install() {
     local root="${1:?isolated root required}"
-    local rc
+    local rc component component_path
+    local -a root_components=()
 
-    [[ "$root" == /* && ! -L "$root" ]] || return "$PNM_EXIT_CONFIG"
+    [[ "$root" == /* && "$root" != *'..'* && "$root" != *$'\n'* ]] || return "$PNM_EXIT_CONFIG"
+    while [[ "$root" != / && "$root" == */ ]]; do root="${root%/}"; done
+    IFS='/' read -r -a root_components <<< "$root"
+    component_path=''
+    for component in "${root_components[@]}"; do
+        [[ -n "$component" && "$component" != '.' ]] || continue
+        component_path+="/$component"
+        [[ ! -L "$component_path" ]] || return "$PNM_EXIT_CONFIG"
+    done
+    # Keep the host identity intact, including equivalent spellings such as /./.
+    if [[ "$root" -ef / ]]; then root=/; fi
     if [[ "$root" == '/' ]]; then
         (( ${PNM_APPLY_GATE_ACTIVE:-0} == 1 )) || return "$PNM_EXIT_NOPERM"
         [[ "${PNM_HOST_APPLY_CONFIRMED:-no}" == yes ]] || return "$PNM_EXIT_NOPERM"
         pnm_require_root || return $?
     fi
-    pnm_mkdir_mode 0700 "$root" || return "$PNM_EXIT_CANTCREAT"
-    PNM_SANDBOX_ROOT="${root%/}"
-    PNM_SANDBOX_STAGING="$PNM_SANDBOX_ROOT/.pnm-staging"
-    pnm_load_node_config PNM_SANDBOX_NODE || return "$PNM_EXIT_CONFIG"
-    pnm_load_reality_secret PNM_SANDBOX_REALITY || return "$PNM_EXIT_CONFIG"
-    pnm_load_hysteria_secret PNM_SANDBOX_HYSTERIA || return "$PNM_EXIT_CONFIG"
+    PNM_SANDBOX_ROOT="$root"
+    PNM_SANDBOX_STAGING=''
+    pnm_load_node_config PNM_SANDBOX_NODE || { pnm_error 'Node configuration is missing or invalid; installation stopped.'; return "$PNM_EXIT_CONFIG"; }
+    pnm_load_reality_secret PNM_SANDBOX_REALITY || { pnm_error 'REALITY secrets are missing or invalid; installation stopped.'; return "$PNM_EXIT_CONFIG"; }
+    pnm_load_hysteria_secret PNM_SANDBOX_HYSTERIA || { pnm_error 'Hysteria2 secrets are missing or invalid; installation stopped.'; return "$PNM_EXIT_CONFIG"; }
     pnm_render_validate_inputs PNM_SANDBOX_NODE PNM_SANDBOX_REALITY PNM_SANDBOX_HYSTERIA || return "$PNM_EXIT_CONFIG"
+    # Validate inputs before creating any directory. Never change the host root.
+    if [[ "$root" != '/' ]]; then
+        pnm_mkdir_mode 0700 "$root" || return "$PNM_EXIT_CANTCREAT"
+    fi
     PNM_DRY_RUN=0
     pnm_tx_begin sandbox-install || return $?
+    PNM_SANDBOX_STAGING="$PNM_TX_PATH/staging"
+    mkdir -m 0700 -- "$PNM_SANDBOX_STAGING" || {
+        rc="$PNM_EXIT_CANTCREAT"; pnm_sandbox_abort "$rc"; return $?;
+    }
     pnm_tx_add_rollback pnm_tx_restore_written_files || {
-        pnm_tx_close
-        return "$PNM_EXIT_SOFTWARE"
+        pnm_sandbox_abort "$PNM_EXIT_SOFTWARE"
+        return $?
     }
     if [[ "$PNM_SANDBOX_ROOT" == '/' ]]; then
         pnm_tx_add_rollback pnm_service_accounts_rollback || {
-            pnm_tx_close
-            return "$PNM_EXIT_SOFTWARE"
+            pnm_sandbox_abort "$PNM_EXIT_SOFTWARE"
+            return $?
         }
         if pnm_tx_run ensure_service_accounts pnm_service_accounts_step; then :; else rc=$?; pnm_sandbox_abort "$rc"; return $?; fi
     fi
@@ -185,12 +231,17 @@ pnm_sandbox_install() {
     if pnm_tx_run render_configs pnm_sandbox_step_configs; then :; else rc=$?; pnm_sandbox_abort "$rc"; return $?; fi
     if pnm_tx_run install_units pnm_sandbox_step_units; then :; else rc=$?; pnm_sandbox_abort "$rc"; return $?; fi
     if pnm_tx_run validate pnm_sandbox_step_validate; then :; else rc=$?; pnm_sandbox_abort "$rc"; return $?; fi
-    pnm_tx_commit || { rc=$?; pnm_sandbox_abort "$rc"; return $?; }
+    if pnm_tx_commit; then :; else
+        rc=$?
+        pnm_sandbox_abort "$rc" 1
+        return $?
+    fi
     pnm_sandbox_cleanup_staging || { pnm_tx_journal CLEANUP_REQUIRED 'staging directory remains'; }
     pnm_tx_close
 }
 
 pnm_sandbox_cleanup_staging() {
-    [[ -n "$PNM_SANDBOX_ROOT" && "$PNM_SANDBOX_STAGING" == "$PNM_SANDBOX_ROOT/.pnm-staging" ]] || return "$PNM_EXIT_CONFIG"
+    [[ -n "$PNM_TX_PATH" && "$PNM_TX_PATH" == /* && "$PNM_TX_PATH" != / &&
+        "$PNM_SANDBOX_STAGING" == "$PNM_TX_PATH/staging" && ! -L "$PNM_SANDBOX_STAGING" ]] || return "$PNM_EXIT_CONFIG"
     [[ ! -e "$PNM_SANDBOX_STAGING" ]] || rm -rf -- "$PNM_SANDBOX_STAGING"
 }
