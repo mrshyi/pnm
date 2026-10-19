@@ -29,7 +29,7 @@ test_xray_render_is_valid_json() {
     local output
     load_render_fixtures || return 1
     output="$(pnm_render_xray_config NODE REALITY)" || return 1
-    python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["inbounds"][0]["port"] == 443; assert d["inbounds"][0]["streamSettings"]["security"] == "reality"' <<<"$output"
+    python3 -c 'import json,sys; d=json.load(sys.stdin); inbound=d["inbounds"][0]; assert inbound["port"] == 443; assert inbound["streamSettings"]["security"] == "reality"; assert inbound["streamSettings"]["realitySettings"]["serverNames"] == ["example.com"]' <<<"$output"
 }
 
 test_hysteria_render_does_not_disable_tls_verification() {

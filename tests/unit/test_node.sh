@@ -49,10 +49,45 @@ test_node_links_render_client_import_uris() {
     rm -rf -- "$temp_dir"
     assert_eq 0 "$RUN_RC" || return 1
     assert_contains "$RUN_OUTPUT" 'vless://11111111-2222-4333-8444-555555555555@203.0.113.10:443' || return 1
+    assert_contains "$RUN_OUTPUT" '&sni=example.com&fp=chrome' || return 1
     assert_contains "$RUN_OUTPUT" 'pbk=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' || return 1
     assert_contains "$RUN_OUTPUT" 'hysteria2://abcdefghijklmnopqrstuvwxyz012345@203.0.113.10:8443/' || return 1
+    assert_contains "$RUN_OUTPUT" '?sni=example.com&insecure=1' || return 1
     assert_contains "$RUN_OUTPUT" 'pinSHA256=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA%3D' || return 1
     assert_not_contains "$RUN_OUTPUT" 'fixture-private'
+}
+
+test_node_validation_rejects_single_label_reality_sni() {
+    local -A node_config=()
+    pnm_load_node_config node_config || return 1
+    node_config[XRAY_SERVER_NAME]=proxy-frankfurt
+    ! pnm_validate_node_config node_config
+}
+
+test_node_links_refuse_single_label_reality_sni() {
+    local temp_dir
+    temp_dir="$(mktemp -d)"
+    cp -- "$TEST_ROOT/fixtures/config-secrets/node.conf" "$temp_dir/node.conf"
+    sed -i 's/^XRAY_SERVER_NAME=.*/XRAY_SERVER_NAME=proxy-frankfurt/' "$temp_dir/node.conf"
+    PNM_CONFIG_DIR="$temp_dir"
+    pnm_require_root() { return 0; }
+    run_capture pnm_node_links --address 203.0.113.10
+    rm -rf -- "$temp_dir"
+    assert_eq 78 "$RUN_RC" || return 1
+    assert_contains "$RUN_ERROR" 'do not use the VPS hostname'
+}
+
+test_node_show_reports_invalid_reality_sni() {
+    local temp_dir
+    temp_dir="$(mktemp -d)"
+    cp -- "$TEST_ROOT/fixtures/config-secrets/node.conf" "$temp_dir/node.conf"
+    cp -- "$TEST_ROOT/fixtures/config-secrets/versions.conf" "$temp_dir/versions.conf"
+    sed -i 's/^XRAY_SERVER_NAME=.*/XRAY_SERVER_NAME=proxy-frankfurt/' "$temp_dir/node.conf"
+    run_capture env PNM_CONFIG_DIR="$temp_dir" "$PROJECT_ROOT/bin/pnm" node show
+    rm -rf -- "$temp_dir"
+    assert_eq 78 "$RUN_RC" || return 1
+    assert_contains "$RUN_OUTPUT" 'xray: 443 -> proxy-frankfurt' || return 1
+    assert_contains "$RUN_OUTPUT" 'do not use the VPS hostname'
 }
 
 test_invalid_node_is_rejected() {
@@ -166,6 +201,9 @@ test_init_writes_valid_files_transactionally() {
 run_test 'node validation accepts a complete configuration' test_validate_existing_node
 run_test 'node show reports only non-secret desired state' test_show_hides_secrets_and_exposes_node
 run_test 'node links render client import URIs without private keys' test_node_links_render_client_import_uris
+run_test 'node validation rejects a single-label REALITY SNI' test_node_validation_rejects_single_label_reality_sni
+run_test 'node links refuse a VPS hostname as REALITY SNI' test_node_links_refuse_single_label_reality_sni
+run_test 'node show reports an invalid REALITY SNI for diagnosis' test_node_show_reports_invalid_reality_sni
 run_test 'node validation rejects invalid values' test_invalid_node_is_rejected
 run_test 'latest release metadata parsers return pinned values' test_release_metadata_parsers
 run_test 'latest lookup returns concrete pinned versions and hashes' test_latest_version_lookup_persists_concrete_values

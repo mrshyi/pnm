@@ -379,7 +379,7 @@ pnm_node_init() {
         pnm_node_prompt address 'VPS public address (IPv4 or hostname; used in share links)' "$address" || return $?
         pnm_node_require_value '--address' "$address" || return $?
         pnm_node_prompt timezone 'Timezone' "$timezone" || return $?
-        pnm_node_prompt server_name 'Xray REALITY server name' "$server_name" || return $?
+        pnm_node_prompt server_name 'Xray REALITY SNI (public DNS name covered by the target certificate)' "$server_name" || return $?
         pnm_node_prompt target 'Xray REALITY target host:port' "$target" || return $?
         pnm_node_prompt xray_port 'Xray listen port' "$xray_port" || return $?
         pnm_node_prompt hy2_port 'Hysteria2 listen port' "$hy2_port" || return $?
@@ -411,6 +411,10 @@ pnm_node_init() {
         [HY2_VERSION]="$hy2_version" [HY2_SHA256]="$hy2_sha256" [APPROVED]=yes
     )
     if ! pnm_node_validate_input node_config versions_config; then
+        if ! pnm_validate_reality_server_name "${node_config[XRAY_SERVER_NAME]}"; then
+            pnm_error 'REALITY SNI must be a fully qualified DNS name covered by the target certificate; do not use the VPS hostname.'
+            return "$PNM_EXIT_CONFIG"
+        fi
         pnm_error 'Node values are invalid; check ports, host names, versions, and SHA-256 values.'
         return "$PNM_EXIT_CONFIG"
     fi
@@ -436,6 +440,7 @@ pnm_node_init() {
 }
 
 pnm_node_show() {
+    local reality_server_name reality_sni_valid=1
     local -A node_config=() versions_config=()
 
     pnm_load_node_config node_config || {
@@ -446,7 +451,21 @@ pnm_node_show() {
         pnm_error "Version manifest is missing or unreadable: $PNM_CONFIG_DIR/versions.conf"
         return "$PNM_EXIT_CONFIG"
     }
-    pnm_validate_node_config node_config || { pnm_error 'Node configuration values are invalid.'; return "$PNM_EXIT_CONFIG"; }
+    reality_server_name="${node_config[XRAY_SERVER_NAME]-}"
+    if ! pnm_validate_node_config node_config; then
+        if pnm_validate_reality_server_name "$reality_server_name"; then
+            pnm_error 'Node configuration values are invalid.'
+            return "$PNM_EXIT_CONFIG"
+        fi
+        node_config[XRAY_SERVER_NAME]='example.com'
+        if ! pnm_validate_node_config node_config; then
+            node_config[XRAY_SERVER_NAME]="$reality_server_name"
+            pnm_error 'Node configuration values are invalid.'
+            return "$PNM_EXIT_CONFIG"
+        fi
+        node_config[XRAY_SERVER_NAME]="$reality_server_name"
+        reality_sni_valid=0
+    fi
     pnm_validate_versions_config versions_config || { pnm_error 'Version manifest values are invalid.'; return "$PNM_EXIT_CONFIG"; }
 
     if [[ "$PNM_OUTPUT_MODE" == json ]]; then
@@ -458,6 +477,10 @@ pnm_node_show() {
             "$(pnm_json_string "${node_config[HY2_PORT]}")" "$(pnm_json_string "${node_config[HY2_TLS_MODE]}")" \
             "$(pnm_json_string "${versions_config[XRAY_VERSION]}")" "$(pnm_json_string "${versions_config[XRAY_SHA256]}")" \
             "$(pnm_json_string "${versions_config[HY2_VERSION]}")" "$(pnm_json_string "${versions_config[HY2_SHA256]}")"
+        if ((reality_sni_valid == 0)); then
+            pnm_warn 'Saved REALITY SNI is not a fully qualified DNS name; do not use the VPS hostname.'
+            return "$PNM_EXIT_CONFIG"
+        fi
         return 0
     fi
 
@@ -468,6 +491,10 @@ pnm_node_show() {
     printf '  xray: %s -> %s (%s)\n' "${node_config[XRAY_PORT]}" "${node_config[XRAY_SERVER_NAME]}" "${node_config[XRAY_TARGET]}"
     printf '  hysteria2: %s (%s)\n' "${node_config[HY2_PORT]}" "${node_config[HY2_TLS_MODE]}"
     printf '  versions: xray %s; hysteria2 %s\n' "${versions_config[XRAY_VERSION]}" "${versions_config[HY2_VERSION]}"
+    if ((reality_sni_valid == 0)); then
+        pnm_warn 'Saved REALITY SNI is not a fully qualified DNS name; do not use the VPS hostname.'
+        return "$PNM_EXIT_CONFIG"
+    fi
 }
 
 pnm_node_links() {
@@ -495,6 +522,10 @@ pnm_node_links() {
     pnm_require_root || return $?
     pnm_load_node_config node_config || {
         pnm_error "Node configuration is missing or unreadable: $PNM_CONFIG_DIR/node.conf"
+        return "$PNM_EXIT_CONFIG"
+    }
+    pnm_validate_reality_server_name "${node_config[XRAY_SERVER_NAME]-}" || {
+        pnm_error 'REALITY SNI must be a fully qualified DNS name covered by the target certificate; do not use the VPS hostname.'
         return "$PNM_EXIT_CONFIG"
     }
     pnm_validate_node_config node_config || {

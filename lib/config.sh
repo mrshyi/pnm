@@ -80,6 +80,13 @@ pnm_validate_node_address() {
     [[ "$value" =~ ^[A-Za-z0-9][A-Za-z0-9.-]{0,252}$ ]]
 }
 
+pnm_validate_reality_server_name() {
+    local value="${1-}"
+
+    [[ ${#value} -le 253 &&
+        "$value" =~ ^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$ ]]
+}
+
 pnm_validate_sha256() {
     [[ "${1-}" =~ ^[a-fA-F0-9]{64}$ ]]
 }
@@ -101,7 +108,7 @@ pnm_validate_node_config() {
     [[ "${config[TIMEZONE]-}" =~ ^[A-Za-z0-9._+-]+(/[A-Za-z0-9._+-]+)*$ ]] || return 1
     pnm_validate_port "${config[XRAY_PORT]-}" || return 1
     pnm_validate_port "${config[HY2_PORT]-}" || return 1
-    [[ "${config[XRAY_SERVER_NAME]-}" =~ ^[A-Za-z0-9.-]+$ ]] || return 1
+    pnm_validate_reality_server_name "${config[XRAY_SERVER_NAME]-}" || return 1
     [[ "${config[XRAY_TARGET]-}" =~ ^[A-Za-z0-9.-]+:[0-9]{1,5}$ ]] || return 1
     pnm_validate_port "${config[XRAY_TARGET]##*:}" || return 1
     [[ "${config[HY2_TLS_MODE]-}" == 'selfsigned-pin' || "${config[HY2_TLS_MODE]-}" == 'external-ca' ]]

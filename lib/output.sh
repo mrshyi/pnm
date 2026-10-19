@@ -84,7 +84,7 @@ pnm_print_help() {
                 'Put global --json before node show/validate/links for machine-readable output.' '' \
                 'Init/change options:' \
                 '  --region NAME --address IPv4-or-hostname --timezone ZONE' \
-                '  --server-name NAME --target HOST:PORT' \
+                '  --server-name FQDN --target HOST:PORT' \
                 '  --xray-port PORT --hy2-port PORT --tls-mode selfsigned-pin|external-ca' \
                 '  --xray-version VERSION --xray-sha256 SHA256' \
                 '  --hy2-version VERSION --hy2-sha256 SHA256' \

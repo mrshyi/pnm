@@ -53,7 +53,7 @@ sudo pnm install --dry-run
 sudo pnm install --apply --yes
 ```
 
-`pnm node init` prompts for the VPS public address, region, timezone, REALITY server name and target, listen ports, TLS mode, and the exact pinned Xray/Hysteria2 versions with their independently verified SHA-256 values. It writes `/etc/pnm/node.conf` and `/etc/pnm/versions.conf` transactionally with mode `0600`. Do not enter placeholders such as `<VERSION>` or `<SHA256>`; angle brackets are intentionally rejected as unsafe configuration values.
+`pnm node init` prompts for the VPS public address, region, timezone, REALITY SNI and target, listen ports, TLS mode, and the exact pinned Xray/Hysteria2 versions with their independently verified SHA-256 values. REALITY SNI must be a fully qualified DNS name covered by the target certificate (for example, `www.microsoft.com`); do not use the VPS hostname. It writes `/etc/pnm/node.conf` and `/etc/pnm/versions.conf` transactionally with mode `0600`. Do not enter placeholders such as `<VERSION>` or `<SHA256>`; angle brackets are intentionally rejected as unsafe configuration values.
 
 The wizard defaults to `vps`, `UTC`, `www.microsoft.com` with target `www.microsoft.com:443`, Xray TCP/443, Hysteria2 UDP/8443, and `selfsigned-pin`. It also queries the latest stable Xray and Hysteria2 release metadata and official SHA-256 files, then displays concrete version/hash values as defaults. Press Enter to accept them, or override them with the corresponding option. The saved `versions.conf` always contains concrete pinned values; the moving `latest` label is never used as an asset URL or written to disk.
 
