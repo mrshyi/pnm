@@ -187,7 +187,7 @@ run_host_install_safety_case() (
         none) assert_eq 0 "$rc" && assert_eq 0 "$restored" || return 1 ;;
         validate) assert_eq 78 "$rc" && assert_eq 1 "$restored" || return 1 ;;
         commit) assert_eq 73 "$rc" && assert_eq 1 "$restored" || return 1 ;;
-        rollback) assert_eq 70 "$rc" && assert_eq 1 "$restored" || return 1 ;;
+        rollback) assert_eq 78 "$rc" && assert_eq 1 "$restored" || return 1 ;;
     esac
     assert_eq 1 "$accounts" 'host branch must create service identities' || return 1
     if [[ "$failure" == rollback ]]; then

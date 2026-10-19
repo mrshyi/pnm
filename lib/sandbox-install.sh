@@ -247,10 +247,19 @@ pnm_sandbox_step_validate() {
 pnm_sandbox_abort() {
     local rc="${1:?sandbox failure code required}"
     local commit_failed="${2:-0}"
+    local original_rc="$PNM_TX_STEP_FAILURE_RC"
 
     if ((PNM_TX_ACTIVE == 1 && PNM_TX_COMMITTED == 0 && PNM_TX_ROLLED_BACK == 0)) &&
         ((PNM_TX_RECOVERY_REQUIRED == 0 || commit_failed == 1)); then
         pnm_tx_rollback || rc="$PNM_EXIT_SOFTWARE"
+    fi
+    if ((PNM_TX_RECOVERY_REQUIRED == 1)); then
+        ((original_rc != 0)) || original_rc="$rc"
+        if ((PNM_TX_ROLLBACK_FAILURE_RC != 0)); then
+            pnm_error "Installation step '${PNM_TX_STEP_FAILURE_NAME:-unknown}' failed with exit code $original_rc; rollback failed with exit code $PNM_TX_ROLLBACK_FAILURE_RC. Recovery is required; transaction evidence retained at $PNM_TX_PATH."
+        else
+            pnm_error "Installation stopped with exit code $rc; transaction state is uncertain and recovery is required. Evidence retained at $PNM_TX_PATH."
+        fi
     fi
     # Retain staging evidence when automatic recovery could not complete.
     if ((PNM_TX_RECOVERY_REQUIRED == 0)); then

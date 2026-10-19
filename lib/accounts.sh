@@ -97,39 +97,73 @@ pnm_service_accounts_step() {
 }
 
 pnm_service_accounts_rollback() {
-    local index account group record members rc=0
+    local index account group record members group_gid passwd_records rc=0
+    local -a remaining_users=() remaining_groups=()
+    local -A failed_users=()
 
     for ((index=${#PNM_ACCOUNTS_CREATED_USERS[@]} - 1; index >= 0; index -= 1)); do
         account="${PNM_ACCOUNTS_CREATED_USERS[$index]}"
         if getent passwd "$account" >/dev/null 2>&1; then
-            pnm_service_account_existing_valid "$account" || { rc="$PNM_EXIT_SOFTWARE"; continue; }
+            pnm_service_account_existing_valid "$account" || {
+                rc="$PNM_EXIT_SOFTWARE"; remaining_users+=("$account"); failed_users[$account]=1; continue;
+            }
             if ps -u "$account" -o pid= 2>/dev/null | awk 'NF {found=1} END {exit(found ? 0 : 1)}'; then
                 rc="$PNM_EXIT_SOFTWARE"
+                remaining_users+=("$account")
+                failed_users[$account]=1
                 continue
             fi
             if userdel -- "$account"; then
-                ((PNM_TX_ACTIVE == 0)) || pnm_tx_record_account RESTORED user "$account" || rc="$PNM_EXIT_SOFTWARE"
+                if ((PNM_TX_ACTIVE != 0)) && ! pnm_tx_record_account RESTORED user "$account"; then
+                    rc="$PNM_EXIT_SOFTWARE"
+                    remaining_users+=("$account")
+                fi
             else
                 rc="$PNM_EXIT_SOFTWARE"
+                remaining_users+=("$account")
+                failed_users[$account]=1
             fi
         elif ((PNM_TX_ACTIVE == 1)); then
-            pnm_tx_record_account RESTORED user "$account" || rc="$PNM_EXIT_SOFTWARE"
+            if ! pnm_tx_record_account RESTORED user "$account"; then
+                rc="$PNM_EXIT_SOFTWARE"
+                remaining_users+=("$account")
+            fi
         fi
     done
     for ((index=${#PNM_ACCOUNTS_CREATED_GROUPS[@]} - 1; index >= 0; index -= 1)); do
         group="${PNM_ACCOUNTS_CREATED_GROUPS[$index]}"
         if record="$(getent group "$group" 2>/dev/null)"; then
+            if [[ -n "${failed_users[$group]-}" ]]; then
+                rc="$PNM_EXIT_SOFTWARE"
+                remaining_groups+=("$group")
+                continue
+            fi
             IFS=: read -r _ _ _ members <<<"$record"
-            [[ -z "$members" ]] || { rc="$PNM_EXIT_SOFTWARE"; continue; }
+            [[ -z "$members" ]] || { rc="$PNM_EXIT_SOFTWARE"; remaining_groups+=("$group"); continue; }
+            IFS=: read -r _ _ group_gid _ <<<"$record"
+            if ! passwd_records="$(getent passwd 2>/dev/null)" ||
+                awk -F: -v gid="$group_gid" '$4 == gid {found=1} END {exit(found ? 0 : 1)}' <<<"$passwd_records"; then
+                rc="$PNM_EXIT_SOFTWARE"
+                remaining_groups+=("$group")
+                continue
+            fi
             if groupdel -- "$group"; then
-                ((PNM_TX_ACTIVE == 0)) || pnm_tx_record_account RESTORED group "$group" || rc="$PNM_EXIT_SOFTWARE"
+                if ((PNM_TX_ACTIVE != 0)) && ! pnm_tx_record_account RESTORED group "$group"; then
+                    rc="$PNM_EXIT_SOFTWARE"
+                    remaining_groups+=("$group")
+                fi
             else
                 rc="$PNM_EXIT_SOFTWARE"
+                remaining_groups+=("$group")
             fi
         elif ((PNM_TX_ACTIVE == 1)); then
-            pnm_tx_record_account RESTORED group "$group" || rc="$PNM_EXIT_SOFTWARE"
+            if ! pnm_tx_record_account RESTORED group "$group"; then
+                rc="$PNM_EXIT_SOFTWARE"
+                remaining_groups+=("$group")
+            fi
         fi
     done
-    pnm_service_accounts_reset
+    PNM_ACCOUNTS_CREATED_USERS=("${remaining_users[@]}")
+    PNM_ACCOUNTS_CREATED_GROUPS=("${remaining_groups[@]}")
     return "$rc"
 }

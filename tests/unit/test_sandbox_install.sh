@@ -255,6 +255,50 @@ test_sandbox_install_rolls_back_after_validation_failure() {
     rm -rf -- "$temp_dir"
 }
 
+test_asset_staging_failure_rolls_back_transaction() {
+    local temp_dir root archive rc journal
+    temp_dir="$(mktemp -d)"
+    root="$temp_dir/root"
+    archive="$temp_dir/not-a-zip.zip"
+    mkdir -m 0700 -- "$root"
+    printf 'invalid archive\n' >"$archive"
+    prepare_sandbox_inputs "$temp_dir"
+    PNM_TX_ID_OVERRIDE='sandbox-stage-assets-failure'
+    PNM_SANDBOX_XRAY_ARCHIVE="$archive"
+    if pnm_sandbox_install "$root"; then rc=0; else rc=$?; fi
+    journal="$PNM_STATE_DIR/transactions/sandbox-stage-assets-failure/journal.tsv"
+    assert_eq 78 "$rc" || { rm -rf -- "$temp_dir"; return 1; }
+    assert_contains "$(<"$journal")" $'STEP_FAILED\tstage_assets rc=78' || { rm -rf -- "$temp_dir"; return 1; }
+    assert_contains "$(<"$journal")" $'ROLLBACK_COMPLETE\t' || { rm -rf -- "$temp_dir"; return 1; }
+    [[ ! -e "$root/usr/local/bin/xray" && ! -e "$root/usr/local/bin/hysteria" ]] || { rm -rf -- "$temp_dir"; return 1; }
+    [[ ! -e "$PNM_SANDBOX_STAGING" ]] || { rm -rf -- "$temp_dir"; return 1; }
+    rm -rf -- "$temp_dir"
+}
+
+test_abort_reports_original_and_rollback_failure_codes() {
+    local temp_dir journal rc
+    temp_dir="$(mktemp -d)"
+    PNM_STATE_DIR="$temp_dir/state"
+    PNM_LOCK_FILE="$temp_dir/pnm.lock"
+    PNM_TX_ID_OVERRIDE='sandbox-recovery-message'
+    PNM_DRY_RUN=0
+    pnm_tx_begin sandbox-install || { rm -rf -- "$temp_dir"; return 1; }
+    journal="$PNM_TX_PATH/journal.tsv"
+    PNM_TX_RECOVERY_REQUIRED=1
+    PNM_TX_STEP_FAILURE_NAME='stage_assets'
+    PNM_TX_STEP_FAILURE_RC=69
+    PNM_TX_ROLLBACK_FAILURE_RC=70
+    PNM_SANDBOX_STAGING=''
+    run_capture pnm_sandbox_abort 69
+    rc="$RUN_RC"
+    assert_eq 69 "$rc" || { rm -rf -- "$temp_dir"; return 1; }
+    assert_contains "$RUN_ERROR" "step 'stage_assets' failed with exit code 69" || { rm -rf -- "$temp_dir"; return 1; }
+    assert_contains "$RUN_ERROR" 'rollback failed with exit code 70' || { rm -rf -- "$temp_dir"; return 1; }
+    assert_contains "$RUN_ERROR" 'Recovery is required' || { rm -rf -- "$temp_dir"; return 1; }
+    assert_contains "$(<"$journal")" $'RECOVERY_REQUIRED\ttransaction closed with uncertain state'
+    rm -rf -- "$temp_dir"
+}
+
 test_sandbox_install_imports_external_tls_and_rewrites_pin() {
     local temp_dir root archive pin expected
     temp_dir="$(mktemp -d)"
@@ -280,6 +324,8 @@ test_sandbox_install_imports_external_tls_and_rewrites_pin() {
 
 run_test 'sandbox install commits Core, TLS, config, and units' test_sandbox_install_commits_all_resources
 run_test 'sandbox validation failure compensates all written files' test_sandbox_install_rolls_back_after_validation_failure
+run_test 'asset staging failure rolls back the installation transaction' test_asset_staging_failure_rolls_back_transaction
+run_test 'recovery message distinguishes original and rollback error codes' test_abort_reports_original_and_rollback_failure_codes
 run_test 'sandbox install imports external TLS and rewrites pin' test_sandbox_install_imports_external_tls_and_rewrites_pin
 run_test 'first install generates secure credentials and reuses them on repeat' test_first_install_generates_and_reuses_secrets
 run_test 'corrupt credentials stop install without replacement' test_corrupt_secret_stops_without_replacing_it

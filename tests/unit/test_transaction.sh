@@ -27,7 +27,7 @@ tx_restore_fixture() {
 }
 
 tx_fail_apply() {
-    return 78
+    return 69
 }
 
 tx_unexpected_apply() {
@@ -137,8 +137,12 @@ test_transaction_surfaces_rollback_failure() {
     if pnm_tx_run failing_step tx_fail_apply; then rc=0; else rc=$?; fi
     journal="$PNM_TX_PATH/journal.tsv"
     pnm_tx_close || true
-    assert_eq 70 "$rc" || { rm -rf -- "$temp_dir"; return 1; }
-    assert_contains "$(<"$journal")" $'RECOVERY_REQUIRED\t'
+    assert_eq 69 "$rc" || { rm -rf -- "$temp_dir"; return 1; }
+    assert_eq failing_step "$PNM_TX_STEP_FAILURE_NAME" || { rm -rf -- "$temp_dir"; return 1; }
+    assert_eq 69 "$PNM_TX_STEP_FAILURE_RC" || { rm -rf -- "$temp_dir"; return 1; }
+    assert_eq 23 "$PNM_TX_ROLLBACK_FAILURE_RC" || { rm -rf -- "$temp_dir"; return 1; }
+    assert_contains "$(<"$journal")" $'STEP_FAILED\tfailing_step rc=69' || { rm -rf -- "$temp_dir"; return 1; }
+    assert_contains "$(<"$journal")" $'RECOVERY_REQUIRED\ttx_fail_rollback rollback_rc=23 original_rc=69'
     rm -rf -- "$temp_dir"
 }
 

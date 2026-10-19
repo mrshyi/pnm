@@ -6,6 +6,9 @@ PNM_TX_ACTIVE=0
 PNM_TX_COMMITTED=0
 PNM_TX_ROLLED_BACK=0
 PNM_TX_RECOVERY_REQUIRED=0
+PNM_TX_STEP_FAILURE_NAME=''
+PNM_TX_STEP_FAILURE_RC=0
+PNM_TX_ROLLBACK_FAILURE_RC=0
 PNM_TX_DEPLOYMENT_ID='none'
 PNM_TX_OPERATION=''
 PNM_TX_INSPECT_CORE=''
@@ -341,6 +344,9 @@ pnm_tx_begin() {
     PNM_TX_COMMITTED=0
     PNM_TX_ROLLED_BACK=0
     PNM_TX_RECOVERY_REQUIRED=0
+    PNM_TX_STEP_FAILURE_NAME=''
+    PNM_TX_STEP_FAILURE_RC=0
+    PNM_TX_ROLLBACK_FAILURE_RC=0
     PNM_TX_DEPLOYMENT_ID='none'
     PNM_TX_OPERATION=''
     PNM_TX_OPERATION="$operation"
@@ -593,9 +599,12 @@ pnm_tx_run() {
         rc=$?
     fi
     if ((rc != 0)); then
+        PNM_TX_STEP_FAILURE_NAME="$step"
+        PNM_TX_STEP_FAILURE_RC="$rc"
         pnm_tx_journal STEP_FAILED "$step rc=$rc" || PNM_TX_RECOVERY_REQUIRED=1
         if ! pnm_tx_rollback; then
-            return "$PNM_EXIT_SOFTWARE"
+            ((PNM_TX_ROLLBACK_FAILURE_RC != 0)) || PNM_TX_ROLLBACK_FAILURE_RC="$PNM_EXIT_SOFTWARE"
+            return "$rc"
         fi
         return "$rc"
     fi
@@ -618,7 +627,8 @@ pnm_tx_rollback() {
             pnm_tx_journal ROLLBACK_DONE "$rollback_function" || rc="$PNM_EXIT_SOFTWARE"
         else
             rc=$?
-            pnm_tx_journal RECOVERY_REQUIRED "$rollback_function rc=$rc"
+            PNM_TX_ROLLBACK_FAILURE_RC="$rc"
+            pnm_tx_journal RECOVERY_REQUIRED "$rollback_function rollback_rc=$rc original_rc=$PNM_TX_STEP_FAILURE_RC"
             PNM_TX_RECOVERY_REQUIRED=1
             return "$PNM_EXIT_SOFTWARE"
         fi
@@ -627,6 +637,7 @@ pnm_tx_rollback() {
         PNM_TX_ROLLED_BACK=1
         pnm_tx_journal ROLLBACK_COMPLETE '' || { PNM_TX_RECOVERY_REQUIRED=1; return "$PNM_EXIT_SOFTWARE"; }
     else
+        PNM_TX_ROLLBACK_FAILURE_RC="$rc"
         PNM_TX_RECOVERY_REQUIRED=1
         pnm_tx_journal RECOVERY_REQUIRED 'rollback journal write failed' || true
         return "$PNM_EXIT_SOFTWARE"
