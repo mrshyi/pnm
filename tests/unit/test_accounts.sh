@@ -23,6 +23,14 @@ source "$TEST_ROOT/testlib.sh"
 ACCOUNT_USERDEL_FAIL=0
 ACCOUNT_GROUPDEL_CALLS=0
 ACCOUNT_USERDEL_CALLS=0
+ACCOUNT_XRAY_PASSWD_GID=999
+ACCOUNT_XRAY_GROUP_GID=999
+ACCOUNT_XRAY_HOME=/nonexistent
+ACCOUNT_XRAY_SHELL=/usr/sbin/nologin
+ACCOUNT_HYSTERIA_PASSWD_GID=998
+ACCOUNT_HYSTERIA_GROUP_GID=998
+ACCOUNT_HYSTERIA_HOME=/nonexistent
+ACCOUNT_HYSTERIA_SHELL=/usr/sbin/nologin
 
 pnm_require_root() { return 0; }
 pnm_command_exists() { return 0; }
@@ -30,16 +38,16 @@ getent() {
     case "${1-}" in
         passwd)
             case "${2-}" in
-                xray) printf 'xray:x:999:999:/nonexistent:/usr/sbin/nologin\n' ;;
-                hysteria) printf 'hysteria:x:998:998:/nonexistent:/usr/sbin/nologin\n' ;;
-                '') printf 'other:x:1000:999:/home/other:/bin/bash\n' ;;
+                xray) printf 'xray:x:999:%s:Xray service:%s:%s\n' "$ACCOUNT_XRAY_PASSWD_GID" "$ACCOUNT_XRAY_HOME" "$ACCOUNT_XRAY_SHELL" ;;
+                hysteria) printf 'hysteria:x:998:%s:Hysteria service:%s:%s\n' "$ACCOUNT_HYSTERIA_PASSWD_GID" "$ACCOUNT_HYSTERIA_HOME" "$ACCOUNT_HYSTERIA_SHELL" ;;
+                '') printf 'other:x:1000:999:Other account:/home/other:/bin/bash\n' ;;
                 *) return 2 ;;
             esac
             ;;
         group)
             case "${2-}" in
-                xray) printf 'xray:x:999:\n' ;;
-                hysteria) printf 'hysteria:x:998:\n' ;;
+                xray) printf 'xray:x:%s:\n' "$ACCOUNT_XRAY_GROUP_GID" ;;
+                hysteria) printf 'hysteria:x:%s:\n' "$ACCOUNT_HYSTERIA_GROUP_GID" ;;
                 *) return 2 ;;
             esac
             ;;
@@ -63,12 +71,39 @@ test_unknown_service_account_is_rejected() {
 }
 
 test_valid_existing_accounts_are_reused() {
-    local rc
+    local rc account expected
+    for account in xray hysteria; do
+        case "$account" in
+            xray) expected='xray|999|999|/nonexistent|/usr/sbin/nologin' ;;
+            hysteria) expected='hysteria|998|998|/nonexistent|/usr/sbin/nologin' ;;
+        esac
+        pnm_service_account_existing_valid "$account" || return 1
+        assert_eq "$expected" "$(pnm_service_account_state "$account")" || return 1
+    done
     pnm_service_accounts_reset
     if pnm_service_accounts_step; then rc=0; else rc=$?; fi
     assert_eq 0 "$rc" || return 1
     assert_eq 0 "${#PNM_ACCOUNTS_CREATED_USERS[@]}" || return 1
     assert_eq 0 "${#PNM_ACCOUNTS_CREATED_GROUPS[@]}"
+}
+
+test_existing_accounts_reject_home_shell_and_gid_mismatches() {
+    local account prefix field variable expected expected_gid rc
+    for account in xray hysteria; do
+        prefix="${account^^}"
+        if [[ "$account" == xray ]]; then expected_gid=999; else expected_gid=998; fi
+        for field in HOME SHELL PASSWD_GID; do
+            variable="ACCOUNT_${prefix}_${field}"
+            case "$field" in
+                HOME) expected=/nonexistent; printf -v "$variable" '%s' /wrong-home ;;
+                SHELL) expected=/usr/sbin/nologin; printf -v "$variable" '%s' /bin/false ;;
+                PASSWD_GID) expected="$expected_gid"; printf -v "$variable" '%s' 12345 ;;
+            esac
+            if pnm_service_account_existing_valid "$account"; then rc=0; else rc=$?; fi
+            [[ "$rc" -ne 0 ]] || { printf 'expected %s mismatch to be rejected\n' "$field" >&2; return 1; }
+            printf -v "$variable" '%s' "$expected"
+        done
+    done
 }
 
 test_failed_user_delete_preserves_group_and_tracking() {
@@ -131,6 +166,7 @@ test_group_with_primary_user_is_preserved() {
 run_test 'service account policy is fixed for both Cores' test_service_account_policy_is_fixed
 run_test 'unknown service account is rejected' test_unknown_service_account_is_rejected
 run_test 'valid existing service accounts are reused' test_valid_existing_accounts_are_reused
+run_test 'existing accounts reject Home, Shell, and primary GID mismatches' test_existing_accounts_reject_home_shell_and_gid_mismatches
 run_test 'failed user deletion preserves its group and rollback tracking' test_failed_user_delete_preserves_group_and_tracking
 run_test 'group with another primary user is preserved' test_group_with_primary_user_is_preserved
 finish_tests

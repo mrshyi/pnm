@@ -5,13 +5,13 @@ declare -ag PNM_ACCOUNTS_CREATED_GROUPS=()
 
 pnm_service_account_existing_valid() {
     local account="${1:?service account required}"
-    local policy group expected_home expected_shell record username _ uid gid home shell group_record group_gid
+    local policy group expected_home expected_shell record username passwd_field uid gid gecos home shell group_record group_gid
 
     policy="$(pnm_service_account_policy "$account")" || return "$PNM_EXIT_CONFIG"
     IFS='|' read -r group expected_home expected_shell <<<"$policy"
     record="$(getent passwd "$account" 2>/dev/null)" || return "$PNM_EXIT_CONFIG"
-    IFS=: read -r username _ uid gid home shell <<<"$record"
-    [[ "$home" == "$expected_home" && "$shell" == "$expected_shell" ]] || return "$PNM_EXIT_CONFIG"
+    IFS=: read -r username passwd_field uid gid gecos home shell <<<"$record"
+    [[ "$username" == "$account" && "$home" == "$expected_home" && "$shell" == "$expected_shell" ]] || return "$PNM_EXIT_CONFIG"
     group_record="$(getent group "$group" 2>/dev/null)" || return "$PNM_EXIT_CONFIG"
     IFS=: read -r _ _ group_gid _ <<<"$group_record"
     [[ "$gid" == "$group_gid" ]]
@@ -28,12 +28,12 @@ pnm_service_account_policy() {
 
 pnm_service_account_state() {
     local account="${1:?service account required}"
-    local record username _ uid gid home shell
+    local record username passwd_field uid gid gecos home shell
 
     pnm_service_account_policy "$account" >/dev/null || return 2
     pnm_command_exists getent || return 2
     record="$(getent passwd "$account" 2>/dev/null)" || return 1
-    IFS=: read -r username _ uid gid home shell <<<"$record"
+    IFS=: read -r username passwd_field uid gid gecos home shell <<<"$record"
     printf '%s|%s|%s|%s|%s\n' "$username" "$uid" "$gid" "$home" "$shell"
 }
 
