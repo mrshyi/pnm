@@ -18,7 +18,12 @@ test_xray_unit_policy() {
     local unit
     unit="$(pnm_render_xray_unit)"
     pnm_unit_validate_text "$unit" xray /usr/local/bin/xray || return 1
+    assert_contains "$unit" $'User=xray\nGroup=xray\n' || return 1
+    assert_contains "$unit" $'NoNewPrivileges=true\n' || return 1
+    assert_contains "$unit" $'CapabilityBoundingSet=CAP_NET_BIND_SERVICE\n' || return 1
+    assert_contains "$unit" $'AmbientCapabilities=CAP_NET_BIND_SERVICE\n' || return 1
     assert_contains "$unit" 'ExecStart=/usr/local/bin/xray run -config /usr/local/etc/xray/config.json'
+    assert_not_contains "$unit" 'CAP_NET_ADMIN'
     assert_not_contains "$unit" 'tailscale'
 }
 
@@ -26,6 +31,8 @@ test_hysteria_unit_policy() {
     local unit
     unit="$(pnm_render_hysteria_unit)"
     pnm_unit_validate_text "$unit" hysteria /usr/local/bin/hysteria || return 1
+    assert_contains "$unit" $'CapabilityBoundingSet=\n' || return 1
+    assert_contains "$unit" $'AmbientCapabilities=\n' || return 1
     assert_contains "$unit" 'ExecStart=/usr/local/bin/hysteria server -c /etc/hysteria/config.yaml'
 }
 

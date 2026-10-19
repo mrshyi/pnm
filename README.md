@@ -34,11 +34,13 @@ Each update changes one core per command. Failed configuration changes and updat
 
 ```bash
 sudo ./bin/pnm node init
+sudo ./bin/pnm node validate
+sudo ./bin/pnm install --dry-run
 sudo ./bin/pnm install --apply --yes
-./bin/pnm check
+sudo ./bin/pnm check
 ```
 
-The command above runs PNM from a source checkout. It requires a clean supported host, root privileges, and the fixed asset versions in `versions.conf`. It does not modify SSH or UFW. Use `pnm install --dry-run` first when you need to review the preflight and installation plan.
+This runs PNM from a source checkout on a supported host. It requires root privileges and the pinned asset versions in `versions.conf`. It does not modify SSH or UFW.
 
 ## Configure one node
 
@@ -59,7 +61,9 @@ If the release lookup is unavailable, interactive setup continues and requires b
 
 For automation, pass the same values as flags. `pnm node add` is an alias for `init`; `pnm node info` is an alias for `show`. `pnm node change` only replaces a node that has not yet been committed by a successful installation. After the node is marked configured, use the core-specific `apply`/`update` workflow or a reviewed backup rather than editing the desired state behind the running services.
 
-## Install PNM on a VPS
+## Install and use PNM on a VPS
+
+Use a supported Debian 12/13 or Ubuntu 22.04/24.04 amd64 host with systemd, root access, and an internet connection. The installer needs `curl` and `tar`; core installation checks for its required tools, including `unzip` for the Xray archive.
 
 To install the PNM CLI and runtime library under `/usr/local/lib/pnm` and create `/usr/local/bin/pnm`, download the installer to a temporary file and execute it as root:
 
@@ -69,7 +73,29 @@ curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
   --output /tmp/pnm-install.sh && sudo bash /tmp/pnm-install.sh
 ```
 
-The installer downloads the repository archive from `PNM_REF` (default: `main`). For a reproducible deployment, set `PNM_REF` to a reviewed tag or commit and inspect the downloaded script before running it. After installation, run `sudo pnm node init`, validate the generated configuration, then run `sudo pnm install --apply --yes` to configure both proxy cores. Once installation commits successfully, run `sudo pnm node links` to print client import links. The links contain credentials; transmit them only as secrets.
+The installer downloads the repository archive from `PNM_REF` (default: `main`). For a reproducible deployment, set `PNM_REF` to a reviewed tag or commit and inspect the downloaded installer before running it. For example, after downloading and reviewing the script, install a specific ref with `sudo env PNM_REF=reviewed-ref bash /tmp/pnm-install.sh` (replace `reviewed-ref` with the selected tag or commit).
+
+Then initialize, review, and install the node:
+
+```bash
+sudo pnm node init
+sudo pnm node validate
+sudo pnm install --dry-run
+sudo pnm install --apply --yes
+```
+
+The initialization wizard asks for the public address, region, timezone, REALITY server name and target, listener ports, TLS mode, and pinned Core versions and checksums. See [Configure one node](#configure-one-node) for the defaults and non-interactive options. The first installation generates the node credentials securely; valid existing credentials are reused on retries and reinstalls. Invalid existing credentials stop installation rather than being replaced.
+
+After installation, check the services and print client import links:
+
+```bash
+sudo pnm status
+sudo pnm check
+sudo pnm node show
+sudo pnm node links
+```
+
+The default listeners are Xray TCP/443 and Hysteria2 UDP/8443. PNM does not change SSH or firewall rules, so ensure those listener ports are reachable through your host and provider firewall. Client links contain credentials; transfer and store them as secrets. If the saved public address is unavailable, supply one with `sudo pnm node links --address ADDRESS`.
 
 ## Tests
 

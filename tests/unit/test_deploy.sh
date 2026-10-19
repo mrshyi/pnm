@@ -19,11 +19,13 @@ source "$TEST_ROOT/testlib.sh"
 
 DEPLOY_ORDER=''
 DEPLOY_FAIL_PHASE=''
+DEPLOY_MARK_CONFIGURED_CALLS=0
 
 deploy_test_sandbox() { DEPLOY_ORDER+="sandbox,"; [[ "$DEPLOY_FAIL_PHASE" != sandbox ]]; }
 deploy_test_xray() { DEPLOY_ORDER+="xray,"; [[ "$DEPLOY_FAIL_PHASE" != xray ]]; }
 deploy_test_hysteria() { DEPLOY_ORDER+="hysteria,"; [[ "$DEPLOY_FAIL_PHASE" != hysteria ]]; }
 deploy_test_health() { DEPLOY_ORDER+="health,"; [[ "$DEPLOY_FAIL_PHASE" != health ]]; }
+pnm_deploy_mark_configured() { DEPLOY_MARK_CONFIGURED_CALLS=$((DEPLOY_MARK_CONFIGURED_CALLS + 1)); }
 
 prepare_deploy() {
     local temp_dir="$1"
@@ -37,8 +39,8 @@ prepare_deploy() {
     PNM_DEPLOY_STEP_HEALTH=deploy_test_health
     DEPLOY_ORDER=''
     DEPLOY_FAIL_PHASE=''
+    DEPLOY_MARK_CONFIGURED_CALLS=0
     pnm_require_root() { return 0; }
-    pnm_deploy_mark_configured() { return 0; }
 }
 
 test_core_deploy_runs_four_stages() {
@@ -67,6 +69,23 @@ test_core_deploy_stops_after_failed_stage() {
     rm -rf -- "$temp_dir"
 }
 
+test_post_health_failure_is_not_reported_as_committed() {
+    local temp_dir rc journal contents
+    temp_dir="$(mktemp -d)"
+    prepare_deploy "$temp_dir"
+    DEPLOY_FAIL_PHASE=health
+    if pnm_deploy_execute; then rc=0; else rc=$?; fi
+    journal="$PNM_STATE_DIR/deployments/deploy-test/journal.tsv"
+    contents="$(<"$journal")"
+    assert_eq 1 "$rc" || { rm -rf -- "$temp_dir"; return 1; }
+    assert_eq 'sandbox,xray,hysteria,health,' "$DEPLOY_ORDER" || { rm -rf -- "$temp_dir"; return 1; }
+    assert_eq 0 "$DEPLOY_MARK_CONFIGURED_CALLS" || { rm -rf -- "$temp_dir"; return 1; }
+    assert_contains "$contents" $'STOPPED\tafter=post-health rc=1' || { rm -rf -- "$temp_dir"; return 1; }
+    assert_contains "$contents" $'ABANDONED\tdeployment closed without commit' || { rm -rf -- "$temp_dir"; return 1; }
+    assert_not_contains "$contents" $'COMMIT\t'
+    rm -rf -- "$temp_dir"
+}
+
 test_apply_rejects_preflight_before_gate() {
     local temp_dir rc calls=0
     temp_dir="$(mktemp -d)"
@@ -89,6 +108,7 @@ test_deploy_health_checks_both_cores() {
 
 run_test 'one-click deploy runs Core stages without SSH or UFW' test_core_deploy_runs_four_stages
 run_test 'one-click deploy stops after a failed Core stage' test_core_deploy_stops_after_failed_stage
+run_test 'post-health failure is not reported as a committed deployment' test_post_health_failure_is_not_reported_as_committed
 run_test 'one-click deploy rejects preflight failures before apply' test_apply_rejects_preflight_before_gate
 run_test 'post-install health checks both systemd Core services' test_deploy_health_checks_both_cores
 finish_tests
