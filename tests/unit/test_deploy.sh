@@ -86,6 +86,24 @@ test_post_health_failure_is_not_reported_as_committed() {
     rm -rf -- "$temp_dir"
 }
 
+test_post_health_failure_can_be_retried_as_a_new_deployment() {
+    local temp_dir rc journal
+    temp_dir="$(mktemp -d)"
+    prepare_deploy "$temp_dir"
+    DEPLOY_FAIL_PHASE=health
+    if pnm_deploy_execute; then rc=0; else rc=$?; fi
+    assert_eq 1 "$rc" || { rm -rf -- "$temp_dir"; return 1; }
+
+    DEPLOY_FAIL_PHASE=''
+    PNM_DEPLOY_ID_OVERRIDE='deploy-retry'
+    if ! pnm_deploy_execute; then rm -rf -- "$temp_dir"; return 1; fi
+    journal="$PNM_STATE_DIR/deployments/deploy-retry/journal.tsv"
+    assert_contains "$(<"$journal")" $'COMMIT\t' || { rm -rf -- "$temp_dir"; return 1; }
+    assert_eq 1 "$DEPLOY_MARK_CONFIGURED_CALLS" || { rm -rf -- "$temp_dir"; return 1; }
+    assert_eq 'sandbox,xray,hysteria,health,sandbox,xray,hysteria,health,' "$DEPLOY_ORDER" || { rm -rf -- "$temp_dir"; return 1; }
+    rm -rf -- "$temp_dir"
+}
+
 test_apply_rejects_preflight_before_gate() {
     local temp_dir rc calls=0
     temp_dir="$(mktemp -d)"
@@ -109,6 +127,7 @@ test_deploy_health_checks_both_cores() {
 run_test 'one-click deploy runs Core stages without SSH or UFW' test_core_deploy_runs_four_stages
 run_test 'one-click deploy stops after a failed Core stage' test_core_deploy_stops_after_failed_stage
 run_test 'post-health failure is not reported as a committed deployment' test_post_health_failure_is_not_reported_as_committed
+run_test 'post-health failure can be retried and committed by a new deployment' test_post_health_failure_can_be_retried_as_a_new_deployment
 run_test 'one-click deploy rejects preflight failures before apply' test_apply_rejects_preflight_before_gate
 run_test 'post-install health checks both systemd Core services' test_deploy_health_checks_both_cores
 finish_tests

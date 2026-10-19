@@ -10,6 +10,7 @@ declare -Ag PNM_PREFLIGHT_VERSIONS_CONFIG=()
 PNM_PREFLIGHT_FAIL_COUNT=0
 PNM_PREFLIGHT_WARN_COUNT=0
 PNM_PREFLIGHT_UNKNOWN_COUNT=0
+declare -ag PNM_PREFLIGHT_RECOVERY_DEPLOYMENT_IDS=()
 
 pnm_preflight_reset() {
     PNM_PREFLIGHT_IDS=()
@@ -21,6 +22,7 @@ pnm_preflight_reset() {
     PNM_PREFLIGHT_FAIL_COUNT=0
     PNM_PREFLIGHT_WARN_COUNT=0
     PNM_PREFLIGHT_UNKNOWN_COUNT=0
+    PNM_PREFLIGHT_RECOVERY_DEPLOYMENT_IDS=()
 }
 
 pnm_preflight_add() {
@@ -102,6 +104,137 @@ pnm_preflight_configuration() {
     fi
 }
 
+pnm_recovery_has_failed_deployment_record() {
+    local deployments_dir="$PNM_STATE_DIR/deployments" directory journal owner_mode
+    local timestamp event detail
+    local saw_begin saw_resources saw_xray saw_hysteria saw_stopped saw_abandoned saw_commit
+
+    PNM_PREFLIGHT_RECOVERY_DEPLOYMENT_IDS=()
+    [[ "${PNM_PREFLIGHT_NODE_CONFIG[PNM_CONFIGURED]-yes}" == no ]] || return 1
+    [[ -d "$PNM_STATE_DIR" && ! -L "$PNM_STATE_DIR" && -d "$deployments_dir" && ! -L "$deployments_dir" ]] || return 1
+    owner_mode="$(stat -c '%a|%u' -- "$PNM_STATE_DIR" 2>/dev/null || printf '000|x')"
+    [[ "$owner_mode" == "700|$EUID" ]] || return 1
+    owner_mode="$(stat -c '%a|%u' -- "$deployments_dir" 2>/dev/null || printf '000|x')"
+    [[ "$owner_mode" == "700|$EUID" ]] || return 1
+
+    for directory in "$deployments_dir"/deploy-*; do
+        [[ -d "$directory" && ! -L "$directory" ]] || continue
+        owner_mode="$(stat -c '%a|%u' -- "$directory" 2>/dev/null || printf '000|x')"
+        [[ "$owner_mode" == "700|$EUID" ]] || continue
+        journal="$directory/journal.tsv"
+        [[ -f "$journal" && ! -L "$journal" ]] || continue
+        owner_mode="$(stat -c '%a|%u' -- "$journal" 2>/dev/null || printf '000|x')"
+        [[ "$owner_mode" == "600|$EUID" ]] || continue
+        saw_begin=0 saw_resources=0 saw_xray=0 saw_hysteria=0 saw_stopped=0 saw_abandoned=0 saw_commit=0
+        while IFS=$'\t' read -r timestamp event detail || [[ -n "$timestamp$event$detail" ]]; do
+            [[ "$timestamp" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]] || continue 2
+            case "$event:$detail" in
+                BEGIN:deployment\ orchestration)
+                    ((saw_begin == 0)) || continue 2
+                    saw_begin=1
+                    ;;
+                PHASE_DONE:core-resources) ((saw_begin == 1)) && saw_resources=1 ;;
+                PHASE_DONE:xray-lifecycle) ((saw_begin == 1)) && saw_xray=1 ;;
+                PHASE_DONE:hysteria-lifecycle) ((saw_begin == 1)) && saw_hysteria=1 ;;
+                STOPPED:after=post-health\ rc=*) ((saw_begin == 1)) && saw_stopped=1 ;;
+                ABANDONED:deployment\ closed\ without\ commit) ((saw_stopped == 1)) && saw_abandoned=1 ;;
+                COMMIT:*) saw_commit=1 ;;
+            esac
+        done <"$journal"
+        if ((saw_begin && saw_resources && saw_xray && saw_hysteria && saw_stopped && saw_abandoned && !saw_commit)); then
+            PNM_PREFLIGHT_RECOVERY_DEPLOYMENT_IDS+=("${directory##*/}")
+        fi
+    done
+    ((${#PNM_PREFLIGHT_RECOVERY_DEPLOYMENT_IDS[@]} > 0))
+}
+
+pnm_recovery_unit_has_committed_pnm_receipt() {
+    local unit_file="${1:?unit file required}" unit_label="${2:?unit label required}"
+    local transaction_root="$PNM_STATE_DIR/transactions" transaction_dir transaction_id owner_mode encoded_target
+    local state label encoded_path original_state original_mode record_hash expected_hash
+    local last_state receipt_found deployment_id matched_deployment failed_deployment
+    local -a failed_deployments=("${PNM_PREFLIGHT_RECOVERY_DEPLOYMENT_IDS[@]}")
+
+    [[ -f "$unit_file" && ! -L "$unit_file" ]] || return 1
+    owner_mode="$(stat -c '%a|%u' -- "$unit_file" 2>/dev/null || printf '000|x')"
+    [[ "$owner_mode" == '644|0' ]] || return 1
+    [[ -d "$transaction_root" && ! -L "$transaction_root" ]] || return 1
+    owner_mode="$(stat -c '%a|%u' -- "$transaction_root" 2>/dev/null || printf '000|x')"
+    [[ "$owner_mode" == "700|$EUID" ]] || return 1
+    encoded_target="$(printf '%s' "$unit_file" | base64 -w0)" || return 1
+
+    for transaction_dir in "$transaction_root"/tx-*; do
+        [[ -d "$transaction_dir" && ! -L "$transaction_dir" ]] || continue
+        transaction_id="${transaction_dir##*/}"
+        pnm_tx_load_for_inspect "$transaction_id" || continue
+        [[ "$PNM_TX_INSPECT_STATE" == COMMITTED && "$PNM_TX_INSPECT_OPERATION" == sandbox-install ]] || continue
+        deployment_id="$PNM_TX_INSPECT_DEPLOYMENT_ID"
+        matched_deployment=0
+        for failed_deployment in "${failed_deployments[@]}"; do
+            [[ "$deployment_id" == "$failed_deployment" ]] && matched_deployment=1
+        done
+        ((matched_deployment == 1)) || continue
+
+        last_state=''
+        receipt_found=0
+        expected_hash=''
+        while IFS=$'\t' read -r state label encoded_path original_state original_mode record_hash ||
+            [[ -n "$state$label$encoded_path$original_state$original_mode$record_hash" ]]; do
+            [[ "$label" == "$unit_label" && "$encoded_path" == "$encoded_target" ]] || continue
+            case "$state" in
+                INTENT) last_state=INTENT ;;
+                APPLIED) last_state=APPLIED; receipt_found=1; expected_hash="$record_hash" ;;
+                RESTORED) last_state=RESTORED; receipt_found=0; expected_hash='' ;;
+            esac
+        done <"$transaction_dir/changes.tsv"
+        if ((receipt_found == 1)) && [[ "$last_state" == APPLIED ]] &&
+            [[ "$(pnm_tx_file_sha256 "$unit_file")" == "$expected_hash" ]]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+pnm_recovery_unit_has_no_dropins() {
+    local unit="${1:?unit required}" dropins
+
+    dropins="$(pnm_systemctl show "$unit" --property DropInPaths --value 2>/dev/null)" || return 1
+    [[ -z "$dropins" ]]
+}
+
+pnm_recovery_listener_owned() {
+    local protocol="${1:?protocol required}" port="${2:?port required}"
+    local unit expected_user expected_binary unit_label expected_uid fragment user active enabled pid cgroup proc_uid executable unit_text
+    case "$protocol:$port" in
+        tcp:443) unit=xray.service unit_label=xray_unit expected_user=xray expected_binary=/usr/local/bin/xray ;;
+        udp:8443) unit=hysteria-server.service unit_label=hysteria_unit expected_user=hysteria expected_binary=/usr/local/bin/hysteria ;;
+        *) return 1 ;;
+    esac
+    pnm_recovery_has_failed_deployment_record || return 1
+    pnm_recovery_unit_has_committed_pnm_receipt "/etc/systemd/system/$unit" "$unit_label" || return 1
+    unit_text="$(</etc/systemd/system/$unit)"
+    pnm_unit_validate_text "$unit_text" "$expected_user" "$expected_binary" || return 1
+    [[ "$unit_text" == *$'\nGroup='"$expected_user"$'\n'* ]] || return 1
+    fragment="$(pnm_systemd_show_value "$unit" FragmentPath 2>/dev/null)" || return 1
+    pnm_recovery_unit_has_no_dropins "$unit" || return 1
+    user="$(pnm_systemd_show_value "$unit" User 2>/dev/null)" || return 1
+    active="$(pnm_systemd_active_state "$unit" 2>/dev/null)" || return 1
+    enabled="$(pnm_systemd_enabled_state "$unit" 2>/dev/null)" || return 1
+    pid="$(pnm_systemd_show_value "$unit" MainPID 2>/dev/null)" || return 1
+    [[ "$fragment" == "/etc/systemd/system/$unit" && "$user" == "$expected_user" && "$active" == active && "$enabled" == enabled ]] || return 1
+    [[ "$pid" =~ ^[1-9][0-9]*$ && -r "/proc/$pid/cgroup" && -r "/proc/$pid/status" ]] || return 1
+    expected_uid="$(id -u "$expected_user" 2>/dev/null)" || return 1
+    proc_uid="$(awk '/^Uid:/ { print $2; exit }' "/proc/$pid/status")"
+    [[ "$proc_uid" == "$expected_uid" ]] || return 1
+    executable="$(readlink "/proc/$pid/exe" 2>/dev/null)" || return 1
+    [[ "$executable" == "$expected_binary" ]] || return 1
+    cgroup="$(<"/proc/$pid/cgroup")"
+    [[ "$cgroup" == *"/system.slice/$unit"* ]] || return 1
+    pnm_listener_owned_by_pid "$protocol" "$port" "$pid" || return 1
+    # Also ensure the effective command agrees with the recorded PNM unit.
+    [[ "$(pnm_systemd_show_value "$unit" ExecStart 2>/dev/null)" == *"$expected_binary"* ]]
+}
+
 pnm_preflight_port() {
     local protocol="${1:?protocol required}"
     local port="${2:?port required}"
@@ -113,7 +246,13 @@ pnm_preflight_port() {
         rc=$?
     fi
     case "$rc" in
-        0) pnm_preflight_add "port_${protocol}_${port}" FAIL "Required ${protocol^^}/${port} is already in use" 'PNM will not replace an unknown listener' ;;
+        0)
+            if pnm_recovery_listener_owned "$protocol" "$port"; then
+                pnm_preflight_add "port_${protocol}_${port}" OK "Required ${protocol^^}/${port} is held by a verified PNM service" 'retrying an uncommitted deployment'
+            else
+                pnm_preflight_add "port_${protocol}_${port}" FAIL "Required ${protocol^^}/${port} is already in use" 'PNM will not replace an unknown listener'
+            fi
+            ;;
         1) pnm_preflight_add "port_${protocol}_${port}" OK "Required ${protocol^^}/${port} is free" 'no listener detected' ;;
         *) pnm_preflight_add "port_${protocol}_${port}" UNKNOWN "Required ${protocol^^}/${port} cannot be verified" 'ss is unavailable or returned an unexpected result' ;;
     esac
