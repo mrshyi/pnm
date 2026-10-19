@@ -80,7 +80,15 @@ test_apply_rejects_preflight_before_gate() {
     rm -rf -- "$temp_dir"
 }
 
+test_deploy_health_checks_both_cores() {
+    local calls=''
+    pnm_systemd_unit_healthy() { calls+="$1,"; }
+    pnm_deploy_health_step || return 1
+    assert_eq 'xray.service,hysteria-server.service,' "$calls"
+}
+
 run_test 'one-click deploy runs Core stages without SSH or UFW' test_core_deploy_runs_four_stages
 run_test 'one-click deploy stops after a failed Core stage' test_core_deploy_stops_after_failed_stage
 run_test 'one-click deploy rejects preflight failures before apply' test_apply_rejects_preflight_before_gate
+run_test 'post-install health checks both systemd Core services' test_deploy_health_checks_both_cores
 finish_tests

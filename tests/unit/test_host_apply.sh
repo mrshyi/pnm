@@ -144,10 +144,15 @@ run_host_install_safety_case() (
     PNM_DRY_RUN=0
     pnm_require_root() { return 0; }
     pnm_mkdir_mode() { return 99; }
-    pnm_load_node_config() { return 0; }
-    pnm_load_reality_secret() { return 0; }
-    pnm_load_hysteria_secret() { return 0; }
-    pnm_render_validate_inputs() { return 0; }
+    pnm_load_node_config() {
+        PNM_SANDBOX_NODE=(
+            [SCHEMA_VERSION]=1 [PNM_CONFIGURED]=no [NODE_REGION]=vps [NODE_ADDRESS]=203.0.113.10
+            [TIMEZONE]=UTC [XRAY_PORT]=443 [XRAY_SERVER_NAME]=example.com [XRAY_TARGET]=example.com:443
+            [HY2_PORT]=8443 [HY2_TLS_MODE]=selfsigned-pin
+        )
+    }
+    pnm_sandbox_prepare_secrets() { PNM_SANDBOX_GENERATE_REALITY_SECRET=0; PNM_SANDBOX_GENERATE_HYSTERIA_SECRET=0; }
+    pnm_sandbox_generate_missing_secrets() { return 0; }
     pnm_tx_begin() {
         PNM_TX_ACTIVE=1
         PNM_TX_COMMITTED=0

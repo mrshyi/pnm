@@ -2,6 +2,8 @@
 
 PNM_SANDBOX_ROOT=''
 PNM_SANDBOX_STAGING=''
+PNM_SANDBOX_GENERATE_REALITY_SECRET=0
+PNM_SANDBOX_GENERATE_HYSTERIA_SECRET=0
 declare -Ag PNM_SANDBOX_NODE=()
 declare -Ag PNM_SANDBOX_REALITY=()
 declare -Ag PNM_SANDBOX_HYSTERIA=()
@@ -52,6 +54,71 @@ pnm_sandbox_prepare_dirs() {
     done
 }
 
+pnm_sandbox_prepare_secrets() {
+    local reality_file="$PNM_CONFIG_DIR/secrets/reality.env"
+    local hysteria_file="$PNM_CONFIG_DIR/secrets/hysteria.env"
+
+    PNM_SANDBOX_GENERATE_REALITY_SECRET=0
+    PNM_SANDBOX_GENERATE_HYSTERIA_SECRET=0
+    if [[ -e "$reality_file" || -L "$reality_file" ]]; then
+        if [[ ! -f "$reality_file" || -L "$reality_file" ]] ||
+            ! pnm_load_reality_secret PNM_SANDBOX_REALITY ||
+            ! pnm_validate_reality_secret_config PNM_SANDBOX_REALITY; then
+            pnm_error "Existing REALITY secret is invalid; refusing to replace $reality_file."
+            return "$PNM_EXIT_CONFIG"
+        fi
+    else
+        PNM_SANDBOX_GENERATE_REALITY_SECRET=1
+        PNM_SANDBOX_REALITY=()
+    fi
+
+    if [[ -e "$hysteria_file" || -L "$hysteria_file" ]]; then
+        if [[ ! -f "$hysteria_file" || -L "$hysteria_file" ]] ||
+            ! pnm_load_hysteria_secret PNM_SANDBOX_HYSTERIA ||
+            ! pnm_validate_hysteria_secret_config PNM_SANDBOX_HYSTERIA; then
+            pnm_error "Existing Hysteria2 secret is invalid; refusing to replace $hysteria_file."
+            return "$PNM_EXIT_CONFIG"
+        fi
+    else
+        PNM_SANDBOX_GENERATE_HYSTERIA_SECRET=1
+        PNM_SANDBOX_HYSTERIA=(
+            [SCHEMA_VERSION]=1
+            [HY2_AUTH_PASSWORD]=''
+            [HY2_TLS_CERT_PATH]='/etc/hysteria/tls/server.crt'
+            [HY2_TLS_KEY_PATH]='/etc/hysteria/tls/server.key'
+            [HY2_TLS_PIN_SHA256]=''
+        )
+    fi
+}
+
+pnm_sandbox_generate_missing_secrets() {
+    local uuid private_key short_id password
+
+    if ((PNM_SANDBOX_GENERATE_REALITY_SECRET == 1 || PNM_SANDBOX_GENERATE_HYSTERIA_SECRET == 1)); then
+        pnm_command_exists openssl || return "$PNM_EXIT_UNAVAILABLE"
+    fi
+
+    if ((PNM_SANDBOX_GENERATE_REALITY_SECRET == 1)); then
+        IFS= read -r uuid </proc/sys/kernel/random/uuid || return "$PNM_EXIT_UNAVAILABLE"
+        pnm_validate_uuid "$uuid" || return "$PNM_EXIT_CONFIG"
+        private_key="$(openssl rand -base64 32 2>/dev/null | tr '+/' '-_' | tr -d '=\n')" || return "$PNM_EXIT_UNAVAILABLE"
+        short_id="$(openssl rand -hex 8 2>/dev/null)" || return "$PNM_EXIT_UNAVAILABLE"
+        [[ "$private_key" =~ ^[A-Za-z0-9_-]{43}$ && "$short_id" =~ ^[a-f0-9]{16}$ ]] || return "$PNM_EXIT_SOFTWARE"
+        PNM_SANDBOX_REALITY=(
+            [SCHEMA_VERSION]=1
+            [XRAY_UUID]="$uuid"
+            [XRAY_REALITY_PRIVATE_KEY]="$private_key"
+            [XRAY_REALITY_SHORT_ID]="$short_id"
+        )
+    fi
+
+    if ((PNM_SANDBOX_GENERATE_HYSTERIA_SECRET == 1)); then
+        password="$(openssl rand -base64 32 2>/dev/null | tr '+/' '-_' | tr -d '=\n')" || return "$PNM_EXIT_UNAVAILABLE"
+        [[ "$password" =~ ^[A-Za-z0-9_-]{43}$ ]] || return "$PNM_EXIT_SOFTWARE"
+        PNM_SANDBOX_HYSTERIA[HY2_AUTH_PASSWORD]="$password"
+    fi
+}
+
 pnm_sandbox_step_assets() {
     local xray_staged hy2_staged
     local xray_target hy2_target
@@ -68,23 +135,40 @@ pnm_sandbox_step_assets() {
 pnm_sandbox_step_tls() {
     local cert_staged="$PNM_SANDBOX_STAGING/tls/server.crt"
     local key_staged="$PNM_SANDBOX_STAGING/tls/server.key"
-    local cert_target key_target
+    local cert_target key_target certificate_mode key_mode
 
     pnm_mkdir_mode 0700 "$PNM_SANDBOX_STAGING/tls" || return "$PNM_EXIT_CANTCREAT"
     case "${PNM_SANDBOX_NODE[HY2_TLS_MODE]}" in
         selfsigned-pin)
-            pnm_tls_generate_selfsigned "$cert_staged" "$key_staged" "${PNM_SANDBOX_NODE[XRAY_SERVER_NAME]}" || return $?
+            cert_target="$(pnm_sandbox_path /etc/hysteria/tls/server.crt)" || return $?
+            key_target="$(pnm_sandbox_path /etc/hysteria/tls/server.key)" || return $?
+            if [[ -e "$cert_target" || -L "$cert_target" || -e "$key_target" || -L "$key_target" ]]; then
+                pnm_tls_validate_pair "$cert_target" "$key_target" || {
+                    pnm_error 'Existing Hysteria2 TLS certificate/key pair is invalid; refusing to replace it.'
+                    return "$PNM_EXIT_CONFIG"
+                }
+                certificate_mode="$(stat -c '%a' -- "$cert_target")" || return "$PNM_EXIT_CONFIG"
+                key_mode="$(stat -c '%a' -- "$key_target")" || return "$PNM_EXIT_CONFIG"
+                [[ "$certificate_mode" == 644 && "$key_mode" == 600 ]] || {
+                    pnm_error 'Existing Hysteria2 TLS files have unsafe permissions; refusing to replace them.'
+                    return "$PNM_EXIT_CONFIG"
+                }
+            else
+                pnm_tls_generate_selfsigned "$cert_staged" "$key_staged" "${PNM_SANDBOX_NODE[XRAY_SERVER_NAME]}" || return $?
+                pnm_tx_write_file "$cert_staged" "$cert_target" hysteria_cert 0644 || return $?
+                pnm_tx_write_file "$key_staged" "$key_target" hysteria_key 0600 || return $?
+            fi
             ;;
         external-ca)
             [[ -r "${PNM_SANDBOX_EXTERNAL_CERT:-}" && -r "${PNM_SANDBOX_EXTERNAL_KEY:-}" ]] || return "$PNM_EXIT_CONFIG"
             pnm_tls_stage_external_pair "$PNM_SANDBOX_EXTERNAL_CERT" "$PNM_SANDBOX_EXTERNAL_KEY" "$PNM_SANDBOX_STAGING/tls" || return $?
+            cert_target="$(pnm_sandbox_path /etc/hysteria/tls/server.crt)" || return $?
+            key_target="$(pnm_sandbox_path /etc/hysteria/tls/server.key)" || return $?
+            pnm_tx_write_file "$cert_staged" "$cert_target" hysteria_cert 0644 || return $?
+            pnm_tx_write_file "$key_staged" "$key_target" hysteria_key 0600 || return $?
             ;;
         *) return "$PNM_EXIT_CONFIG" ;;
     esac
-    cert_target="$(pnm_sandbox_path /etc/hysteria/tls/server.crt)" || return $?
-    key_target="$(pnm_sandbox_path /etc/hysteria/tls/server.key)" || return $?
-    pnm_tx_write_file "$cert_staged" "$cert_target" hysteria_cert 0644 || return $?
-    pnm_tx_write_file "$key_staged" "$key_target" hysteria_key 0600 || return $?
     PNM_SANDBOX_HYSTERIA[HY2_TLS_PIN_SHA256]="$(pnm_tls_spki_pin "$cert_target")" || return "$PNM_EXIT_CONFIG"
     pnm_validate_pin_sha256 "${PNM_SANDBOX_HYSTERIA[HY2_TLS_PIN_SHA256]}" || return "$PNM_EXIT_CONFIG"
     pnm_tls_validate_pair "$cert_target" "$key_target"
@@ -98,6 +182,7 @@ pnm_sandbox_step_secrets() {
     pnm_mkdir_mode 0700 "$PNM_SANDBOX_STAGING/secrets" || return "$PNM_EXIT_CANTCREAT"
     pnm_render_reality_secret_config PNM_SANDBOX_REALITY >"$reality_staged" || return $?
     pnm_render_hysteria_secret_config PNM_SANDBOX_HYSTERIA >"$hysteria_staged" || return $?
+    chmod 0600 -- "$reality_staged" "$hysteria_staged" || return "$PNM_EXIT_NOPERM"
     reality_target="$(pnm_sandbox_path /etc/pnm/secrets/reality.env)" || return $?
     hysteria_target="$(pnm_sandbox_path /etc/pnm/secrets/hysteria.env)" || return $?
     pnm_tx_write_file "$reality_staged" "$reality_target" reality_secret 0600 || return $?
@@ -199,9 +284,8 @@ pnm_sandbox_install() {
     PNM_SANDBOX_ROOT="$root"
     PNM_SANDBOX_STAGING=''
     pnm_load_node_config PNM_SANDBOX_NODE || { pnm_error 'Node configuration is missing or invalid; installation stopped.'; return "$PNM_EXIT_CONFIG"; }
-    pnm_load_reality_secret PNM_SANDBOX_REALITY || { pnm_error 'REALITY secrets are missing or invalid; installation stopped.'; return "$PNM_EXIT_CONFIG"; }
-    pnm_load_hysteria_secret PNM_SANDBOX_HYSTERIA || { pnm_error 'Hysteria2 secrets are missing or invalid; installation stopped.'; return "$PNM_EXIT_CONFIG"; }
-    pnm_render_validate_inputs PNM_SANDBOX_NODE PNM_SANDBOX_REALITY PNM_SANDBOX_HYSTERIA || return "$PNM_EXIT_CONFIG"
+    pnm_validate_node_config PNM_SANDBOX_NODE || { pnm_error 'Node configuration is invalid; installation stopped.'; return "$PNM_EXIT_CONFIG"; }
+    pnm_sandbox_prepare_secrets || return $?
     # Validate inputs before creating any directory. Never change the host root.
     if [[ "$root" != '/' ]]; then
         pnm_mkdir_mode 0700 "$root" || return "$PNM_EXIT_CANTCREAT"
@@ -211,6 +295,9 @@ pnm_sandbox_install() {
     PNM_SANDBOX_STAGING="$PNM_TX_PATH/staging"
     mkdir -m 0700 -- "$PNM_SANDBOX_STAGING" || {
         rc="$PNM_EXIT_CANTCREAT"; pnm_sandbox_abort "$rc"; return $?;
+    }
+    pnm_sandbox_generate_missing_secrets || {
+        rc=$?; pnm_sandbox_abort "$rc"; return $?
     }
     pnm_tx_add_rollback pnm_tx_restore_written_files || {
         pnm_sandbox_abort "$PNM_EXIT_SOFTWARE"

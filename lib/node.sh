@@ -86,8 +86,8 @@ pnm_node_xray_reality_public_key() {
     local public_key
 
     [[ -x "$PNM_XRAY_BIN" && ! -L "$PNM_XRAY_BIN" ]] || return "$PNM_EXIT_UNAVAILABLE"
-    public_key="$("$PNM_XRAY_BIN" x25519 -i "$private_key" 2>/dev/null | awk -F ': ' '$1 == "Public key" { print $2; exit }')" || return "$PNM_EXIT_CONFIG"
-    [[ "$public_key" =~ ^[A-Za-z0-9_-]{40,64}$ ]] || return "$PNM_EXIT_CONFIG"
+    public_key="$("$PNM_XRAY_BIN" x25519 -i "$private_key" 2>/dev/null | awk -F ': ' '$1 == "Password (PublicKey)" || $1 == "Password" || $1 == "Public key" || $1 == "PublicKey" { print $2; exit }')" || return "$PNM_EXIT_CONFIG"
+    [[ "$public_key" =~ ^[A-Za-z0-9_-]{43}$ ]] || return "$PNM_EXIT_CONFIG"
     printf '%s\n' "$public_key"
 }
 

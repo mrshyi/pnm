@@ -28,6 +28,10 @@ source "$PNM_LIB_DIR/tls.sh"
 source "$PNM_ADAPTER_DIR/assets.sh"
 # shellcheck source=../../lib/sandbox-install.sh
 source "$PNM_LIB_DIR/sandbox-install.sh"
+# shellcheck source=../../lib/node.sh
+source "$PNM_LIB_DIR/node.sh"
+# shellcheck source=../../lib/deploy.sh
+source "$PNM_LIB_DIR/deploy.sh"
 # shellcheck source=../testlib.sh
 source "$TEST_ROOT/testlib.sh"
 
@@ -39,7 +43,12 @@ make_xray_archive() {
     temp_dir="$(mktemp -d)"
     script="$temp_dir/xray"
     if [[ "$behavior" == pass ]]; then
-        printf '%s\n' '#!/usr/bin/env bash' '[[ "$1" == run && "$2" == -test ]]' >"$script"
+        printf '%s\n' '#!/usr/bin/env bash' \
+            'case "${1-}" in' \
+            '  run) [[ "${2-}" == -test ]] ;;' \
+            '  x25519) printf "PrivateKey: fixture-private\\nPassword (PublicKey): AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\\nHash32: ignored\\n" ;;' \
+            '  *) exit 1 ;;' \
+            'esac' >"$script"
     else
         printf '%s\n' '#!/usr/bin/env bash' 'exit 23' >"$script"
     fi
@@ -75,6 +84,126 @@ prepare_external_tls_inputs() {
     openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes \
         -days 2 -subj '/CN=example.com' -addext 'subjectAltName=DNS:example.com' \
         -keyout "$PNM_SANDBOX_EXTERNAL_KEY" -out "$PNM_SANDBOX_EXTERNAL_CERT" >/dev/null 2>&1
+}
+
+prepare_fresh_sandbox_inputs() {
+    local temp_dir="$1" root="$2"
+    mkdir -p -- "$root"
+    PNM_CONFIG_DIR="$root/etc/pnm"
+    PNM_STATE_DIR="$temp_dir/state"
+    PNM_LOCK_FILE="$temp_dir/pnm.lock"
+    PNM_DRY_RUN=0
+    PNM_TX_ID_OVERRIDE='fresh-node-init'
+    pnm_require_root() { return 0; }
+    pnm_node_init 0 \
+        --region vps --address 203.0.113.10 \
+        --xray-version v1.2.3 --xray-sha256 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
+        --hy2-version v2.3.4 --hy2-sha256 bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb || return $?
+    PNM_SANDBOX_HY2_BINARY="$temp_dir/hysteria"
+    printf '%s\n' '#!/usr/bin/env bash' 'exit 0' >"$PNM_SANDBOX_HY2_BINARY"
+    chmod 0755 -- "$PNM_SANDBOX_HY2_BINARY"
+}
+
+test_first_install_generates_and_reuses_secrets() {
+    local temp_dir root archive first_reality first_hy2 first_cert_pin second_cert_pin
+    local -A reality=() hysteria=()
+    temp_dir="$(mktemp -d)"
+    root="$temp_dir/root"
+    archive="$temp_dir/xray.zip"
+    mkdir -m 0700 -- "$root"
+    prepare_fresh_sandbox_inputs "$temp_dir" "$root"
+    make_xray_archive "$archive" pass
+    PNM_SANDBOX_XRAY_ARCHIVE="$archive"
+    PNM_TX_ID_OVERRIDE='fresh-secrets-first'
+    pnm_sandbox_install "$root" || { rm -rf -- "$temp_dir"; return 1; }
+
+    pnm_load_reality_secret reality && pnm_validate_reality_secret_config reality || { rm -rf -- "$temp_dir"; return 1; }
+    pnm_load_hysteria_secret hysteria && pnm_validate_hysteria_secret_config hysteria || { rm -rf -- "$temp_dir"; return 1; }
+    [[ "${reality[XRAY_UUID]}" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$ ]] || { rm -rf -- "$temp_dir"; return 1; }
+    [[ "${reality[XRAY_REALITY_SHORT_ID]}" =~ ^[a-f0-9]{16}$ ]] || { rm -rf -- "$temp_dir"; return 1; }
+    [[ "${reality[XRAY_REALITY_PRIVATE_KEY]}" =~ ^[A-Za-z0-9_-]{43}$ ]] || { rm -rf -- "$temp_dir"; return 1; }
+    [[ "${hysteria[HY2_AUTH_PASSWORD]}" =~ ^[A-Za-z0-9_-]{43}$ ]] || { rm -rf -- "$temp_dir"; return 1; }
+    [[ "$(stat -c '%a' "$PNM_CONFIG_DIR/secrets/reality.env")" == 600 ]] || { rm -rf -- "$temp_dir"; return 1; }
+    [[ "$(stat -c '%a' "$PNM_CONFIG_DIR/secrets/hysteria.env")" == 600 ]] || { rm -rf -- "$temp_dir"; return 1; }
+    pnm_tls_validate_pair "$root/etc/hysteria/tls/server.crt" "$root/etc/hysteria/tls/server.key" || { rm -rf -- "$temp_dir"; return 1; }
+    first_reality="${reality[XRAY_UUID]}|${reality[XRAY_REALITY_PRIVATE_KEY]}|${reality[XRAY_REALITY_SHORT_ID]}"
+    first_hy2="${hysteria[HY2_AUTH_PASSWORD]}"
+    first_cert_pin="${hysteria[HY2_TLS_PIN_SHA256]}"
+
+    PNM_TX_ID_OVERRIDE='fresh-secrets-second'
+    pnm_sandbox_install "$root" || { rm -rf -- "$temp_dir"; return 1; }
+    pnm_load_reality_secret reality && pnm_load_hysteria_secret hysteria || { rm -rf -- "$temp_dir"; return 1; }
+    second_cert_pin="$(pnm_tls_spki_pin "$root/etc/hysteria/tls/server.crt")"
+    rm -rf -- "$temp_dir"
+    assert_eq "$first_reality" "${reality[XRAY_UUID]}|${reality[XRAY_REALITY_PRIVATE_KEY]}|${reality[XRAY_REALITY_SHORT_ID]}" || return 1
+    assert_eq "$first_hy2" "${hysteria[HY2_AUTH_PASSWORD]}" || return 1
+    assert_eq "$first_cert_pin" "$second_cert_pin"
+}
+
+test_corrupt_secret_stops_without_replacing_it() {
+    local temp_dir root archive rc original
+    temp_dir="$(mktemp -d)"
+    root="$temp_dir/root"
+    archive="$temp_dir/xray.zip"
+    mkdir -m 0700 -- "$root"
+    prepare_fresh_sandbox_inputs "$temp_dir" "$root"
+    mkdir -m 0700 -- "$PNM_CONFIG_DIR/secrets"
+    printf '%s\n' 'SCHEMA_VERSION=1' 'XRAY_UUID=invalid' >"$PNM_CONFIG_DIR/secrets/reality.env"
+    original="$(<"$PNM_CONFIG_DIR/secrets/reality.env")"
+    make_xray_archive "$archive" pass
+    PNM_SANDBOX_XRAY_ARCHIVE="$archive"
+    PNM_TX_ID_OVERRIDE='corrupt-secret'
+    if pnm_sandbox_install "$root"; then rc=0; else rc=$?; fi
+    assert_eq 78 "$rc" || { rm -rf -- "$temp_dir"; return 1; }
+    assert_eq "$original" "$(<"$PNM_CONFIG_DIR/secrets/reality.env")" || { rm -rf -- "$temp_dir"; return 1; }
+    [[ ! -e "$root/usr/local/bin/xray" && ! -e "$PNM_STATE_DIR/transactions/corrupt-secret" ]] || { rm -rf -- "$temp_dir"; return 1; }
+    rm -rf -- "$temp_dir"
+}
+
+test_failed_first_install_rolls_back_secrets_and_retry_succeeds() {
+    local temp_dir root archive rc
+    temp_dir="$(mktemp -d)"
+    root="$temp_dir/root"
+    archive="$temp_dir/xray.zip"
+    mkdir -m 0700 -- "$root"
+    prepare_fresh_sandbox_inputs "$temp_dir" "$root"
+    make_xray_archive "$archive" fail
+    PNM_SANDBOX_XRAY_ARCHIVE="$archive"
+    PNM_TX_ID_OVERRIDE='fresh-secrets-failed'
+    if pnm_sandbox_install "$root"; then rc=0; else rc=$?; fi
+    assert_eq 78 "$rc" || { rm -rf -- "$temp_dir"; return 1; }
+    [[ ! -e "$PNM_CONFIG_DIR/secrets/reality.env" && ! -e "$PNM_CONFIG_DIR/secrets/hysteria.env" ]] || { rm -rf -- "$temp_dir"; return 1; }
+    [[ ! -e "$root/usr/local/bin/xray" ]] || { rm -rf -- "$temp_dir"; return 1; }
+
+    make_xray_archive "$archive" pass
+    PNM_TX_ID_OVERRIDE='fresh-secrets-retry'
+    pnm_sandbox_install "$root" || { rm -rf -- "$temp_dir"; return 1; }
+    [[ -s "$PNM_CONFIG_DIR/secrets/reality.env" && -s "$PNM_CONFIG_DIR/secrets/hysteria.env" ]] || { rm -rf -- "$temp_dir"; return 1; }
+    rm -rf -- "$temp_dir"
+}
+
+test_node_links_work_after_fresh_install() {
+    local temp_dir root archive old_xray_bin
+    temp_dir="$(mktemp -d)"
+    root="$temp_dir/root"
+    archive="$temp_dir/xray.zip"
+    mkdir -m 0700 -- "$root"
+    prepare_fresh_sandbox_inputs "$temp_dir" "$root"
+    make_xray_archive "$archive" pass
+    PNM_SANDBOX_XRAY_ARCHIVE="$archive"
+    PNM_TX_ID_OVERRIDE='fresh-secrets-links'
+    pnm_sandbox_install "$root" || { rm -rf -- "$temp_dir"; return 1; }
+    PNM_TX_ID_OVERRIDE='fresh-secrets-configured'
+    pnm_deploy_mark_configured || { rm -rf -- "$temp_dir"; return 1; }
+    old_xray_bin="$PNM_XRAY_BIN"
+    PNM_XRAY_BIN="$root/usr/local/bin/xray"
+    pnm_require_root() { return 0; }
+    run_capture pnm_node_links --address 203.0.113.10
+    PNM_XRAY_BIN="$old_xray_bin"
+    rm -rf -- "$temp_dir"
+    assert_eq 0 "$RUN_RC" || return 1
+    assert_contains "$RUN_OUTPUT" 'vless://'
+    assert_contains "$RUN_OUTPUT" 'hysteria2://'
 }
 
 test_sandbox_install_commits_all_resources() {
@@ -152,4 +281,8 @@ test_sandbox_install_imports_external_tls_and_rewrites_pin() {
 run_test 'sandbox install commits Core, TLS, config, and units' test_sandbox_install_commits_all_resources
 run_test 'sandbox validation failure compensates all written files' test_sandbox_install_rolls_back_after_validation_failure
 run_test 'sandbox install imports external TLS and rewrites pin' test_sandbox_install_imports_external_tls_and_rewrites_pin
+run_test 'first install generates secure credentials and reuses them on repeat' test_first_install_generates_and_reuses_secrets
+run_test 'corrupt credentials stop install without replacement' test_corrupt_secret_stops_without_replacing_it
+run_test 'failed first install rolls back generated credentials and retry succeeds' test_failed_first_install_rolls_back_secrets_and_retry_succeeds
+run_test 'client links work after fresh install' test_node_links_work_after_fresh_install
 finish_tests

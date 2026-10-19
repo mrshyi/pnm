@@ -38,7 +38,7 @@ test_node_links_render_client_import_uris() {
     temp_dir="$(mktemp -d)"
     fake_xray="$temp_dir/xray"
     old_xray_bin="$PNM_XRAY_BIN"
-    printf '#!/usr/bin/env bash\nprintf "Private key: fixture-private\\nPublic key: FixturePublicKey_1234567890123456789012345678901234567890\\n"\n' >"$fake_xray"
+    printf '#!/usr/bin/env bash\nprintf "PrivateKey: fixture-private\\nPassword (PublicKey): AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\\nHash32: ignored\\n"\n' >"$fake_xray"
     chmod 0755 -- "$fake_xray"
     PNM_CONFIG_DIR="$TEST_ROOT/fixtures/config-secrets"
     PNM_XRAY_BIN="$fake_xray"
@@ -49,7 +49,7 @@ test_node_links_render_client_import_uris() {
     rm -rf -- "$temp_dir"
     assert_eq 0 "$RUN_RC" || return 1
     assert_contains "$RUN_OUTPUT" 'vless://11111111-2222-4333-8444-555555555555@203.0.113.10:443' || return 1
-    assert_contains "$RUN_OUTPUT" 'pbk=FixturePublicKey_1234567890123456789012345678901234567890' || return 1
+    assert_contains "$RUN_OUTPUT" 'pbk=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' || return 1
     assert_contains "$RUN_OUTPUT" 'hysteria2://abcdefghijklmnopqrstuvwxyz012345@203.0.113.10:8443/' || return 1
     assert_contains "$RUN_OUTPUT" 'pinSHA256=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA%3D' || return 1
     assert_not_contains "$RUN_OUTPUT" 'fixture-private'
