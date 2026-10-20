@@ -42,13 +42,26 @@ pnm_status_collect_service() {
 }
 
 pnm_status_collect() {
+    local version_rc
     pnm_status_reset
 
     pnm_status_collect_service 'Xray' 'xray.service'
     pnm_status_collect_service 'Hysteria2' 'hysteria-server.service'
 
-    PNM_STATUS_XRAY_VERSION="$(pnm_binary_version xray xray 2>/dev/null || printf 'not-installed')"
-    PNM_STATUS_HY2_VERSION="$(pnm_binary_version hysteria hysteria 2>/dev/null || printf 'not-installed')"
+    if PNM_STATUS_XRAY_VERSION="$(pnm_binary_version "$PNM_XRAY_BIN" xray 2>/dev/null)"; then :; else
+        version_rc=$?
+        case "$version_rc" in
+            127) PNM_STATUS_XRAY_VERSION='not-installed' ;;
+            *) PNM_STATUS_XRAY_VERSION='unknown' ;;
+        esac
+    fi
+    if PNM_STATUS_HY2_VERSION="$(pnm_binary_version "$PNM_HY2_BIN" hysteria 2>/dev/null)"; then :; else
+        version_rc=$?
+        case "$version_rc" in
+            127) PNM_STATUS_HY2_VERSION='not-installed' ;;
+            *) PNM_STATUS_HY2_VERSION='unknown' ;;
+        esac
+    fi
 
     if pnm_listener_present tcp 443; then
         PNM_STATUS_XRAY_LISTENER='listening'

@@ -483,7 +483,12 @@ pnm_node_show() {
                     if ((consistency_rc == 1)); then runtime_consistency=drift; else runtime_consistency=unavailable; fi
                 fi
             else
-                runtime_consistency=unavailable
+                if pnm_xray_config_matches_node node_config reality_secret; then
+                    runtime_consistency=unavailable
+                else
+                    consistency_rc=$?
+                    if ((consistency_rc == 1)); then runtime_consistency=drift; else runtime_consistency=unavailable; fi
+                fi
             fi
         else
             runtime_consistency=unavailable

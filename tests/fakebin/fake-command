@@ -64,7 +64,21 @@ case "$command_name" in
         ;;
     hysteria)
         [[ "${1-}" == version ]] || exit 1
-        printf 'Version v2.6.4\n'
+        [[ "$profile" == hysteria-exec-fails ]] && exit 23
+        [[ "$profile" == hysteria-stderr ]] && exec 1>&2
+        cat <<'EOF'
+░█░█░█░█░█▀▀░▀█▀░█▀▀░█▀▄░▀█▀░█▀█░░░▀▀▄
+░█▀█░░█░░▀▀█░░█░░█▀▀░█▀▄░░█░░█▀█░░░▄▀░
+░▀░▀░░▀░░▀▀▀░░▀░░▀▀▀░░▀▀▀░▀░▀░░░▀▀▀
+
+Version:        v2.13.0
+BuildDate:      2026-10-05T04:16:24Z
+BuildType:      release
+Toolchain:      go1.26.8 linux/amd64
+CommitHash:     ca8fbd874fd6ca82413948de6dc5924405e103e1
+Platform:       linux
+Architecture:   amd64
+EOF
         ;;
     openssl)
         [[ "${PNM_FAKE_PROFILE:-pass}" == expired-cert ]] && {

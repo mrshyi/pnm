@@ -33,6 +33,8 @@ run_fake_pnm() {
         PNM_TEST_SYSTEMD=1 \
         PNM_FAKE_PROFILE="${PNM_FAKE_PROFILE:-pass}" \
         PNM_CONFIG_DIR="$CHECK_CONFIG_DIR" \
+        PNM_XRAY_BIN="$FAKE_DIR/xray" \
+        PNM_HY2_BIN="${PNM_HY2_BIN:-$FAKE_DIR/hysteria}" \
         PNM_OS_RELEASE_FILE="${PNM_OS_RELEASE_FILE:-$TEST_ROOT/fixtures/os-release-debian-13}" \
         PNM_XRAY_CONFIG="$TEST_ROOT/fixtures/xray-config.json" \
         PNM_HY2_CONFIG="$TEST_ROOT/fixtures/hysteria-config.yaml" \
@@ -67,6 +69,34 @@ test_expired_hysteria_certificate_fails_health_check() {
     assert_contains "$RUN_OUTPUT" '"id":"hysteria_tls","status":"FAIL"'
 }
 
+test_hysteria_v213_binary_is_detected_and_version_reported() {
+    PNM_FAKE_PROFILE=pass run_capture run_fake_pnm --json check
+    assert_eq 0 "$RUN_RC" || return 1
+    assert_contains "$RUN_OUTPUT" 'Hysteria2 local checks passed' || return 1
+    assert_contains "$RUN_OUTPUT" 'v2.13.0' || return 1
+
+    PNM_FAKE_PROFILE=hysteria-stderr run_capture run_fake_pnm --json check
+    assert_eq 0 "$RUN_RC" || return 1
+    assert_contains "$RUN_OUTPUT" 'v2.13.0'
+}
+
+test_hysteria_missing_binary_is_distinct_from_version_failure() {
+    PNM_HY2_BIN="$FAKE_DIR/missing-hysteria" PNM_FAKE_PROFILE=pass run_capture run_fake_pnm --json check
+    assert_eq 2 "$RUN_RC" || return 1
+    assert_contains "$RUN_OUTPUT" 'Hysteria2 is not installed' || return 1
+
+    PNM_HY2_BIN="$FAKE_DIR/hysteria" PNM_FAKE_PROFILE=hysteria-exec-fails run_capture run_fake_pnm --json check
+    assert_eq 2 "$RUN_RC" || return 1
+    assert_contains "$RUN_OUTPUT" 'Hysteria2 version could not be determined' || return 1
+    assert_not_contains "$RUN_OUTPUT" 'Hysteria2 is not installed'
+}
+
+test_status_reports_hysteria_version() {
+    PNM_FAKE_PROFILE=pass run_capture run_fake_pnm --json status
+    assert_eq 0 "$RUN_RC" || return 1
+    assert_contains "$RUN_OUTPUT" 'v2.13.0'
+}
+
 test_supported_platform_matrix() {
     local fixture
 
@@ -81,5 +111,8 @@ run_test 'FAIL takes exit-code precedence' test_failure_exit_precedence
 run_test 'quiet mode emits no stdout' test_quiet_has_no_stdout
 run_test 'check output does not expose config secret fixture' test_json_contains_no_fixture_password
 run_test 'expired Hysteria2 certificate fails the health check' test_expired_hysteria_certificate_fails_health_check
+run_test 'official Hysteria2 v2.13.0 banner is detected and reported' test_hysteria_v213_binary_is_detected_and_version_reported
+run_test 'missing Hysteria binary differs from version-command failure' test_hysteria_missing_binary_is_distinct_from_version_failure
+run_test 'status reports the detected Hysteria2 version' test_status_reports_hysteria_version
 run_test 'supported Debian and Ubuntu platform matrix passes' test_supported_platform_matrix
 finish_tests

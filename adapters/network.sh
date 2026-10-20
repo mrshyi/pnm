@@ -64,21 +64,29 @@ pnm_listener_owned_by_pid() {
 pnm_binary_version() {
     local binary="${1:?binary required}"
     local style="${2:?version style required}"
-    local output
+    local output version
 
-    pnm_command_exists "$binary" || return 1
+    if [[ "$binary" == */* ]]; then
+        [[ -f "$binary" ]] || return 127
+        [[ -x "$binary" ]] || return 69
+    elif ! pnm_command_exists "$binary"; then
+        return 127
+    fi
     case "$style" in
         xray)
-            output="$("$binary" version 2>/dev/null | head -n 1)" || return 1
+            output="$("$binary" version 2>/dev/null)" || return 69
+            version="$(head -n 1 <<<"$output")"
             ;;
         hysteria)
-            output="$("$binary" version 2>/dev/null | head -n 1)" || return 1
+            output="$("$binary" version 2>&1)" || return 69
+            version="$(sed -nE 's/^Version:?[[:space:]]*(v?[0-9][^[:space:]]*).*/\1/p' <<<"$output" | head -n 1)"
             ;;
         *)
             return 1
             ;;
     esac
-    pnm_one_line "$output"
+    [[ -n "$version" ]] || return 69
+    pnm_one_line "$version"
     printf '\n'
 }
 

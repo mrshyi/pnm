@@ -58,18 +58,88 @@ EOF
 pnm_xray_config_matches_node() {
     local node_name="${1:?node config array required}"
     local reality_name="${2:?REALITY secret array required}"
-    local expected rc
+    local expected comparison rc
 
     [[ -f "$PNM_XRAY_CONFIG" && ! -L "$PNM_XRAY_CONFIG" ]] || return "$PNM_EXIT_UNAVAILABLE"
     expected="$(mktemp -- "${TMPDIR:-/tmp}/pnm-xray-config.XXXXXXXX")" || return "$PNM_EXIT_CANTCREAT"
     chmod 0600 -- "$expected" || { rm -f -- "$expected"; return "$PNM_EXIT_NOPERM"; }
     if pnm_render_xray_config "$node_name" "$reality_name" >"$expected"; then
-        if cmp -s -- "$expected" "$PNM_XRAY_CONFIG"; then rc=0; else rc=1; fi
+        if comparison="$(pnm_xray_config_compare_files "$expected" "$PNM_XRAY_CONFIG")"; then
+            rc=0
+        else
+            rc=$?
+        fi
     else
         rc="$PNM_EXIT_CONFIG"
     fi
     rm -f -- "$expected"
+    case "$rc" in
+        0) ;;
+        1)
+            if [[ "$PNM_OUTPUT_MODE" == json ]]; then
+                pnm_error "Xray runtime configuration drift; $comparison"
+            else
+                pnm_warn "Xray runtime configuration drift; $comparison"
+            fi
+            ;;
+        "$PNM_EXIT_CONFIG") pnm_error 'Xray runtime configuration is invalid JSON; consistency cannot be determined.' ;;
+        *) return "$rc" ;;
+    esac
     return "$rc"
+}
+
+pnm_xray_config_compare_files() {
+    local expected="${1:?expected Xray config required}"
+    local runtime="${2:?runtime Xray config required}"
+
+    python3 - "$expected" "$runtime" <<'PY'
+import json
+import re
+import sys
+
+def field_name(key):
+    text = str(key)
+    return text if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_.-]*", text) else "<key>"
+
+def differences(expected, actual, path=""):
+    if type(expected) is not type(actual):
+        return [path or "$"]
+    if isinstance(expected, dict):
+        result = []
+        for key in sorted(expected.keys() | actual.keys(), key=str):
+            child = f"{path}.{field_name(key)}" if path else field_name(key)
+            if key not in expected or key not in actual:
+                result.append(child)
+            else:
+                result.extend(differences(expected[key], actual[key], child))
+        return result
+    if isinstance(expected, list):
+        result = []
+        if len(expected) != len(actual):
+            result.append(f"{path}.length" if path else "$.length")
+        for index, (left, right) in enumerate(zip(expected, actual)):
+            result.extend(differences(left, right, f"{path}[{index}]"))
+        return result
+    return [] if expected == actual else [path or "$"]
+
+try:
+    with open(sys.argv[1], encoding="utf-8") as source:
+        expected = json.load(source)
+    with open(sys.argv[2], encoding="utf-8") as source:
+        actual = json.load(source)
+except (OSError, UnicodeError, json.JSONDecodeError):
+    print("runtime JSON could not be parsed")
+    sys.exit(78)
+
+fields = differences(expected, actual)
+if fields:
+    fields = fields[:32]
+    suffix = ", ..." if len(fields) == 32 else ""
+    print("drift fields: " + ", ".join(fields) + suffix)
+    sys.exit(1)
+
+print("consistent")
+PY
 }
 
 pnm_xray_config_runtime_values() {

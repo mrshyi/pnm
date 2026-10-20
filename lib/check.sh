@@ -153,16 +153,25 @@ pnm_check_file_metadata() {
 }
 
 pnm_check_xray() {
-    local state active enabled version test_output
+    local state active enabled version test_output version_rc
     local severity='FAIL'
 
     ((PNM_CHECK_CONFIGURED == 0)) && severity='WARN'
-    version="$(pnm_binary_version xray xray 2>/dev/null || true)"
+    if version="$(pnm_binary_version "$PNM_XRAY_BIN" xray 2>/dev/null)"; then
+        version_rc=0
+    else
+        version_rc=$?
+        version=''
+    fi
     state="$(pnm_service_state_line xray.service)"
     IFS='|' read -r _ active enabled _ <<<"$state"
 
-    if [[ -z "$version" ]]; then
+    if ((version_rc == 127)); then
         pnm_check_add xray "$severity" 'Xray is not installed' 'xray binary not found'
+        return 0
+    fi
+    if ((version_rc != 0)); then
+        pnm_check_add xray "$severity" 'Xray version could not be determined' 'xray version command failed or returned an unsupported format'
         return 0
     fi
     if [[ ! -r "$PNM_XRAY_CONFIG" ]]; then
@@ -185,16 +194,25 @@ pnm_check_xray() {
 }
 
 pnm_check_hysteria() {
-    local state active enabled version
+    local state active enabled version version_rc
     local severity='FAIL'
 
     ((PNM_CHECK_CONFIGURED == 0)) && severity='WARN'
-    version="$(pnm_binary_version hysteria hysteria 2>/dev/null || true)"
+    if version="$(pnm_binary_version "$PNM_HY2_BIN" hysteria 2>/dev/null)"; then
+        version_rc=0
+    else
+        version_rc=$?
+        version=''
+    fi
     state="$(pnm_service_state_line hysteria-server.service)"
     IFS='|' read -r _ active enabled _ <<<"$state"
 
-    if [[ -z "$version" ]]; then
+    if ((version_rc == 127)); then
         pnm_check_add hysteria2 "$severity" 'Hysteria2 is not installed' 'hysteria binary not found'
+        return 0
+    fi
+    if ((version_rc != 0)); then
+        pnm_check_add hysteria2 "$severity" 'Hysteria2 version could not be determined' 'hysteria version command failed or returned an unsupported format'
         return 0
     fi
     if [[ ! -r "$PNM_HY2_CONFIG" ]]; then
