@@ -25,6 +25,7 @@ case "$command_name" in
                     LoadState) printf 'loaded\n' ;;
                     ActiveState) [[ "$profile" == fail ]] && printf 'failed\n' || printf 'active\n' ;;
                     SubState) [[ "$profile" == fail ]] && printf 'failed\n' || printf 'running\n' ;;
+                    InvocationID) printf '0123456789abcdef0123456789abcdef\n' ;;
                     *) printf 'unknown\n' ;;
                 esac
                 ;;
@@ -104,9 +105,24 @@ EOF
         case "$target" in
             *xray-config.json) printf '640|root|xray\n' ;;
             *hysteria-config.yaml) printf '600|hysteria|hysteria\n' ;;
+            */server.crt) [[ "$profile" == bad-tls-mode ]] && printf '600|hysteria|hysteria\n' || printf '644|root|hysteria\n' ;;
+            */server.key) [[ "$profile" == bad-tls-mode ]] && printf '644|root|root\n' || printf '600|hysteria|hysteria\n' ;;
             */secrets) printf '700|root|root\n' ;;
             *) exec /usr/bin/stat "$@" ;;
         esac
+        ;;
+    getent)
+        if [[ "${1-}" == passwd && "${2-}" == hysteria ]]; then
+            printf 'hysteria:x:999:999:Hysteria:/nonexistent:/usr/sbin/nologin\n'
+        elif [[ "${1-}" == group && "${2-}" == hysteria ]]; then
+            printf 'hysteria:x:999:\n'
+        else
+            exit 2
+        fi
+        ;;
+    runuser)
+        [[ "$profile" != bad-tls-read ]] || exit 1
+        exit 0
         ;;
     *)
         printf 'Unsupported fake command: %s\n' "$command_name" >&2

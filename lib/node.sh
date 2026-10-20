@@ -459,8 +459,12 @@ pnm_node_init() {
 pnm_node_show() {
     local reality_server_name reality_sni_valid=1 runtime_consistency=not-applied
     local runtime_port='' runtime_target='' runtime_server_names='' runtime_network=''
-    local xray_service_state=unknown runtime_summary='' consistency_rc
+    local xray_service_state=unknown hy2_service_state=unknown runtime_summary='' consistency_rc
+    local xray_applied=unknown hy2_consistency=not-applied hy2_applied=unknown
+    local xray_link_status=unknown hy2_link_status=unknown xray_status_line='' hy2_status_line=''
+    local xray_reason='' hy2_reason=''
     local -A node_config=() versions_config=()
+    local -A reality_secret=() hysteria_secret=()
 
     pnm_load_node_config node_config || {
         pnm_error "Node configuration is missing or unreadable: $PNM_CONFIG_DIR/node.conf"
@@ -488,32 +492,29 @@ pnm_node_show() {
     pnm_validate_versions_config versions_config || { pnm_error 'Version manifest values are invalid.'; return "$PNM_EXIT_CONFIG"; }
 
     xray_service_state="$(pnm_systemd_active_state xray.service 2>/dev/null || printf unknown)"
+    hy2_service_state="$(pnm_systemd_active_state hysteria-server.service 2>/dev/null || printf unknown)"
     if [[ "${node_config[PNM_CONFIGURED]}" == yes ]] && ((reality_sni_valid == 1)); then
-        local -A reality_secret=()
         if pnm_load_reality_secret reality_secret && pnm_validate_reality_secret_config reality_secret; then
+            xray_status_line="$(pnm_node_core_link_status xray node_config reality_secret)"
+            IFS='|' read -r xray_link_status xray_service_state runtime_consistency xray_applied xray_reason <<<"$xray_status_line"
             if runtime_summary="$(pnm_xray_config_runtime_values "$PNM_XRAY_CONFIG" 2>/dev/null)"; then
                 IFS=$'\t' read -r runtime_port runtime_target runtime_server_names runtime_network <<<"$runtime_summary"
-                if pnm_xray_config_matches_node node_config reality_secret; then
-                    runtime_consistency=consistent
-                else
-                    consistency_rc=$?
-                    if ((consistency_rc == 1)); then runtime_consistency=drift; else runtime_consistency=unavailable; fi
-                fi
-            else
-                if pnm_xray_config_matches_node node_config reality_secret; then
-                    runtime_consistency=unavailable
-                else
-                    consistency_rc=$?
-                    if ((consistency_rc == 1)); then runtime_consistency=drift; else runtime_consistency=unavailable; fi
-                fi
             fi
         else
             runtime_consistency=unavailable
         fi
+        if pnm_load_hysteria_secret hysteria_secret && pnm_validate_hysteria_secret_config hysteria_secret; then
+            hy2_status_line="$(pnm_node_core_link_status hysteria2 node_config hysteria_secret)"
+            IFS='|' read -r hy2_link_status hy2_service_state hy2_consistency hy2_applied hy2_reason <<<"$hy2_status_line"
+        else
+            hy2_link_status=unknown
+            hy2_consistency=unavailable
+            hy2_applied=unknown
+        fi
     fi
 
     if [[ "$PNM_OUTPUT_MODE" == json ]]; then
-        printf '{"schema":"pnm.node.v1","config_dir":%s,"node":{"region":%s,"address":%s,"timezone":%s,"configured":%s,"xray_port":%s,"server_name":%s,"target":%s,"hy2_port":%s,"tls_mode":%s},"runtime":{"xray_service":%s,"xray_port":%s,"xray_server_names":%s,"xray_target":%s,"xray_network":%s,"configuration_consistency":%s},"versions":{"xray":%s,"xray_sha256":%s,"hysteria2":%s,"hysteria2_sha256":%s}}\n' \
+        printf '{"schema":"pnm.node.v1","config_dir":%s,"node":{"region":%s,"address":%s,"timezone":%s,"configured":%s,"xray_port":%s,"server_name":%s,"target":%s,"hy2_port":%s,"tls_mode":%s},"runtime":{"xray_service":%s,"xray_port":%s,"xray_server_names":%s,"xray_target":%s,"xray_network":%s,"configuration_consistency":%s,"xray_applied_state":%s,"xray_link_status":%s,"hysteria2_service":%s,"hysteria2_configuration_consistency":%s,"hysteria2_applied_state":%s,"hysteria2_link_status":%s},"versions":{"xray":%s,"xray_sha256":%s,"hysteria2":%s,"hysteria2_sha256":%s}}\n' \
             "$(pnm_json_string "$PNM_CONFIG_DIR")" "$(pnm_json_string "${node_config[NODE_REGION]}")" \
             "$(pnm_json_string "${node_config[NODE_ADDRESS]-}")" "$(pnm_json_string "${node_config[TIMEZONE]}")" \
             "$(pnm_json_string "${node_config[PNM_CONFIGURED]}")" "$(pnm_json_string "${node_config[XRAY_PORT]}")" \
@@ -522,19 +523,26 @@ pnm_node_show() {
             "$(pnm_json_string "$xray_service_state")" "$(pnm_json_string "$runtime_port")" \
             "$(pnm_json_string "$runtime_server_names")" "$(pnm_json_string "$runtime_target")" \
             "$(pnm_json_string "$runtime_network")" \
-            "$(pnm_json_string "$runtime_consistency")" \
+            "$(pnm_json_string "$runtime_consistency")" "$(pnm_json_string "$xray_applied")" \
+            "$(pnm_json_string "$xray_link_status")" "$(pnm_json_string "$hy2_service_state")" \
+            "$(pnm_json_string "$hy2_consistency")" "$(pnm_json_string "$hy2_applied")" \
+            "$(pnm_json_string "$hy2_link_status")" \
             "$(pnm_json_string "${versions_config[XRAY_VERSION]}")" "$(pnm_json_string "${versions_config[XRAY_SHA256]}")" \
             "$(pnm_json_string "${versions_config[HY2_VERSION]}")" "$(pnm_json_string "${versions_config[HY2_SHA256]}")"
         if ((reality_sni_valid == 0)); then
             pnm_warn 'Saved REALITY SNI is not a fully qualified DNS name; do not use the VPS hostname.'
             return "$PNM_EXIT_CONFIG"
         fi
-        if [[ "$runtime_consistency" == drift ]]; then
-            pnm_error 'Persistent node.conf differs from the runtime Xray configuration; apply the desired settings with `sudo pnm apply xray`.'
+        if [[ "$xray_link_status" != ready ]]; then
+            if [[ "$runtime_consistency" == drift ]]; then
+                pnm_error "Persistent node.conf differs from the runtime Xray configuration; ${xray_reason:-runtime fields differ}. Review and apply with 'sudo pnm apply xray'."
+            else
+                pnm_error "Xray persistent/runtime state is not safe for links: ${xray_reason:-status unavailable}. Review and apply with 'sudo pnm apply xray' if appropriate."
+            fi
             return "$PNM_EXIT_CONFIG"
         fi
-        if [[ "$runtime_consistency" == unavailable ]]; then
-            pnm_error 'Runtime Xray configuration is unavailable or invalid; consistency could not be verified.'
+        if [[ "$hy2_link_status" != ready ]]; then
+            pnm_error "Hysteria2 persistent/runtime state is not safe for links: ${hy2_reason:-status unavailable}. Review and apply with 'sudo pnm apply hy2' if appropriate."
             return "$PNM_EXIT_CONFIG"
         fi
         return 0
@@ -545,30 +553,39 @@ pnm_node_show() {
         "${node_config[NODE_REGION]}" "${node_config[NODE_ADDRESS]-not-set}" \
         "${node_config[TIMEZONE]}" "${node_config[PNM_CONFIGURED]}"
     printf '  xray: %s -> %s (%s) [persisted]\n' "${node_config[XRAY_PORT]}" "${node_config[XRAY_SERVER_NAME]}" "${node_config[XRAY_TARGET]}"
-    printf '  xray runtime: service=%s config=%s' "$xray_service_state" "$runtime_consistency"
+    printf '  xray runtime: service=%s config=%s applied=%s link=%s' \
+        "$xray_service_state" "$runtime_consistency" "$xray_applied" "$xray_link_status"
     if [[ -n "$runtime_port" ]]; then
         printf ' port=%s sni=%s target=%s transport=%s' \
             "$runtime_port" "$runtime_server_names" "$runtime_target" "$runtime_network"
     fi
     printf '\n'
-    printf '  hysteria2: %s (%s)\n' "${node_config[HY2_PORT]}" "${node_config[HY2_TLS_MODE]}"
+    printf '  hysteria2: %s (%s) [persisted]\n' "${node_config[HY2_PORT]}" "${node_config[HY2_TLS_MODE]}"
+    printf '  hysteria2 runtime: service=%s config=%s applied=%s link=%s\n' \
+        "$hy2_service_state" "$hy2_consistency" "$hy2_applied" "$hy2_link_status"
     printf '  versions: xray %s; hysteria2 %s\n' "${versions_config[XRAY_VERSION]}" "${versions_config[HY2_VERSION]}"
     if ((reality_sni_valid == 0)); then
         pnm_warn 'Saved REALITY SNI is not a fully qualified DNS name; do not use the VPS hostname.'
         return "$PNM_EXIT_CONFIG"
     fi
-    if [[ "$runtime_consistency" == drift ]]; then
-        pnm_error 'Persistent node.conf differs from the runtime Xray configuration; apply the desired settings with `sudo pnm apply xray`.'
+    if [[ "$xray_link_status" != ready ]]; then
+        if [[ "$runtime_consistency" == drift ]]; then
+            pnm_error "Persistent node.conf differs from the runtime Xray configuration; ${xray_reason:-runtime fields differ}. Review and apply with 'sudo pnm apply xray'."
+        else
+            pnm_error "Xray persistent/runtime state is not safe for links: ${xray_reason:-status unavailable}. Review and apply with 'sudo pnm apply xray' if appropriate."
+        fi
         return "$PNM_EXIT_CONFIG"
     fi
-    if [[ "$runtime_consistency" == unavailable ]]; then
-        pnm_error 'Runtime Xray configuration is unavailable or invalid; consistency could not be verified.'
+    if [[ "$hy2_link_status" != ready ]]; then
+        pnm_error "Hysteria2 persistent/runtime state is not safe for links: ${hy2_reason:-status unavailable}. Review and apply with 'sudo pnm apply hy2' if appropriate."
         return "$PNM_EXIT_CONFIG"
     fi
 }
 
 pnm_node_links() {
-    local address='' argument xray_public_key xray_link hy2_link='' xray_label hy2_label rc hy2_omission_reason='' hy2_server_name=''
+    local address='' argument xray_public_key xray_link='' hy2_link='' xray_label hy2_label rc
+    local xray_status xray_service xray_config_state xray_applied xray_reason
+    local hy2_status hy2_service hy2_config_state hy2_applied hy2_reason hy2_server_name=''
     local -A node_config=() reality_secret=() hysteria_secret=()
 
     while (($# > 0)); do
@@ -615,54 +632,45 @@ pnm_node_links() {
         pnm_error 'Share-link address must be an IPv4 address or hostname.'
         return "$PNM_EXIT_CONFIG"
     }
-    pnm_load_reality_secret reality_secret || {
-        pnm_error 'REALITY credentials are missing.'
-        return "$PNM_EXIT_CONFIG"
-    }
-    pnm_validate_reality_secret_config reality_secret || {
-        pnm_error 'REALITY credentials are invalid.'
-        return "$PNM_EXIT_CONFIG"
-    }
-    if pnm_xray_config_matches_node node_config reality_secret; then
-        :
+    if pnm_load_reality_secret reality_secret && pnm_validate_reality_secret_config reality_secret; then
+        IFS='|' read -r xray_status xray_service xray_config_state xray_applied xray_reason \
+            <<<"$(pnm_node_core_link_status xray node_config reality_secret)"
     else
-        rc=$?
-        if ((rc == 1)); then
-            pnm_error 'Runtime Xray configuration differs from node.conf; refusing to emit potentially stale links. Apply the desired settings with `sudo pnm apply xray`.'
-            return "$PNM_EXIT_CONFIG"
-        fi
-        pnm_error 'Runtime Xray configuration could not be verified; refusing to emit links.'
-        return "$rc"
+        xray_status=unknown
+        xray_service=unknown
+        xray_config_state=unknown
+        xray_applied=unknown
+        xray_reason='REALITY credentials are missing or invalid'
+    fi
+    if [[ "$xray_status" == ready ]]; then
+        xray_public_key="$(pnm_node_xray_reality_public_key "${reality_secret[XRAY_REALITY_PRIVATE_KEY]}")" || {
+            xray_status=unknown
+            xray_reason='REALITY public key could not be derived'
+        }
+    fi
+    if [[ "$xray_status" == ready ]]; then
+        xray_label="$(pnm_node_uri_encode "PNM-${node_config[NODE_REGION]}-Xray")"
+        xray_link="vless://$(pnm_node_uri_encode "${reality_secret[XRAY_UUID]}")@$address:${node_config[XRAY_PORT]}?encryption=none&flow=xtls-rprx-vision&security=reality&sni=$(pnm_node_uri_encode "${node_config[XRAY_SERVER_NAME]}")&fp=chrome&pbk=$(pnm_node_uri_encode "$xray_public_key")&sid=$(pnm_node_uri_encode "${reality_secret[XRAY_REALITY_SHORT_ID]}")&type=tcp&headerType=none#$xray_label"
     fi
 
     if ! pnm_load_hysteria_secret hysteria_secret || ! pnm_validate_hysteria_secret_config hysteria_secret; then
-        hy2_omission_reason='Hysteria2 credentials are missing or invalid'
+        hy2_status=unknown
+        hy2_service=unknown
+        hy2_config_state=unknown
+        hy2_applied=unknown
+        hy2_reason='Hysteria2 credentials are missing or invalid'
     elif ! hy2_server_name="$(pnm_hysteria_tls_server_name node_config hysteria_secret 2>/dev/null)"; then
-        hy2_omission_reason='HY2 TLS SNI is missing or does not match the configured certificate SAN'
-    elif pnm_hysteria_config_matches_node node_config hysteria_secret; then
-        :
+        hy2_status=unknown
+        hy2_service=unknown
+        hy2_config_state=unknown
+        hy2_applied=unknown
+        hy2_reason='HY2 TLS SNI is missing or does not match the configured certificate SAN'
     else
-        rc=$?
-        if [[ -n "${PNM_HY2_CONFIG_DIAGNOSTIC-}" ]]; then
-            hy2_omission_reason="$PNM_HY2_CONFIG_DIAGNOSTIC"
-        else
-            case "$rc" in
-                1) hy2_omission_reason='runtime configuration differs from PNM settings' ;;
-                "$PNM_EXIT_CONFIG") hy2_omission_reason='runtime configuration is damaged' ;;
-                "$PNM_EXIT_UNAVAILABLE") hy2_omission_reason='runtime configuration is missing' ;;
-                "$PNM_EXIT_NOPERM") hy2_omission_reason='runtime configuration cannot be read due to permissions' ;;
-                *) hy2_omission_reason='runtime configuration could not be verified' ;;
-            esac
-        fi
+        IFS='|' read -r hy2_status hy2_service hy2_config_state hy2_applied hy2_reason \
+            <<<"$(pnm_node_core_link_status hysteria2 node_config hysteria_secret)"
     fi
 
-    xray_public_key="$(pnm_node_xray_reality_public_key "${reality_secret[XRAY_REALITY_PRIVATE_KEY]}")" || {
-        pnm_error "Unable to derive the REALITY public key from $PNM_XRAY_BIN."
-        return "$PNM_EXIT_UNAVAILABLE"
-    }
-    xray_label="$(pnm_node_uri_encode "PNM-${node_config[NODE_REGION]}-Xray")"
-    xray_link="vless://$(pnm_node_uri_encode "${reality_secret[XRAY_UUID]}")@$address:${node_config[XRAY_PORT]}?encryption=none&flow=xtls-rprx-vision&security=reality&sni=$(pnm_node_uri_encode "${node_config[XRAY_SERVER_NAME]}")&fp=chrome&pbk=$(pnm_node_uri_encode "$xray_public_key")&sid=$(pnm_node_uri_encode "${reality_secret[XRAY_REALITY_SHORT_ID]}")&type=tcp&headerType=none#$xray_label"
-    if [[ -z "$hy2_omission_reason" ]]; then
+    if [[ "$hy2_status" == ready ]]; then
         hy2_label="$(pnm_node_uri_encode "PNM-${node_config[NODE_REGION]}-Hysteria2")"
         hy2_link="hysteria2://$(pnm_node_uri_encode "${hysteria_secret[HY2_AUTH_PASSWORD]}")@$address:${node_config[HY2_PORT]}/?sni=$(pnm_node_uri_encode "$hy2_server_name")"
         if [[ "${node_config[HY2_TLS_MODE]}" == selfsigned-pin ]]; then
@@ -672,23 +680,29 @@ pnm_node_links() {
     fi
 
     if [[ "$PNM_OUTPUT_MODE" == json ]]; then
-        if [[ -n "$hy2_omission_reason" ]]; then
-            printf '{"schema":"pnm.node-links.v1","address":%s,"xray_vless_reality":%s,"hysteria2":null,"hysteria2_status":"omitted"}\n' \
-                "$(pnm_json_string "$address")" "$(pnm_json_string "$xray_link")"
-            pnm_error "Hysteria2 link omitted: $hy2_omission_reason."
-        else
-            printf '{"schema":"pnm.node-links.v1","address":%s,"xray_vless_reality":%s,"hysteria2":%s}\n' \
-                "$(pnm_json_string "$address")" "$(pnm_json_string "$xray_link")" "$(pnm_json_string "$hy2_link")"
-        fi
+        printf '{"schema":"pnm.node-links.v1","address":%s,"xray_vless_reality":%s,"xray_status":%s,"hysteria2":%s,"hysteria2_status":%s}\n' \
+            "$(pnm_json_string "$address")" \
+            "$([[ -n "$xray_link" ]] && pnm_json_string "$xray_link" || printf null)" \
+            "$(pnm_json_string "$xray_status")" \
+            "$([[ -n "$hy2_link" ]] && pnm_json_string "$hy2_link" || printf null)" \
+            "$(pnm_json_string "$hy2_status")"
+        [[ -n "$xray_link" || -n "$hy2_link" ]] || return "$PNM_EXIT_CONFIG"
+        [[ -n "$xray_link" ]] || pnm_error "Xray link omitted: $xray_reason."
+        [[ -n "$hy2_link" ]] || pnm_error "Hysteria2 link omitted: $hy2_reason."
         return "$PNM_EXIT_OK"
     fi
     printf 'PNM client share links (sensitive)\n'
-    printf '  Xray VLESS + REALITY:\n%s\n' "$xray_link"
-    if [[ -n "$hy2_omission_reason" ]]; then
-        pnm_warn "Hysteria2 link omitted: $hy2_omission_reason."
+    if [[ -n "$xray_link" ]]; then
+        printf '  Xray VLESS + REALITY:\n%s\n' "$xray_link"
     else
-        printf '  Hysteria2:\n%s\n' "$hy2_link"
+        pnm_warn "Xray link omitted: $xray_reason."
     fi
+    if [[ -n "$hy2_link" ]]; then
+        printf '  Hysteria2:\n%s\n' "$hy2_link"
+    else
+        pnm_warn "Hysteria2 link omitted: $hy2_reason."
+    fi
+    [[ -n "$xray_link" || -n "$hy2_link" ]] || return "$PNM_EXIT_CONFIG"
     pnm_warn 'These links contain client credentials. Store and transmit them as secrets.'
 }
 

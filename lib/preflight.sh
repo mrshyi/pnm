@@ -57,7 +57,7 @@ pnm_preflight_platform() {
 }
 
 pnm_preflight_runtime() {
-    local -a missing=()
+    local -a missing=() asset_missing=() tls_missing=() unit_missing=() account_missing=() access_missing=()
     local command_name
 
     if pnm_systemd_available; then
@@ -66,13 +66,47 @@ pnm_preflight_runtime() {
         pnm_preflight_add systemd FAIL 'systemd is unavailable' 'PNM installation requires systemd'
     fi
 
-    for command_name in apt-get awk curl flock install python3 sha256sum ss unzip; do
+    for command_name in apt-get awk curl flock install python3 sha256sum ss; do
         pnm_command_exists "$command_name" || missing+=("$command_name")
     done
     if ((${#missing[@]} == 0)); then
-        pnm_preflight_add tools OK 'Required local tools are available' 'apt-get, awk, curl, flock, install, python3, sha256sum, ss, unzip'
+        pnm_preflight_add tools OK 'Base install tools are available' 'apt-get, awk, curl, flock, install, python3, sha256sum, ss'
     else
-        pnm_preflight_add tools FAIL 'Required local tools are unavailable' "missing: ${missing[*]}"
+        pnm_preflight_add tools FAIL 'Base install tools are unavailable' "missing during preflight/transaction: ${missing[*]}"
+    fi
+    for command_name in unzip; do
+        pnm_command_exists "$command_name" || asset_missing+=("$command_name")
+    done
+    if ((${#asset_missing[@]} == 0)); then
+        pnm_preflight_add xray_assets OK 'Xray asset tools are available' 'Xray ZIP staging requires unzip'
+    else
+        pnm_preflight_add xray_assets FAIL 'Xray asset tools are unavailable' "missing during Xray asset staging: ${asset_missing[*]}"
+    fi
+    pnm_command_exists openssl || tls_missing+=(openssl)
+    if ((${#tls_missing[@]} == 0)); then
+        pnm_preflight_add tls_tools OK 'TLS tools are available' 'openssl is required for TLS and secure credential generation'
+    else
+        pnm_preflight_add tls_tools FAIL 'TLS tools are unavailable' "missing during TLS/secret generation: ${tls_missing[*]}"
+    fi
+    pnm_command_exists systemd-analyze || unit_missing+=(systemd-analyze)
+    if ((${#unit_missing[@]} == 0)); then
+        pnm_preflight_add unit_tools OK 'systemd unit validation tool is available' 'systemd-analyze verify'
+    else
+        pnm_preflight_add unit_tools FAIL 'systemd unit validation tool is unavailable' "missing during service-unit staging: ${unit_missing[*]}"
+    fi
+    for command_name in getent groupadd useradd userdel groupdel id; do
+        pnm_command_exists "$command_name" || account_missing+=("$command_name")
+    done
+    if ((${#account_missing[@]} == 0)); then
+        pnm_preflight_add service_account_tools OK 'Service-account transaction tools are available' 'getent and account create/rollback tools'
+    else
+        pnm_preflight_add service_account_tools FAIL 'Service-account transaction tools are unavailable' "missing during account provisioning/rollback: ${account_missing[*]}"
+    fi
+    pnm_command_exists runuser || access_missing+=(runuser)
+    if ((${#access_missing[@]} == 0)); then
+        pnm_preflight_add service_access_tools OK 'Service-account access probe is available' 'runuser is required for the post-install TLS read check'
+    else
+        pnm_preflight_add service_access_tools FAIL 'Service-account access probe is unavailable' "missing during post-health TLS access validation: ${access_missing[*]}"
     fi
 }
 

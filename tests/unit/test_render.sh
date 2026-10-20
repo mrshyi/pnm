@@ -16,6 +16,9 @@ source "$PNM_LIB_DIR/render.sh"
 # shellcheck source=../testlib.sh
 source "$TEST_ROOT/testlib.sh"
 
+PNM_TEST_INVOCATION_ID=0123456789abcdef0123456789abcdef
+pnm_systemd_show_value() { printf '%s\n' "$PNM_TEST_INVOCATION_ID"; }
+
 load_render_fixtures() {
     declare -gA NODE=() REALITY=() HYSTERIA=()
     PNM_CONFIG_DIR="$TEST_ROOT/fixtures/config-secrets"
@@ -92,6 +95,34 @@ test_render_write_is_atomic_mode_600() {
     assert_eq 600 "$mode"
 }
 
+test_applied_config_record_distinguishes_unknown_confirmed_and_changed() {
+    local temp_dir config status
+    local -A applied=()
+    temp_dir="$(mktemp -d)"
+    PNM_STATE_DIR="$temp_dir/state"
+    config="$temp_dir/config.yaml"
+    printf 'listen: :8443\n' >"$config"
+
+    status="$(pnm_core_applied_config_status hysteria2 "$config")" || { rm -rf -- "$temp_dir"; return 1; }
+    assert_eq unknown "$status" || { rm -rf -- "$temp_dir"; return 1; }
+    mkdir -p -- "$PNM_STATE_DIR/cores/hysteria2"
+    printf 'SCHEMA_VERSION=1\nCORE=hysteria2\nCONFIG_SHA256=%s\nSERVICE_INVOCATION_ID=%s\n' \
+        "$(sha256sum -- "$config" | awk '{print $1}')" "$PNM_TEST_INVOCATION_ID" >"$PNM_STATE_DIR/cores/hysteria2/applied.env"
+    chmod 0600 -- "$PNM_STATE_DIR/cores/hysteria2/applied.env"
+    status="$(pnm_core_applied_config_status hysteria2 "$config")" || { rm -rf -- "$temp_dir"; return 1; }
+    assert_eq confirmed "$status" || { rm -rf -- "$temp_dir"; return 1; }
+
+    PNM_TEST_INVOCATION_ID=ffffffffffffffffffffffffffffffff
+    status="$(pnm_core_applied_config_status hysteria2 "$config")" || { rm -rf -- "$temp_dir"; return 1; }
+    assert_eq changed "$status" || { rm -rf -- "$temp_dir"; return 1; }
+    PNM_TEST_INVOCATION_ID=0123456789abcdef0123456789abcdef
+
+    printf 'listen: :9443\n' >"$config"
+    status="$(pnm_core_applied_config_status hysteria2 "$config")" || { rm -rf -- "$temp_dir"; return 1; }
+    rm -rf -- "$temp_dir"
+    assert_eq changed "$status"
+}
+
 run_test 'Xray renderer produces valid JSON' test_xray_render_is_valid_json
 run_test 'Xray renderer keeps REALITY target and SNI independent' test_xray_renderer_keeps_reality_target_and_sni_independent
 run_test 'runtime Xray parser exposes public REALITY values only' test_runtime_xray_config_exposes_only_public_reality_values
@@ -99,4 +130,5 @@ run_test 'REALITY Short ID rejects odd hex length' test_reality_short_id_require
 run_test 'Hysteria renderer keeps TLS verification enabled' test_hysteria_render_does_not_disable_tls_verification
 run_test 'Hysteria candidate validation rejects non-rendered or damaged YAML' test_hysteria_candidate_validation_accepts_only_rendered_yaml
 run_test 'rendered files are atomically written with mode 600' test_render_write_is_atomic_mode_600
+run_test 'applied configuration evidence distinguishes unknown and changed state' test_applied_config_record_distinguishes_unknown_confirmed_and_changed
 finish_tests

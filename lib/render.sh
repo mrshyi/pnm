@@ -394,6 +394,125 @@ pnm_hysteria_config_matches_node() {
     pnm_hysteria_config_validate_candidate "$PNM_HY2_CONFIG" "$node_name" "$hysteria_name"
 }
 
+pnm_core_applied_config_status() {
+    local core="${1:?core id required}"
+    local config="${2:?runtime configuration required}"
+    local record="$PNM_STATE_DIR/cores/$core/applied.env"
+    local digest unit invocation
+    local -A applied=()
+
+    case "$core" in
+        xray | hysteria2) ;;
+        *) return "$PNM_EXIT_CONFIG" ;;
+    esac
+    if [[ ! -e "$record" && ! -L "$record" ]]; then
+        printf 'unknown\n'
+        return 0
+    fi
+    if [[ ! -f "$record" || -L "$record" || ! -r "$record" ]] ||
+        ! pnm_config_load "$record" applied SCHEMA_VERSION CORE CONFIG_SHA256 SERVICE_INVOCATION_ID ||
+        [[ "${applied[SCHEMA_VERSION]-}" != 1 || "${applied[CORE]-}" != "$core" ||
+            ! "${applied[CONFIG_SHA256]-}" =~ ^[a-f0-9]{64}$ ||
+            ! "${applied[SERVICE_INVOCATION_ID]-}" =~ ^[a-f0-9]{32}$ ]]; then
+        printf 'damaged\n'
+        return 0
+    fi
+    [[ -f "$config" && ! -L "$config" && -r "$config" ]] || {
+        printf 'unknown\n'
+        return 0
+    }
+    digest="$(sha256sum -- "$config" 2>/dev/null | awk '{print $1}')" || {
+        printf 'unknown\n'
+        return 0
+    }
+    case "$core" in
+        xray) unit=xray.service ;;
+        hysteria2) unit=hysteria-server.service ;;
+    esac
+    invocation="$(pnm_systemd_show_value "$unit" InvocationID 2>/dev/null)" || {
+        printf 'unknown\n'
+        return 0
+    }
+    [[ "$invocation" =~ ^[a-fA-F0-9]{32}$ ]] || {
+        printf 'unknown\n'
+        return 0
+    }
+    if [[ "$digest" == "${applied[CONFIG_SHA256]}" && "$invocation" == "${applied[SERVICE_INVOCATION_ID]}" ]]; then
+        printf 'confirmed\n'
+    else
+        printf 'changed\n'
+    fi
+}
+
+pnm_node_core_link_status() {
+    local core="${1:?core id required}"
+    local node_name="${2:?node configuration array required}"
+    local secret_name="${3:?Core secret array required}"
+    local unit active config consistency_rc applied_status config_status=unknown diagnostic='' listener_rc protocol port
+    local -n node_ref="$node_name"
+
+    case "$core" in
+        xray) unit=xray.service; config="$PNM_XRAY_CONFIG"; protocol=tcp; port="${node_ref[XRAY_PORT]}" ;;
+        hysteria2) unit=hysteria-server.service; config="$PNM_HY2_CONFIG"; protocol=udp; port="${node_ref[HY2_PORT]}" ;;
+        *) printf 'unknown|unknown|unknown|unknown|unsupported Core\n'; return 0 ;;
+    esac
+    if ! active="$(pnm_systemd_active_state "$unit" 2>/dev/null)"; then
+        printf 'unknown|unknown|unknown|unknown|service state cannot be determined\n'
+        return 0
+    fi
+    if [[ "$active" != active ]]; then
+        printf 'inactive|%s|unknown|unknown|service is %s\n' "$active" "$active"
+        return 0
+    fi
+    if [[ "$core" == xray ]]; then
+        if diagnostic="$(pnm_xray_config_matches_node "$node_name" "$secret_name" 2>&1 >/dev/null)"; then
+            config_status=consistent
+        else
+            consistency_rc=$?
+            case "$consistency_rc" in
+                1) printf 'drift|%s|drift|unknown|runtime configuration differs from node.conf; %s\n' "$active" "${diagnostic#*; }" ;;
+                "$PNM_EXIT_UNAVAILABLE" | "$PNM_EXIT_NOPERM") printf 'unknown|%s|unknown|unknown|runtime configuration cannot be read\n' "$active" ;;
+                *) printf 'damaged|%s|damaged|unknown|runtime configuration is invalid\n' "$active" ;;
+            esac
+            return 0
+        fi
+    else
+        if pnm_hysteria_config_matches_node "$node_name" "$secret_name" >/dev/null 2>&1; then
+            config_status=consistent
+        else
+            consistency_rc=$?
+            diagnostic="${PNM_HY2_CONFIG_DIAGNOSTIC:-}"
+            case "$consistency_rc" in
+                1) printf 'drift|%s|drift|unknown|%s\n' "$active" "$diagnostic" ;;
+                "$PNM_EXIT_UNAVAILABLE" | "$PNM_EXIT_NOPERM") printf 'unknown|%s|unknown|unknown|%s\n' "$active" "${diagnostic:-runtime configuration cannot be read}" ;;
+                *) printf 'damaged|%s|damaged|unknown|%s\n' "$active" "${diagnostic:-runtime configuration is invalid}" ;;
+            esac
+            return 0
+        fi
+    fi
+    applied_status="$(pnm_core_applied_config_status "$core" "$config")" || {
+        printf 'unknown|%s|%s|unknown|applied configuration evidence cannot be read\n' "$active" "$config_status"
+        return 0
+    }
+    case "$applied_status" in
+        confirmed)
+            if pnm_listener_present "$protocol" "$port"; then
+                printf 'ready|%s|%s|confirmed|configuration is verified as applied; local listener is present\n' "$active" "$config_status"
+            else
+                listener_rc=$?
+                if ((listener_rc == 1)); then
+                    printf 'unavailable|%s|%s|confirmed|expected local %s/%s listener is absent\n' "$active" "$config_status" "${protocol^^}" "$port"
+                else
+                    printf 'unknown|%s|%s|confirmed|local listener state cannot be determined\n' "$active" "$config_status"
+                fi
+            fi
+            ;;
+        changed) printf 'drift|%s|%s|changed|runtime file or service invocation changed since the last successful PNM apply\n' "$active" "$config_status" ;;
+        damaged) printf 'unknown|%s|%s|damaged|applied configuration evidence is damaged\n' "$active" "$config_status" ;;
+        *) printf 'unknown|%s|%s|unknown|no successful PNM apply record exists\n' "$active" "$config_status" ;;
+    esac
+}
+
 pnm_render_reality_secret_config() {
     local reality_name="${1:?reality secret array required}"
     local -n reality="$reality_name"

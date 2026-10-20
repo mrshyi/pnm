@@ -14,12 +14,14 @@ source "$PNM_LIB_DIR/transaction.sh"
 source "$PNM_ADAPTER_DIR/systemd.sh"
 source "$PNM_LIB_DIR/lifecycle.sh"
 source "$PNM_LIB_DIR/sandbox-install.sh"
+source "$PNM_LIB_DIR/check.sh"
 source "$PNM_LIB_DIR/deploy.sh"
 source "$TEST_ROOT/testlib.sh"
 
 DEPLOY_ORDER=''
 DEPLOY_FAIL_PHASE=''
 DEPLOY_MARK_CONFIGURED_CALLS=0
+DEPLOY_RESTORE_CALLS=0
 
 deploy_test_sandbox() { DEPLOY_ORDER+="sandbox,"; [[ "$DEPLOY_FAIL_PHASE" != sandbox ]]; }
 deploy_test_xray() { DEPLOY_ORDER+="xray,"; [[ "$DEPLOY_FAIL_PHASE" != xray ]]; }
@@ -40,7 +42,19 @@ prepare_deploy() {
     DEPLOY_ORDER=''
     DEPLOY_FAIL_PHASE=''
     DEPLOY_MARK_CONFIGURED_CALLS=0
+    DEPLOY_RESTORE_CALLS=0
     pnm_require_root() { return 0; }
+    pnm_systemd_load_state() { printf 'not-found\n'; }
+    pnm_systemd_active_state() { printf 'inactive\n'; }
+    pnm_systemd_enabled_state() { printf 'disabled\n'; }
+    pnm_systemctl() { return 0; }
+    stat() {
+        case "$*" in
+            *"$PNM_STATE_DIR"*) printf '700|%s\n' "$EUID" ;;
+            *) command stat "$@" ;;
+        esac
+    }
+    pnm_deploy_restore_service_state() { ((DEPLOY_RESTORE_CALLS += 1)); }
 }
 
 test_core_deploy_runs_four_stages() {
@@ -80,6 +94,7 @@ test_post_health_failure_is_not_reported_as_committed() {
     assert_eq 1 "$rc" || { rm -rf -- "$temp_dir"; return 1; }
     assert_eq 'sandbox,xray,hysteria,health,' "$DEPLOY_ORDER" || { rm -rf -- "$temp_dir"; return 1; }
     assert_eq 0 "$DEPLOY_MARK_CONFIGURED_CALLS" || { rm -rf -- "$temp_dir"; return 1; }
+    assert_eq 1 "$DEPLOY_RESTORE_CALLS" || { rm -rf -- "$temp_dir"; return 1; }
     assert_contains "$contents" $'STOPPED\tafter=post-health rc=1' || { rm -rf -- "$temp_dir"; return 1; }
     assert_contains "$contents" $'ABANDONED\tdeployment closed without commit' || { rm -rf -- "$temp_dir"; return 1; }
     assert_not_contains "$contents" $'COMMIT\t'
@@ -119,9 +134,41 @@ test_apply_rejects_preflight_before_gate() {
 
 test_deploy_health_checks_both_cores() {
     local calls=''
-    pnm_systemd_unit_healthy() { calls+="$1,"; }
+    pnm_check_deploy_core_health() { calls+="$1,"; }
     pnm_deploy_health_step || return 1
-    assert_eq 'xray.service,hysteria-server.service,' "$calls"
+    assert_eq 'xray,hysteria2,' "$calls"
+}
+
+test_failed_deploy_restores_prior_active_and_enabled_state() {
+    local temp_dir calls
+    temp_dir="$(mktemp -d)"
+    PNM_TEST_SYSTEMCTL_LOG="$temp_dir/systemctl.log"
+    PNM_DEPLOY_XRAY_ACTIVE=active PNM_DEPLOY_XRAY_ENABLED=enabled
+    PNM_DEPLOY_HY2_ACTIVE=inactive PNM_DEPLOY_HY2_ENABLED=disabled
+    pnm_systemctl() { printf '%s;' "$*" >>"$PNM_TEST_SYSTEMCTL_LOG"; }
+    pnm_deploy_restore_service_state || { rm -rf -- "$temp_dir"; return 1; }
+    calls="$(<"$PNM_TEST_SYSTEMCTL_LOG")"
+    rm -rf -- "$temp_dir"
+    assert_eq 'enable xray.service;restart xray.service;disable hysteria-server.service;stop hysteria-server.service;' "$calls"
+}
+
+test_post_health_journal_failure_still_restores_prior_services() {
+    local rc
+    PNM_DEPLOY_ACTIVE=0
+    PNM_DEPLOY_JOURNAL_ERROR=0
+    DEPLOY_RESTORE_CALLS=0
+    pnm_deploy_begin() { PNM_DEPLOY_ACTIVE=1; return 0; }
+    pnm_deploy_run_phase() {
+        if [[ "$1" == post-health ]]; then
+            PNM_DEPLOY_JOURNAL_ERROR=1
+            return "$PNM_EXIT_CANTCREAT"
+        fi
+        return 0
+    }
+    pnm_deploy_close() { PNM_DEPLOY_ACTIVE=0; return 0; }
+    if pnm_deploy_execute >/dev/null 2>&1; then rc=0; else rc=$?; fi
+    assert_eq "$PNM_EXIT_CANTCREAT" "$rc" || return 1
+    assert_eq 1 "$DEPLOY_RESTORE_CALLS"
 }
 
 run_test 'one-click deploy runs Core stages without SSH or UFW' test_core_deploy_runs_four_stages
@@ -130,4 +177,6 @@ run_test 'post-health failure is not reported as a committed deployment' test_po
 run_test 'post-health failure can be retried and committed by a new deployment' test_post_health_failure_can_be_retried_as_a_new_deployment
 run_test 'one-click deploy rejects preflight failures before apply' test_apply_rejects_preflight_before_gate
 run_test 'post-install health checks both systemd Core services' test_deploy_health_checks_both_cores
+run_test 'failed deployment restores prior Core active and enabled states' test_failed_deploy_restores_prior_active_and_enabled_state
+run_test 'post-health journal failure still restores prior services' test_post_health_journal_failure_still_restores_prior_services
 finish_tests

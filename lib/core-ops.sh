@@ -8,6 +8,7 @@ PNM_CORE_RESTORE_XRAY_ACTIVE=''
 PNM_CORE_RESTORE_XRAY_ENABLED=''
 PNM_CORE_RESTORE_HY2_ACTIVE=''
 PNM_CORE_RESTORE_HY2_ENABLED=''
+PNM_CORE_UPDATE_FAILURE_STAGE=''
 
 pnm_core_resolve() {
     case "$1" in
@@ -102,6 +103,39 @@ pnm_core_apply_rollback() {
     return "$PNM_EXIT_SOFTWARE"
 }
 
+pnm_core_record_applied_config() {
+    local core="${1:?Core id required}"
+    local config="${2:?configuration path required}"
+    local stage_dir="${3:?stage directory required}"
+    local record_dir="$PNM_STATE_DIR/cores/$core"
+    local record="$record_dir/applied.env"
+    local staged="$stage_dir/applied-$core.env"
+    local digest rc unit invocation
+
+    [[ "$core" == xray || "$core" == hysteria2 ]] || return "$PNM_EXIT_CONFIG"
+    digest="$(sha256sum -- "$config" 2>/dev/null | awk '{print $1}')" || return "$PNM_EXIT_SOFTWARE"
+    [[ "$digest" =~ ^[a-f0-9]{64}$ ]] || return "$PNM_EXIT_SOFTWARE"
+    case "$core" in
+        xray) unit=xray.service ;;
+        hysteria2) unit=hysteria-server.service ;;
+    esac
+    invocation="$(pnm_systemd_show_value "$unit" InvocationID 2>/dev/null)" || return "$PNM_EXIT_UNAVAILABLE"
+    [[ "$invocation" =~ ^[a-fA-F0-9]{32}$ ]] || return "$PNM_EXIT_UNAVAILABLE"
+    pnm_mkdir_mode 0700 "$PNM_STATE_DIR/cores" || return "$PNM_EXIT_CANTCREAT"
+    pnm_mkdir_mode 0700 "$record_dir" || return "$PNM_EXIT_CANTCREAT"
+    printf 'SCHEMA_VERSION=1\nCORE=%s\nCONFIG_SHA256=%s\nSERVICE_INVOCATION_ID=%s\n' \
+        "$core" "$digest" "${invocation,,}" >"$staged" || return "$PNM_EXIT_CANTCREAT"
+    chmod 0600 -- "$staged" || { rm -f -- "$staged"; return "$PNM_EXIT_NOPERM"; }
+    if pnm_tx_write_file "$staged" "$record" "applied_$core" 0600; then
+        :
+    else
+        rc=$?
+        rm -f -- "$staged"
+        return "$rc"
+    fi
+    rm -f -- "$staged"
+}
+
 pnm_core_apply_config() {
     local core=$1 rc stage config validation_output tls_check tls_status tls_detail
     local node_name=PNM_CORE_NODE secret_name=PNM_CORE_SECRET
@@ -190,6 +224,21 @@ pnm_core_apply_config() {
             return "$PNM_EXIT_CONFIG"
         fi
     fi
+    if [[ "$core" == hysteria2 ]] && ! pnm_hysteria_config_matches_node "$node_name" "$secret_name"; then
+        pnm_error 'Hysteria2 restarted, but the runtime configuration differs from the validated candidate; restoring the previous configuration.'
+        pnm_core_apply_rollback || true
+        pnm_tx_close
+        return "$PNM_EXIT_CONFIG"
+    fi
+    if pnm_core_record_applied_config "$core" "$PNM_CORE_CONFIG" "$stage"; then
+        :
+    else
+        rc=$?
+        pnm_error "$core applied-configuration evidence could not be committed; restoring the previous configuration."
+        pnm_core_apply_rollback || true
+        pnm_tx_close
+        return "$rc"
+    fi
     pnm_tx_commit || { rc=$?; pnm_core_apply_rollback || true; pnm_tx_close; return "$rc"; }
     pnm_tx_close
     pnm_success "$core configuration applied."
@@ -243,7 +292,9 @@ pnm_core_backup() {
 }
 
 pnm_core_update() {
-    local requested='' version hash arg asset staged rc previous_dir previous_file previous_meta old_version tmp style
+    local requested='' version hash arg asset staged rc previous_dir previous_file previous_meta old_version style metadata_stage snapshot_stage
+    local staged_version staged_validation
+    local -A PNM_UPDATE_NODE=() PNM_UPDATE_SECRET=()
     pnm_core_resolve "$1" || return $?
     shift
     while (($#)); do
@@ -276,35 +327,59 @@ pnm_core_update() {
     pnm_asset_download_verified "$PNM_CORE_ID" "$version" "$hash" "$asset" || return $?
     if [[ "$PNM_CORE_ID" == xray ]]; then
         staged="$(pnm_asset_stage_xray_zip "$asset" "$PNM_CORE_STAGE/extract")" || return $?
-    local validation_output
-    pnm_capture validation_output "$staged" run -test -config "$PNM_CORE_CONFIG" || return "$PNM_EXIT_CONFIG"
     else
         staged="$(pnm_asset_stage_hysteria_binary "$asset" "$PNM_CORE_STAGE")" || return $?
+    fi
+    staged_version="$(pnm_binary_version_number "$staged" "$style" 2>/dev/null)" || return "$PNM_EXIT_CONFIG"
+    [[ "$staged_version" == "${version#v}" ]] || return "$PNM_EXIT_CONFIG"
+    pnm_load_node_config PNM_UPDATE_NODE && pnm_validate_node_config PNM_UPDATE_NODE || return "$PNM_EXIT_CONFIG"
+    if [[ "$PNM_CORE_ID" == xray ]]; then
+        pnm_load_reality_secret PNM_UPDATE_SECRET && pnm_validate_reality_secret_config PNM_UPDATE_SECRET || return "$PNM_EXIT_CONFIG"
+        pnm_capture staged_validation "$staged" run -test -config "$PNM_CORE_CONFIG" || return "$PNM_EXIT_CONFIG"
+    else
+        pnm_load_hysteria_secret PNM_UPDATE_SECRET && pnm_validate_hysteria_secret_config PNM_UPDATE_SECRET || return "$PNM_EXIT_CONFIG"
+        pnm_hysteria_config_validate_candidate "$PNM_CORE_CONFIG" PNM_UPDATE_NODE PNM_UPDATE_SECRET || return "$PNM_EXIT_CONFIG"
+        pnm_tls_validate_pair "${PNM_UPDATE_SECRET[HY2_TLS_CERT_PATH]}" "${PNM_UPDATE_SECRET[HY2_TLS_KEY_PATH]}" || return "$PNM_EXIT_CONFIG"
     fi
     previous_dir="$PNM_STATE_DIR/cores/$PNM_CORE_ID"
     pnm_mkdir_mode 0700 "$previous_dir" || return "$PNM_EXIT_CANTCREAT"
     previous_file="$previous_dir/previous"
     previous_meta="$previous_dir/previous.env"
-    tmp="$(mktemp -- "$previous_dir/.previous.XXXXXXXX")" || return "$PNM_EXIT_CANTCREAT"
-    pnm_tx_begin "core-update-$PNM_CORE_ID" || { rm -f -- "$tmp"; return $?; }
-    pnm_tx_add_rollback pnm_core_update_rollback || { pnm_tx_close; rm -f -- "$tmp"; return "$PNM_EXIT_SOFTWARE"; }
+    metadata_stage="$PNM_CORE_STAGE/previous.env"
+    snapshot_stage="$PNM_CORE_STAGE/previous"
+    pnm_tx_begin "core-update-$PNM_CORE_ID" || return $?
+    pnm_tx_add_rollback pnm_core_update_rollback || { pnm_tx_close; return "$PNM_EXIT_SOFTWARE"; }
     pnm_tx_write_file "$staged" "$PNM_CORE_BINARY" core_binary 0755 || {
-        rc=$?; pnm_tx_rollback || true; pnm_tx_close; rm -f -- "$tmp"; return "$rc";
+        rc=$?; pnm_core_update_abort update 'binary publication' "$rc"; return "$rc";
     }
     if [[ "$(pnm_binary_version_number "$PNM_CORE_BINARY" "$style")" != "${version#v}" ]]; then
-        pnm_tx_rollback || true; pnm_tx_close; rm -f -- "$tmp"; return "$PNM_EXIT_CONFIG"
+        pnm_core_update_abort update 'published binary version verification' "$PNM_EXIT_CONFIG"; return "$PNM_EXIT_CONFIG"
     fi
-    pnm_systemctl restart "$PNM_CORE_UNIT" || { rc=$?; pnm_tx_rollback || true; pnm_tx_close; rm -f -- "$tmp"; return "$rc"; }
-    pnm_systemd_unit_healthy "$PNM_CORE_UNIT" || { pnm_tx_rollback || true; pnm_tx_close; rm -f -- "$tmp"; return "$PNM_EXIT_CONFIG"; }
-    install -m 0755 -- "$PNM_TX_PATH/snapshots/core_binary" "$tmp" || {
-        pnm_tx_rollback || true; pnm_tx_close; rm -f -- "$tmp"; return "$PNM_EXIT_CANTCREAT";
+    pnm_systemctl restart "$PNM_CORE_UNIT" || { rc=$?; pnm_core_update_abort update 'service restart' "$rc"; return "$rc"; }
+    if declare -F pnm_check_deploy_core_health >/dev/null 2>&1; then
+        pnm_check_deploy_core_health "$PNM_CORE_ID" || { pnm_core_update_abort update 'post-update health check' "$PNM_EXIT_CONFIG"; return "$PNM_EXIT_CONFIG"; }
+    else
+        pnm_systemd_unit_healthy "$PNM_CORE_UNIT" || { pnm_core_update_abort update 'post-update health check' "$PNM_EXIT_CONFIG"; return "$PNM_EXIT_CONFIG"; }
+    fi
+    install -m 0755 -- "$PNM_TX_PATH/snapshots/core_binary" "$snapshot_stage" || {
+        pnm_core_update_abort update 'previous binary staging' "$PNM_EXIT_CANTCREAT"; return "$PNM_EXIT_CANTCREAT";
     }
-    mv -f -- "$tmp" "$previous_file" || { pnm_tx_rollback || true; pnm_tx_close; return "$PNM_EXIT_CANTCREAT"; }
-    printf 'SCHEMA_VERSION=1\nCORE=%s\nVERSION=%s\n' "$PNM_CORE_ID" "$old_version" >"$previous_meta" || {
-        pnm_tx_rollback || true; pnm_tx_close; return "$PNM_EXIT_CANTCREAT";
+    [[ "$(pnm_binary_version_number "$snapshot_stage" "$style" 2>/dev/null)" == "$old_version" ]] || {
+        pnm_core_update_abort update 'previous binary version verification' "$PNM_EXIT_CONFIG"; return "$PNM_EXIT_CONFIG";
     }
-    chmod 0600 -- "$previous_meta" || { pnm_tx_rollback || true; pnm_tx_close; return "$PNM_EXIT_NOPERM"; }
-    pnm_tx_commit || { rc=$?; pnm_tx_rollback || true; pnm_tx_close; return "$rc"; }
+    printf 'SCHEMA_VERSION=1\nCORE=%s\nVERSION=%s\n' "$PNM_CORE_ID" "$old_version" >"$metadata_stage" || {
+        pnm_core_update_abort update 'previous version metadata staging' "$PNM_EXIT_CANTCREAT"; return "$PNM_EXIT_CANTCREAT";
+    }
+    chmod 0600 -- "$metadata_stage" || { pnm_core_update_abort update 'previous metadata permissions' "$PNM_EXIT_NOPERM"; return "$PNM_EXIT_NOPERM"; }
+    if pnm_core_publish_previous_state "$snapshot_stage" "$metadata_stage" "$previous_file" "$previous_meta"; then :; else
+        rc=$?
+        pnm_core_update_abort update "$PNM_CORE_UPDATE_FAILURE_STAGE" "$rc"
+        return "$rc"
+    fi
+    [[ "$(pnm_binary_version_number "$previous_file" "$style" 2>/dev/null)" == "$old_version" ]] || {
+        pnm_core_update_abort update 'previous binary and metadata consistency check' "$PNM_EXIT_CONFIG"; return "$PNM_EXIT_CONFIG";
+    }
+    pnm_tx_commit || { rc=$?; pnm_core_update_abort update 'transaction commit' "$rc"; return "$rc"; }
     pnm_tx_close
     pnm_success "$PNM_CORE_ID updated to $version; use 'pnm rollback $PNM_CORE_ID' to revert."
 }
@@ -315,8 +390,33 @@ pnm_core_update_rollback() {
     pnm_systemd_unit_healthy "$PNM_CORE_UNIT"
 }
 
+pnm_core_publish_previous_state() {
+    local binary_source="${1:?previous binary source required}"
+    local metadata_source="${2:?previous metadata source required}"
+    local binary_target="${3:?previous binary target required}"
+    local metadata_target="${4:?previous metadata target required}"
+
+    PNM_CORE_UPDATE_FAILURE_STAGE='previous binary publication'
+    pnm_tx_write_file "$binary_source" "$binary_target" previous_binary 0755 || return $?
+    PNM_CORE_UPDATE_FAILURE_STAGE='previous version metadata publication'
+    pnm_tx_write_file "$metadata_source" "$metadata_target" previous_metadata 0600 || return $?
+    PNM_CORE_UPDATE_FAILURE_STAGE=''
+}
+
+pnm_core_update_abort() {
+    local operation="${1:?operation required}" stage="${2:?failure stage required}" original_rc="${3:?original failure code required}" rollback_rc=0
+    if pnm_tx_rollback; then
+        pnm_error "Core $operation failed during $stage (rc=$original_rc); previous Core state was restored."
+    else
+        rollback_rc=$?
+        pnm_error "Core $operation failed during $stage (rc=$original_rc) and rollback failed (rc=$rollback_rc); recovery files were retained."
+    fi
+    pnm_tx_close || true
+    return "$original_rc"
+}
+
 pnm_core_rollback() {
-    local core version current_version previous_dir previous_file previous_meta rc style
+    local core version current_version previous_dir previous_file previous_meta rc style metadata_stage
     pnm_core_resolve "$1" || return $?
     pnm_require_root || return $?
     core=$PNM_CORE_ID
@@ -335,21 +435,33 @@ pnm_core_rollback() {
     [[ "$PNM_LIFECYCLE_PRE_ACTIVE" == active ]] || return "$PNM_EXIT_CONFIG"
     PNM_CORE_STAGE="$(pnm_make_temp_dir)" || return $?
     current_version="$(pnm_binary_version_number "$PNM_CORE_BINARY" "$style")" || return "$PNM_EXIT_CONFIG"
+    [[ -n "$current_version" ]] || return "$PNM_EXIT_CONFIG"
     install -m 0755 -- "$PNM_CORE_BINARY" "$PNM_CORE_STAGE/current" || return "$PNM_EXIT_CANTCREAT"
     pnm_tx_begin "core-rollback-$core" || return $?
     pnm_tx_add_rollback pnm_core_update_rollback || { pnm_tx_close; return "$PNM_EXIT_SOFTWARE"; }
     pnm_tx_write_file "$previous_file" "$PNM_CORE_BINARY" core_binary 0755 || {
-        rc=$?; pnm_tx_rollback || true; pnm_tx_close; return "$rc";
+        rc=$?; pnm_core_update_abort rollback 'binary publication' "$rc"; return "$rc";
     }
-    pnm_systemctl restart "$PNM_CORE_UNIT" || { rc=$?; pnm_tx_rollback || true; pnm_tx_close; return "$rc"; }
-    pnm_systemd_unit_healthy "$PNM_CORE_UNIT" || { pnm_tx_rollback || true; pnm_tx_close; return "$PNM_EXIT_CONFIG"; }
-    mv -f -- "$PNM_CORE_STAGE/current" "$previous_file" || { pnm_tx_rollback || true; pnm_tx_close; return "$PNM_EXIT_CANTCREAT"; }
-    printf 'SCHEMA_VERSION=1\nCORE=%s\nVERSION=%s\n' "$core" "$current_version" >"$PNM_CORE_STAGE/previous.env" || {
-        pnm_tx_rollback || true; pnm_tx_close; return "$PNM_EXIT_CANTCREAT";
+    pnm_systemctl restart "$PNM_CORE_UNIT" || { rc=$?; pnm_core_update_abort rollback 'service restart' "$rc"; return "$rc"; }
+    if declare -F pnm_check_deploy_core_health >/dev/null 2>&1; then
+        pnm_check_deploy_core_health "$core" || { pnm_core_update_abort rollback 'post-rollback health check' "$PNM_EXIT_CONFIG"; return "$PNM_EXIT_CONFIG"; }
+    else
+        pnm_systemd_unit_healthy "$PNM_CORE_UNIT" || { pnm_core_update_abort rollback 'post-rollback health check' "$PNM_EXIT_CONFIG"; return "$PNM_EXIT_CONFIG"; }
+    fi
+    metadata_stage="$PNM_CORE_STAGE/previous.env"
+    printf 'SCHEMA_VERSION=1\nCORE=%s\nVERSION=%s\n' "$core" "$current_version" >"$metadata_stage" || {
+        pnm_core_update_abort rollback 'previous version metadata staging' "$PNM_EXIT_CANTCREAT"; return "$PNM_EXIT_CANTCREAT";
     }
-    chmod 0600 -- "$PNM_CORE_STAGE/previous.env" || { pnm_tx_rollback || true; pnm_tx_close; return "$PNM_EXIT_NOPERM"; }
-    mv -f -- "$PNM_CORE_STAGE/previous.env" "$previous_meta" || { pnm_tx_rollback || true; pnm_tx_close; return "$PNM_EXIT_CANTCREAT"; }
-    pnm_tx_commit || { rc=$?; pnm_tx_rollback || true; pnm_tx_close; return "$rc"; }
+    chmod 0600 -- "$metadata_stage" || { pnm_core_update_abort rollback 'previous metadata permissions' "$PNM_EXIT_NOPERM"; return "$PNM_EXIT_NOPERM"; }
+    if pnm_core_publish_previous_state "$PNM_CORE_STAGE/current" "$metadata_stage" "$previous_file" "$previous_meta"; then :; else
+        rc=$?
+        pnm_core_update_abort rollback "$PNM_CORE_UPDATE_FAILURE_STAGE" "$rc"
+        return "$rc"
+    fi
+    [[ "$(pnm_binary_version_number "$previous_file" "$style" 2>/dev/null)" == "$current_version" ]] || {
+        pnm_core_update_abort rollback 'previous binary and metadata consistency check' "$PNM_EXIT_CONFIG"; return "$PNM_EXIT_CONFIG";
+    }
+    pnm_tx_commit || { rc=$?; pnm_core_update_abort rollback 'transaction commit' "$rc"; return "$rc"; }
     pnm_tx_close
     pnm_success "$core rolled back to $version."
 }
@@ -361,6 +473,14 @@ pnm_core_restore_rollback() {
     if [[ -f "$PNM_HY2_CONFIG" ]]; then
         chown hysteria:hysteria -- "$PNM_HY2_CONFIG" || rc="$PNM_EXIT_SOFTWARE"
         chmod 0600 -- "$PNM_HY2_CONFIG" || rc="$PNM_EXIT_SOFTWARE"
+    fi
+    if [[ -f /etc/hysteria/tls/server.crt ]]; then
+        chown root:hysteria -- /etc/hysteria/tls/server.crt || rc="$PNM_EXIT_SOFTWARE"
+        chmod 0644 -- /etc/hysteria/tls/server.crt || rc="$PNM_EXIT_SOFTWARE"
+    fi
+    if [[ -f /etc/hysteria/tls/server.key ]]; then
+        chown hysteria:hysteria -- /etc/hysteria/tls/server.key || rc="$PNM_EXIT_SOFTWARE"
+        chmod 0600 -- /etc/hysteria/tls/server.key || rc="$PNM_EXIT_SOFTWARE"
     fi
     pnm_systemd_daemon_reload || rc="$PNM_EXIT_SOFTWARE"
     if [[ "$PNM_CORE_RESTORE_XRAY_ENABLED" == enabled ]]; then
@@ -384,6 +504,51 @@ pnm_core_restore_rollback() {
         pnm_systemctl stop hysteria-server.service || rc="$PNM_EXIT_SOFTWARE"
     fi
     return "$rc"
+}
+
+pnm_core_restore_validate_staged() {
+    local staging="${1:?staged restore directory required}" xray_version hy2_version validation_output tls_result tls_status xray_unit_text hysteria_unit_text
+    local -A PNM_RESTORE_NODE=() PNM_RESTORE_VERSIONS=() PNM_RESTORE_REALITY=() PNM_RESTORE_HYSTERIA=()
+
+    [[ -f "$staging/etc/hysteria/tls/server.crt" && -f "$staging/etc/hysteria/tls/server.key" &&
+        -f "$staging/etc/pnm/secrets/reality.env" && -f "$staging/etc/pnm/secrets/hysteria.env" ]] || return "$PNM_EXIT_CONFIG"
+    chmod 0755 -- "$staging/usr/local/bin/xray" "$staging/usr/local/bin/hysteria" || return "$PNM_EXIT_NOPERM"
+    chmod 0600 -- "$staging/etc/hysteria/tls/server.key" "$staging/etc/pnm/secrets/reality.env" \
+        "$staging/etc/pnm/secrets/hysteria.env" || return "$PNM_EXIT_NOPERM"
+    pnm_config_load "$staging/etc/pnm/node.conf" PNM_RESTORE_NODE SCHEMA_VERSION NODE_REGION NODE_ADDRESS TIMEZONE PNM_CONFIGURED XRAY_PORT XRAY_SERVER_NAME XRAY_TARGET HY2_PORT HY2_TLS_MODE HY2_TLS_SERVER_NAME || return "$PNM_EXIT_CONFIG"
+    pnm_validate_node_config PNM_RESTORE_NODE || return "$PNM_EXIT_CONFIG"
+    pnm_config_load "$staging/etc/pnm/versions.conf" PNM_RESTORE_VERSIONS SCHEMA_VERSION XRAY_VERSION XRAY_SHA256 HY2_VERSION HY2_SHA256 APPROVED || return "$PNM_EXIT_CONFIG"
+    pnm_validate_versions_config PNM_RESTORE_VERSIONS || return "$PNM_EXIT_CONFIG"
+    xray_unit_text="$(<"$staging/etc/systemd/system/xray.service")"
+    hysteria_unit_text="$(<"$staging/etc/systemd/system/hysteria-server.service")"
+    pnm_unit_validate_text "$xray_unit_text" xray /usr/local/bin/xray || return "$PNM_EXIT_CONFIG"
+    pnm_unit_validate_text "$hysteria_unit_text" hysteria /usr/local/bin/hysteria || return "$PNM_EXIT_CONFIG"
+    [[ "$xray_unit_text" == *$'CapabilityBoundingSet=CAP_NET_BIND_SERVICE'* &&
+        "$xray_unit_text" == *$'AmbientCapabilities=CAP_NET_BIND_SERVICE'* ]] || return "$PNM_EXIT_CONFIG"
+    [[ "$hysteria_unit_text"$'\n' == *$'\nCapabilityBoundingSet=\n'* &&
+        "$hysteria_unit_text"$'\n' == *$'\nAmbientCapabilities=\n'* ]] || return "$PNM_EXIT_CONFIG"
+    pnm_systemd_validate_unit_file "$staging/etc/systemd/system/xray.service" &&
+        pnm_systemd_validate_unit_file "$staging/etc/systemd/system/hysteria-server.service" || return "$PNM_EXIT_CONFIG"
+    # Validate the complete candidate set while it is still isolated. Never
+    # apply archive contents and then discover that their config/binaries do
+    # not agree.
+    pnm_config_load "$staging/etc/pnm/secrets/reality.env" PNM_RESTORE_REALITY SCHEMA_VERSION XRAY_UUID XRAY_REALITY_PRIVATE_KEY XRAY_REALITY_SHORT_ID || return "$PNM_EXIT_CONFIG"
+    pnm_validate_reality_secret_config PNM_RESTORE_REALITY || return "$PNM_EXIT_CONFIG"
+    pnm_config_load "$staging/etc/pnm/secrets/hysteria.env" PNM_RESTORE_HYSTERIA SCHEMA_VERSION HY2_AUTH_PASSWORD HY2_TLS_CERT_PATH HY2_TLS_KEY_PATH HY2_TLS_PIN_SHA256 || return "$PNM_EXIT_CONFIG"
+    pnm_validate_hysteria_secret_config PNM_RESTORE_HYSTERIA || return "$PNM_EXIT_CONFIG"
+    [[ "${PNM_RESTORE_HYSTERIA[HY2_TLS_CERT_PATH]}" == /etc/hysteria/tls/server.crt &&
+        "${PNM_RESTORE_HYSTERIA[HY2_TLS_KEY_PATH]}" == /etc/hysteria/tls/server.key ]] || return "$PNM_EXIT_CONFIG"
+    xray_version="$(pnm_binary_version_number "$staging/usr/local/bin/xray" xray 2>/dev/null)" || return "$PNM_EXIT_CONFIG"
+    hy2_version="$(pnm_binary_version_number "$staging/usr/local/bin/hysteria" hysteria 2>/dev/null)" || return "$PNM_EXIT_CONFIG"
+    [[ "$xray_version" == "${PNM_RESTORE_VERSIONS[XRAY_VERSION]#v}" &&
+        "$hy2_version" == "${PNM_RESTORE_VERSIONS[HY2_VERSION]#v}" ]] || return "$PNM_EXIT_CONFIG"
+    pnm_capture validation_output "$staging/usr/local/bin/xray" run -test -config "$staging/usr/local/etc/xray/config.json" || return "$PNM_EXIT_CONFIG"
+    pnm_hysteria_config_validate_candidate "$staging/etc/hysteria/config.yaml" PNM_RESTORE_NODE PNM_RESTORE_HYSTERIA || return "$PNM_EXIT_CONFIG"
+    pnm_tls_validate_pair "$staging/etc/hysteria/tls/server.crt" "$staging/etc/hysteria/tls/server.key" || return "$PNM_EXIT_CONFIG"
+    tls_result="$(pnm_tls_certificate_check "${PNM_RESTORE_NODE[HY2_TLS_MODE]}" "$staging/etc/hysteria/tls/server.crt")"
+    IFS='|' read -r tls_status _ <<<"$tls_result"
+    [[ "$tls_status" == OK ]] || return "$PNM_EXIT_CONFIG"
+    pnm_hysteria_tls_server_name PNM_RESTORE_NODE PNM_RESTORE_HYSTERIA "$staging/etc/hysteria/tls/server.crt" >/dev/null || return "$PNM_EXIT_CONFIG"
 }
 
 pnm_core_restore() {
@@ -423,7 +588,8 @@ try:
             elif not item.isdir() or ".." in pathlib.PurePosixPath(name).parts:
                 raise ValueError("unexpected backup member")
         if not {"etc/pnm/node.conf", "etc/pnm/versions.conf", "usr/local/etc/xray/config.json",
-                "etc/hysteria/config.yaml", "usr/local/bin/xray", "usr/local/bin/hysteria"} <= seen:
+                "etc/hysteria/config.yaml", "usr/local/bin/xray", "usr/local/bin/hysteria",
+                "etc/systemd/system/xray.service", "etc/systemd/system/hysteria-server.service"} <= seen:
             raise ValueError("backup lacks required Core state")
         manifest = None if manifest_item is None else source.extractfile(manifest_item)
         if manifest is None or b"CONTAINS SECRETS" not in manifest.read(256):
@@ -443,10 +609,11 @@ PY
     else
         return "$PNM_EXIT_CONFIG"
     fi
-    pnm_config_load "$staging/etc/pnm/node.conf" PNM_RESTORE_NODE SCHEMA_VERSION NODE_REGION NODE_ADDRESS TIMEZONE PNM_CONFIGURED XRAY_PORT XRAY_SERVER_NAME XRAY_TARGET HY2_PORT HY2_TLS_MODE HY2_TLS_SERVER_NAME || return "$PNM_EXIT_CONFIG"
-    pnm_validate_node_config PNM_RESTORE_NODE || return "$PNM_EXIT_CONFIG"
-    pnm_config_load "$staging/etc/pnm/versions.conf" PNM_RESTORE_VERSIONS SCHEMA_VERSION XRAY_VERSION XRAY_SHA256 HY2_VERSION HY2_SHA256 APPROVED || return "$PNM_EXIT_CONFIG"
-    pnm_validate_versions_config PNM_RESTORE_VERSIONS || return "$PNM_EXIT_CONFIG"
+    if pnm_core_restore_validate_staged "$staging"; then :; else
+        rc=$?
+        pnm_error "Restore candidate validation failed before apply (rc=$rc); the current Core files and services were not changed."
+        return "$rc"
+    fi
     pnm_systemd_available || return "$PNM_EXIT_UNAVAILABLE"
     PNM_CORE_RESTORE_XRAY_ACTIVE="$(pnm_systemd_active_state xray.service)" || return "$PNM_EXIT_UNAVAILABLE"
     PNM_CORE_RESTORE_XRAY_ENABLED="$(pnm_systemd_enabled_state xray.service)" || return "$PNM_EXIT_UNAVAILABLE"
@@ -482,16 +649,6 @@ PY
     chown root:root /etc/pnm /etc/pnm/secrets /usr/local/etc/xray /etc/hysteria /etc/hysteria/tls || {
         pnm_tx_rollback || true; pnm_tx_close; return "$PNM_EXIT_NOPERM";
     }
-    pnm_core_config_validate xray "$PNM_XRAY_CONFIG" || { pnm_tx_rollback || true; pnm_tx_close; return "$PNM_EXIT_CONFIG"; }
-    pnm_load_reality_secret PNM_RESTORE_REALITY && pnm_validate_reality_secret_config PNM_RESTORE_REALITY || {
-        pnm_tx_rollback || true; pnm_tx_close; return "$PNM_EXIT_CONFIG";
-    }
-    pnm_load_hysteria_secret PNM_RESTORE_HYSTERIA && pnm_validate_hysteria_secret_config PNM_RESTORE_HYSTERIA || {
-        pnm_tx_rollback || true; pnm_tx_close; return "$PNM_EXIT_CONFIG";
-    }
-    pnm_tls_validate_pair /etc/hysteria/tls/server.crt /etc/hysteria/tls/server.key || {
-        pnm_tx_rollback || true; pnm_tx_close; return "$PNM_EXIT_CONFIG";
-    }
     pnm_systemd_daemon_reload || { pnm_tx_rollback || true; pnm_tx_close; return "$PNM_EXIT_SOFTWARE"; }
     pnm_systemctl enable xray.service || { rc=$?; pnm_tx_rollback || true; pnm_tx_close; return "$rc"; }
     pnm_systemctl enable hysteria-server.service || { rc=$?; pnm_tx_rollback || true; pnm_tx_close; return "$rc"; }
@@ -500,6 +657,20 @@ PY
     pnm_systemd_unit_healthy xray.service && pnm_systemd_unit_healthy hysteria-server.service || {
         pnm_tx_rollback || true; pnm_tx_close; return "$PNM_EXIT_CONFIG";
     }
+    declare -F pnm_check_deploy_core_health >/dev/null 2>&1 || {
+        pnm_tx_rollback || true; pnm_tx_close; return "$PNM_EXIT_UNAVAILABLE";
+    }
+    pnm_check_deploy_core_health xray && pnm_check_deploy_core_health hysteria2 || {
+        pnm_tx_rollback || true; pnm_tx_close; return "$PNM_EXIT_CONFIG";
+    }
+    PNM_CORE_STAGE="$(pnm_make_temp_dir)" || { pnm_tx_rollback || true; pnm_tx_close; return "$PNM_EXIT_CANTCREAT"; }
+    if pnm_core_record_applied_config xray "$PNM_XRAY_CONFIG" "$PNM_CORE_STAGE" &&
+        pnm_core_record_applied_config hysteria2 "$PNM_HY2_CONFIG" "$PNM_CORE_STAGE"; then :; else
+        rc=$?
+        pnm_tx_rollback || true
+        pnm_tx_close
+        return "$rc"
+    fi
     pnm_tx_commit || { rc=$?; pnm_tx_rollback || true; pnm_tx_close; return "$rc"; }
     pnm_tx_close
     pnm_success 'Both Cores restored and healthy.'

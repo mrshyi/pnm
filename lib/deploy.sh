@@ -5,6 +5,10 @@ PNM_DEPLOY_PATH=''
 PNM_DEPLOY_ACTIVE=0
 PNM_DEPLOY_COMMITTED=0
 PNM_DEPLOY_JOURNAL_ERROR=0
+PNM_DEPLOY_XRAY_ACTIVE=''
+PNM_DEPLOY_XRAY_ENABLED=''
+PNM_DEPLOY_HY2_ACTIVE=''
+PNM_DEPLOY_HY2_ENABLED=''
 PNM_DEPLOY_STEP_SANDBOX="${PNM_DEPLOY_STEP_SANDBOX:-pnm_deploy_sandbox_step}"
 PNM_DEPLOY_STEP_XRAY="${PNM_DEPLOY_STEP_XRAY:-pnm_core_lifecycle_apply_xray_step}"
 PNM_DEPLOY_STEP_HYSTERIA="${PNM_DEPLOY_STEP_HYSTERIA:-pnm_core_lifecycle_apply_hysteria_step}"
@@ -27,7 +31,7 @@ pnm_deploy_journal() {
 }
 
 pnm_deploy_begin() {
-    local deployments_dir owner_mode
+    local deployments_dir owner_mode xray_load hy2_load
 
     ((PNM_DEPLOY_ACTIVE == 0)) || return "$PNM_EXIT_SOFTWARE"
     PNM_DEPLOY_ID="$(pnm_deploy_new_id)"
@@ -39,6 +43,24 @@ pnm_deploy_begin() {
         return 0
     fi
     pnm_require_root || return $?
+    xray_load="$(pnm_systemd_load_state xray.service 2>/dev/null)" || return "$PNM_EXIT_UNAVAILABLE"
+    hy2_load="$(pnm_systemd_load_state hysteria-server.service 2>/dev/null)" || return "$PNM_EXIT_UNAVAILABLE"
+    if [[ "$xray_load" == not-found ]]; then
+        PNM_DEPLOY_XRAY_ACTIVE=inactive PNM_DEPLOY_XRAY_ENABLED=disabled
+    else
+        PNM_DEPLOY_XRAY_ACTIVE="$(pnm_systemd_active_state xray.service 2>/dev/null)" || return "$PNM_EXIT_UNAVAILABLE"
+        PNM_DEPLOY_XRAY_ENABLED="$(pnm_systemd_enabled_state xray.service 2>/dev/null)" || return "$PNM_EXIT_UNAVAILABLE"
+        [[ "$PNM_DEPLOY_XRAY_ACTIVE" == active || "$PNM_DEPLOY_XRAY_ACTIVE" == inactive ]] || return "$PNM_EXIT_UNAVAILABLE"
+        [[ "$PNM_DEPLOY_XRAY_ENABLED" == enabled || "$PNM_DEPLOY_XRAY_ENABLED" == disabled ]] || return "$PNM_EXIT_UNAVAILABLE"
+    fi
+    if [[ "$hy2_load" == not-found ]]; then
+        PNM_DEPLOY_HY2_ACTIVE=inactive PNM_DEPLOY_HY2_ENABLED=disabled
+    else
+        PNM_DEPLOY_HY2_ACTIVE="$(pnm_systemd_active_state hysteria-server.service 2>/dev/null)" || return "$PNM_EXIT_UNAVAILABLE"
+        PNM_DEPLOY_HY2_ENABLED="$(pnm_systemd_enabled_state hysteria-server.service 2>/dev/null)" || return "$PNM_EXIT_UNAVAILABLE"
+        [[ "$PNM_DEPLOY_HY2_ACTIVE" == active || "$PNM_DEPLOY_HY2_ACTIVE" == inactive ]] || return "$PNM_EXIT_UNAVAILABLE"
+        [[ "$PNM_DEPLOY_HY2_ENABLED" == enabled || "$PNM_DEPLOY_HY2_ENABLED" == disabled ]] || return "$PNM_EXIT_UNAVAILABLE"
+    fi
     [[ "$PNM_STATE_DIR" == /* && "$PNM_STATE_DIR" != / ]] || return "$PNM_EXIT_CONFIG"
     pnm_mkdir_mode 0700 "$PNM_STATE_DIR" || return "$PNM_EXIT_CANTCREAT"
     [[ -d "$PNM_STATE_DIR" && ! -L "$PNM_STATE_DIR" ]] || return "$PNM_EXIT_CONFIG"
@@ -109,8 +131,15 @@ pnm_core_lifecycle_apply_hysteria_step() {
 }
 
 pnm_deploy_health_step() {
-    pnm_systemd_unit_healthy xray.service || return "$PNM_EXIT_CONFIG"
-    pnm_systemd_unit_healthy hysteria-server.service || return "$PNM_EXIT_CONFIG"
+    declare -F pnm_check_deploy_core_health >/dev/null 2>&1 || return "$PNM_EXIT_UNAVAILABLE"
+    pnm_check_deploy_core_health xray || {
+        pnm_error 'post-health failed for Xray; deployment remains uncommitted.'
+        return "$PNM_EXIT_CONFIG"
+    }
+    pnm_check_deploy_core_health hysteria2 || {
+        pnm_error 'post-health failed for Hysteria2; deployment remains uncommitted.'
+        return "$PNM_EXIT_CONFIG"
+    }
 }
 
 pnm_deploy_mark_configured() {
@@ -130,8 +159,23 @@ pnm_deploy_mark_configured() {
     fi
     pnm_tx_begin install-state || return $?
     pnm_tx_add_rollback pnm_tx_restore_written_files || { pnm_tx_close; return "$PNM_EXIT_SOFTWARE"; }
-    if pnm_tx_run mark_configured pnm_tx_write_file "$staged" "$PNM_CONFIG_DIR/node.conf" node_config 0600; then :; else rc=$?; pnm_tx_close; return "$rc"; fi
-    pnm_tx_commit || { rc=$?; pnm_tx_close; return "$rc"; }
+    declare -F pnm_core_record_applied_config >/dev/null 2>&1 || { pnm_tx_close; return "$PNM_EXIT_UNAVAILABLE"; }
+    pnm_core_record_applied_config xray "$PNM_XRAY_CONFIG" "$temp_dir" || { rc=$?; pnm_tx_rollback || true; pnm_tx_close; return "$rc"; }
+    pnm_core_record_applied_config hysteria2 "$PNM_HY2_CONFIG" "$temp_dir" || { rc=$?; pnm_tx_rollback || true; pnm_tx_close; return "$rc"; }
+    if pnm_tx_run mark_configured pnm_tx_write_file "$staged" "$PNM_CONFIG_DIR/node.conf" node_config 0600; then :; else
+        rc=$?
+        pnm_tx_rollback || pnm_error 'Node-state commit rollback failed; inspect transaction recovery state.'
+        pnm_tx_close
+        return "$rc"
+    fi
+    if pnm_tx_commit; then :; else
+        rc=$?
+        if ! pnm_tx_rollback; then
+            pnm_error 'Node-state transaction commit failed and rollback also failed; inspect transaction recovery state.'
+        fi
+        pnm_tx_close || true
+        return "$rc"
+    fi
     pnm_tx_close
 }
 pnm_deploy_execute() {
@@ -164,15 +208,38 @@ pnm_deploy_execute() {
             phase=$?
         fi
         if ((PNM_DEPLOY_JOURNAL_ERROR == 1)); then
+            if [[ "${phases[$index]}" == post-health ]]; then
+                local restore_rc=0
+                pnm_deploy_restore_service_state || restore_rc=$?
+                if ((restore_rc != 0)); then
+                    pnm_error "Post-health failed (rc=$phase), deployment journal also failed, and restoring the pre-deployment Core service state failed (rc=$restore_rc); inspect systemd and deployment recovery state."
+                else
+                    pnm_error "Post-health failed (rc=$phase) and deployment journal failed; prior Core service state was restored."
+                fi
+            fi
             pnm_deploy_close || true
             return "$phase"
         fi
-        pnm_deploy_journal STOPPED "after=${phases[$index]} rc=$phase" || phase="$PNM_EXIT_CANTCREAT"
+        if [[ "${phases[$index]}" == post-health ]]; then
+            local restore_rc=0
+            pnm_deploy_restore_service_state || restore_rc=$?
+            if ((restore_rc != 0)); then
+                pnm_error 'Post-health failed and restoring the pre-deployment Core service state also failed; inspect systemd and deployment recovery state.'
+                pnm_deploy_journal STOPPED "after=${phases[$index]} rc=$phase recovery_rc=$restore_rc" || phase="$PNM_EXIT_CANTCREAT"
+            else
+                pnm_deploy_journal STOPPED "after=${phases[$index]} rc=$phase services_restored=yes" || phase="$PNM_EXIT_CANTCREAT"
+            fi
+        else
+            pnm_deploy_journal STOPPED "after=${phases[$index]} rc=$phase" || phase="$PNM_EXIT_CANTCREAT"
+        fi
         pnm_deploy_close || true
         return "$phase"
     done
     if pnm_deploy_mark_configured; then :; else
         phase=$?
+        if ! pnm_deploy_restore_service_state; then
+            pnm_error 'Deployment state commit failed and prior Core service state could not be restored.'
+        fi
         pnm_deploy_journal STOPPED "after=configuration-commit rc=$phase" || phase="$PNM_EXIT_CANTCREAT"
         pnm_deploy_close || true
         return "$phase"
@@ -197,6 +264,29 @@ pnm_deploy_close() {
     PNM_DEPLOY_ID=''
     PNM_DEPLOY_PATH=''
     PNM_DEPLOY_COMMITTED=0
+    return "$rc"
+}
+
+pnm_deploy_restore_service_state() {
+    local rc=0
+    local unit active enabled
+    for unit in xray.service hysteria-server.service; do
+        if [[ "$unit" == xray.service ]]; then
+            active=$PNM_DEPLOY_XRAY_ACTIVE enabled=$PNM_DEPLOY_XRAY_ENABLED
+        else
+            active=$PNM_DEPLOY_HY2_ACTIVE enabled=$PNM_DEPLOY_HY2_ENABLED
+        fi
+        if [[ "$enabled" == enabled ]]; then
+            pnm_systemctl enable "$unit" >/dev/null || rc="$PNM_EXIT_SOFTWARE"
+        else
+            pnm_systemctl disable "$unit" >/dev/null || rc="$PNM_EXIT_SOFTWARE"
+        fi
+        if [[ "$active" == active ]]; then
+            pnm_systemctl restart "$unit" >/dev/null || rc="$PNM_EXIT_SOFTWARE"
+        else
+            pnm_systemctl stop "$unit" >/dev/null || rc="$PNM_EXIT_SOFTWARE"
+        fi
+    done
     return "$rc"
 }
 

@@ -158,14 +158,14 @@ test_missing_unzip_fails_install_dry_run_before_apply() {
     run_capture pnm_install --dry-run
     rc="$RUN_RC"
     assert_eq 2 "$rc" || return 1
-    assert_contains "$RUN_OUTPUT" 'missing: unzip' || return 1
+    assert_contains "$RUN_OUTPUT" 'missing during Xray asset staging: unzip' || return 1
     assert_eq 0 "$DEPLOY_STARTED" || return 1
 
     PNM_DRY_RUN=0
     PNM_ASSUME_YES=0
     run_capture pnm_install --apply --yes
     assert_eq 2 "$RUN_RC" || return 1
-    assert_contains "$RUN_OUTPUT" 'missing: unzip' || return 1
+    assert_contains "$RUN_OUTPUT" 'missing during Xray asset staging: unzip' || return 1
     assert_eq 0 "$DEPLOY_STARTED"
 }
 
@@ -180,12 +180,24 @@ test_missing_python3_fails_install_dry_run_before_apply() {
     PNM_DRY_RUN=0
     PNM_ASSUME_YES=0
     assert_eq 2 "$rc" || return 1
-    assert_contains "$RUN_OUTPUT" 'missing: python3' || return 1
+    assert_contains "$RUN_OUTPUT" 'missing during preflight/transaction: python3' || return 1
     assert_eq 0 "$DEPLOY_STARTED" || return 1
+}
+
+test_missing_openssl_is_classified_as_tls_stage_dependency() {
+    local rc
+    PNM_MISSING_TOOL=openssl
+    run_capture pnm_install --dry-run
+    rc="$RUN_RC"
+    PNM_MISSING_TOOL=unzip
+    assert_eq 2 "$rc" || return 1
+    assert_contains "$RUN_OUTPUT" 'missing during TLS/secret generation: openssl' || return 1
+    assert_eq 0 "$DEPLOY_STARTED"
 }
 
 run_test 'missing unzip fails dry-run preflight before installation starts' test_missing_unzip_fails_install_dry_run_before_apply
 run_test 'missing python3 fails dry-run preflight before installation starts' test_missing_python3_fails_install_dry_run_before_apply
+run_test 'missing openssl is classified as a TLS dependency before apply' test_missing_openssl_is_classified_as_tls_stage_dependency
 run_test 'port preflight allows only a verified PNM recovery listener' test_port_preflight_allows_only_verified_recovery_listener
 run_test 'unknown and committed service listeners are not recovery-authorized' test_committed_or_ambiguous_service_is_not_recovery_authorized
 run_test 'repeat install refuses a previously configured node' test_repeat_install_refuses_a_committed_node

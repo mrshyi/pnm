@@ -20,6 +20,7 @@ source "$PROJECT_ROOT/lib/node.sh"
 # shellcheck source=../../lib/render.sh
 source "$PROJECT_ROOT/lib/render.sh"
 source "$PROJECT_ROOT/lib/tls.sh"
+source "$PROJECT_ROOT/adapters/network.sh"
 
 # Link tests isolate URI selection; certificate SAN validation is covered by
 # test_hy2_sni.sh and sandbox install tests use real generated certificates.
@@ -31,6 +32,17 @@ pnm_hysteria_tls_server_name() {
 
 assert_sensitive_output_contains() { [[ "${1-}" == *"${2-}"* ]]; }
 assert_sensitive_output_not_contains() { [[ "${1-}" != *"${2-}"* ]]; }
+pnm_listener_present() { return 0; }
+pnm_systemd_show_value() { printf '0123456789abcdef0123456789abcdef\n'; }
+
+pnm_test_record_applied_config() {
+    local core="${1:?Core ID required}" config="${2:?config required}" directory
+    directory="$PNM_STATE_DIR/cores/$core"
+    mkdir -p -- "$directory"
+    printf 'SCHEMA_VERSION=1\nCORE=%s\nCONFIG_SHA256=%s\nSERVICE_INVOCATION_ID=0123456789abcdef0123456789abcdef\n' \
+        "$core" "$(sha256sum -- "$config" | awk '{print $1}')" >"$directory/applied.env"
+    chmod 0600 -- "$directory/applied.env"
+}
 
 test_validate_existing_node() {
     run_capture env PNM_CONFIG_DIR="$TEST_ROOT/fixtures/config-valid" "$PROJECT_ROOT/bin/pnm" node validate
@@ -44,9 +56,15 @@ test_show_hides_secrets_and_exposes_node() {
     temp_dir="$(mktemp -d)"
     declare -gA NODE=() REALITY=()
     PNM_CONFIG_DIR="$TEST_ROOT/fixtures/config-secrets"
+    PNM_STATE_DIR="$temp_dir/state"
     PNM_XRAY_CONFIG="$temp_dir/runtime.json"
+    PNM_HY2_CONFIG="$temp_dir/hysteria.yaml"
     pnm_load_node_config NODE && pnm_load_reality_secret REALITY || return 1
     pnm_render_xray_config NODE REALITY >"$PNM_XRAY_CONFIG" || return 1
+    pnm_load_hysteria_secret HYSTERIA || return 1
+    pnm_render_hysteria_config NODE HYSTERIA >"$PNM_HY2_CONFIG" || return 1
+    pnm_test_record_applied_config xray "$PNM_XRAY_CONFIG" || return 1
+    pnm_test_record_applied_config hysteria2 "$PNM_HY2_CONFIG" || return 1
     pnm_xray_config_runtime_values() { printf '443\texample.com:443\texample.com\ttcp\n'; }
     pnm_systemd_active_state() { printf 'active\n'; }
     run_capture pnm_node_show
@@ -78,6 +96,7 @@ test_node_links_render_client_import_uris() {
     printf '#!/usr/bin/env bash\nprintf "PrivateKey: fixture-private\\nPassword (PublicKey): AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\\nHash32: ignored\\n"\n' >"$fake_xray"
     chmod 0755 -- "$fake_xray"
     PNM_CONFIG_DIR="$temp_dir/config"
+    PNM_STATE_DIR="$temp_dir/state"
     PNM_XRAY_BIN="$fake_xray"
     PNM_XRAY_CONFIG="$runtime_config"
     PNM_HY2_CONFIG="$runtime_hy2_config"
@@ -87,6 +106,8 @@ test_node_links_render_client_import_uris() {
     pnm_load_hysteria_secret HYSTERIA || return 1
     pnm_render_xray_config NODE REALITY >"$runtime_config" || return 1
     pnm_render_hysteria_config NODE HYSTERIA >"$runtime_hy2_config" || return 1
+    pnm_test_record_applied_config xray "$runtime_config" || return 1
+    pnm_test_record_applied_config hysteria2 "$runtime_hy2_config" || return 1
     PNM_OUTPUT_MODE=text
     pnm_require_root() { return 0; }
     pnm_systemd_active_state() { printf 'active\n'; }
@@ -122,11 +143,14 @@ test_node_links_omit_hy2_when_runtime_port_drifts() {
     printf '#!/usr/bin/env bash\nprintf "PrivateKey: fixture-private\\nPassword (PublicKey): AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\\n"\n' >"$fake_xray"
     chmod 0755 -- "$fake_xray"
     PNM_CONFIG_DIR="$temp_dir/config"; PNM_XRAY_BIN="$fake_xray"
+    PNM_STATE_DIR="$temp_dir/state"
     PNM_XRAY_CONFIG="$runtime_config"; PNM_HY2_CONFIG="$hy2_config"
     declare -gA NODE=() REALITY=() HYSTERIA=()
     pnm_load_node_config NODE && pnm_load_reality_secret REALITY && pnm_load_hysteria_secret HYSTERIA || return 1
     pnm_render_xray_config NODE REALITY >"$runtime_config" || return 1
     pnm_render_hysteria_config NODE HYSTERIA >"$hy2_config" || return 1
+    pnm_test_record_applied_config xray "$runtime_config" || return 1
+    pnm_test_record_applied_config hysteria2 "$hy2_config" || return 1
     sed -i 's/^listen: :8443$/listen: :9443/' "$hy2_config"
     pnm_require_root() { return 0; }
     run_capture pnm_node_links --address 203.0.113.10
@@ -154,11 +178,14 @@ test_node_links_omit_hy2_when_runtime_auth_drifts_without_leaking_password() {
     printf '#!/usr/bin/env bash\nprintf "PrivateKey: fixture-private\\nPassword (PublicKey): AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\\n"\n' >"$fake_xray"
     chmod 0755 -- "$fake_xray"
     PNM_CONFIG_DIR="$temp_dir/config"; PNM_XRAY_BIN="$fake_xray"
+    PNM_STATE_DIR="$temp_dir/state"
     PNM_XRAY_CONFIG="$runtime_config"; PNM_HY2_CONFIG="$hy2_config"
     declare -gA NODE=() REALITY=() HYSTERIA=()
     pnm_load_node_config NODE && pnm_load_reality_secret REALITY && pnm_load_hysteria_secret HYSTERIA || return 1
     pnm_render_xray_config NODE REALITY >"$runtime_config" || return 1
     pnm_render_hysteria_config NODE HYSTERIA >"$hy2_config" || return 1
+    pnm_test_record_applied_config xray "$runtime_config" || return 1
+    pnm_test_record_applied_config hysteria2 "$hy2_config" || return 1
     sed -i 's/abcdefghijklmnopqrstuvwxyz012345/zyxwvutsrqponmlkjihgfedcba654321/' "$temp_dir/config/secrets/hysteria.env"
     pnm_require_root() { return 0; }
     run_capture pnm_node_links --address 203.0.113.10
@@ -187,10 +214,14 @@ test_node_links_omit_hy2_for_damaged_runtime_config() {
     old_xray_bin="$PNM_XRAY_BIN"; old_xray_config="$PNM_XRAY_CONFIG"
     old_hy2_config="$PNM_HY2_CONFIG"; old_config_dir="$PNM_CONFIG_DIR"
     PNM_CONFIG_DIR="$temp_dir/config"; PNM_XRAY_BIN="$fake_xray"
+    PNM_STATE_DIR="$temp_dir/state"
     PNM_XRAY_CONFIG="$runtime_config"; PNM_HY2_CONFIG="$hy2_config"
     declare -gA NODE=() REALITY=() HYSTERIA=()
     pnm_load_node_config NODE && pnm_load_reality_secret REALITY && pnm_load_hysteria_secret HYSTERIA || return 1
     pnm_render_xray_config NODE REALITY >"$runtime_config" || return 1
+    pnm_render_hysteria_config NODE HYSTERIA >"$hy2_config" || return 1
+    pnm_test_record_applied_config xray "$runtime_config" || return 1
+    pnm_test_record_applied_config hysteria2 "$hy2_config" || return 1
     printf 'not: valid: [\n' >"$hy2_config"
     pnm_require_root() { return 0; }
     run_capture pnm_node_links --address 203.0.113.10
@@ -490,8 +521,67 @@ test_node_links_refuse_runtime_configuration_drift() {
     PNM_XRAY_CONFIG="$old_xray_config"
     rm -rf -- "$temp_dir"
     assert_eq 78 "$rc" || return 1
-    assert_contains "$RUN_ERROR" 'Runtime Xray configuration differs from node.conf' || return 1
+    assert_contains "$RUN_ERROR" 'Xray link omitted: runtime configuration differs from node.conf' || return 1
     assert_sensitive_output_not_contains "$RUN_OUTPUT" 'vless://'
+}
+
+test_core_link_statuses_are_independent_and_require_applied_evidence() {
+    local temp_dir status old_state old_xray_config old_hy2_config old_config_dir
+    temp_dir="$(mktemp -d)"
+    old_state="$PNM_STATE_DIR"
+    old_xray_config="$PNM_XRAY_CONFIG"
+    old_hy2_config="$PNM_HY2_CONFIG"
+    old_config_dir="$PNM_CONFIG_DIR"
+    PNM_CONFIG_DIR="$TEST_ROOT/fixtures/config-secrets"
+    PNM_STATE_DIR="$temp_dir/state"
+    PNM_XRAY_CONFIG="$temp_dir/xray.json"
+    PNM_HY2_CONFIG="$temp_dir/hysteria.yaml"
+    declare -gA NODE=() REALITY=() HYSTERIA=()
+    pnm_load_node_config NODE && pnm_load_reality_secret REALITY && pnm_load_hysteria_secret HYSTERIA || return 1
+    pnm_render_xray_config NODE REALITY >"$PNM_XRAY_CONFIG" || return 1
+    pnm_render_hysteria_config NODE HYSTERIA >"$PNM_HY2_CONFIG" || return 1
+    pnm_test_record_applied_config xray "$PNM_XRAY_CONFIG" || return 1
+    pnm_test_record_applied_config hysteria2 "$PNM_HY2_CONFIG" || return 1
+    pnm_systemd_active_state() { printf '%s\n' "${PNM_TEST_ACTIVE_STATE[${1-}]-unknown}"; }
+    declare -gA PNM_TEST_ACTIVE_STATE=([xray.service]=active [hysteria-server.service]=active)
+
+    status="$(pnm_node_core_link_status xray NODE REALITY)" || return 1
+    assert_contains "$status" 'ready|active|consistent|confirmed|' || return 1
+    status="$(pnm_node_core_link_status hysteria2 NODE HYSTERIA)" || return 1
+    assert_contains "$status" 'ready|active|consistent|confirmed|' || return 1
+
+    PNM_TEST_ACTIVE_STATE[xray.service]=inactive
+    status="$(pnm_node_core_link_status xray NODE REALITY)" || return 1
+    assert_contains "$status" 'inactive|inactive|' || return 1
+    status="$(pnm_node_core_link_status hysteria2 NODE HYSTERIA)" || return 1
+    assert_contains "$status" 'ready|' || return 1
+
+    PNM_TEST_ACTIVE_STATE[xray.service]=active
+    PNM_TEST_ACTIVE_STATE[hysteria-server.service]=inactive
+    status="$(pnm_node_core_link_status hysteria2 NODE HYSTERIA)" || return 1
+    assert_contains "$status" 'inactive|inactive|' || return 1
+    status="$(pnm_node_core_link_status xray NODE REALITY)" || return 1
+    assert_contains "$status" 'ready|' || return 1
+
+    PNM_TEST_ACTIVE_STATE[hysteria-server.service]=active
+    sed -i 's/^listen: :8443$/listen: :9443/' "$PNM_HY2_CONFIG"
+    status="$(pnm_node_core_link_status hysteria2 NODE HYSTERIA)" || return 1
+    assert_contains "$status" 'drift|active|drift|' || return 1
+    assert_not_contains "$status" "${HYSTERIA[HY2_AUTH_PASSWORD]}" || return 1
+
+    pnm_listener_present() { return 1; }
+    status="$(pnm_node_core_link_status xray NODE REALITY)" || return 1
+    assert_contains "$status" 'unavailable|active|consistent|confirmed|expected local TCP/' || return 1
+    pnm_listener_present() { return 0; }
+
+    rm -f -- "$PNM_STATE_DIR/cores/xray/applied.env"
+    status="$(pnm_node_core_link_status xray NODE REALITY)" || return 1
+    assert_contains "$status" 'unknown|active|consistent|unknown|' || return 1
+    PNM_STATE_DIR="$old_state"
+    PNM_XRAY_CONFIG="$old_xray_config"
+    PNM_HY2_CONFIG="$old_hy2_config"
+    PNM_CONFIG_DIR="$old_config_dir"
+    rm -rf -- "$temp_dir"
 }
 
 test_xray_config_semantic_match_ignores_json_formatting() {
@@ -777,6 +867,7 @@ run_test 'node show reports an invalid REALITY SNI for diagnosis' test_node_show
 run_test 'node show reports runtime drift without exposing credentials' test_node_show_reports_runtime_drift_without_secrets
 run_test 'new defaults do not migrate an existing Microsoft node' test_node_init_does_not_migrate_existing_microsoft_config
 run_test 'node links refuse to emit credentials when runtime Xray config has drifted' test_node_links_refuse_runtime_configuration_drift
+run_test 'Core link status checks are independent and require applied evidence' test_core_link_statuses_are_independent_and_require_applied_evidence
 run_test 'Xray runtime comparison ignores JSON formatting differences' test_xray_config_semantic_match_ignores_json_formatting
 run_test 'historical v0.16.0-rc.1 runtime config matches the current render template' test_historical_release_runtime_config_matches_current_template
 run_test 'Xray log subfields and REALITY show drift are strict and use stderr JSON paths' test_xray_log_subfields_and_reality_show_are_strict_and_report_json_paths

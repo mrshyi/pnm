@@ -230,6 +230,58 @@ pnm_check_hysteria() {
     pnm_check_add hysteria2 OK 'Hysteria2 local checks passed' "$version; UDP/8443 listening; external QUIC test still required"
 }
 
+# Strict local deployment gate. This is intentionally limited to local Core
+# readiness; a listening socket does not prove public reachability.
+pnm_check_deploy_core_health() {
+    local core="${1:?Core id required}" index id status
+
+    case "$core" in
+        xray) ;;
+        hysteria2 | hy2) core=hysteria2 ;;
+        *) return "$PNM_EXIT_USAGE" ;;
+    esac
+    pnm_check_reset
+    pnm_load_node_config PNM_NODE_CONFIG && pnm_validate_node_config PNM_NODE_CONFIG || return "$PNM_EXIT_CONFIG"
+    # Install runs before node.conf is marked configured; for this gate the
+    # managed resources must already meet the strict configured policy.
+    PNM_CHECK_CONFIGURED=1
+    if [[ "$core" == xray ]]; then
+        pnm_check_xray
+        pnm_check_file_metadata xray_permissions "$PNM_XRAY_CONFIG" 640 root xray
+        local -A reality=()
+        if pnm_load_reality_secret reality && pnm_validate_reality_secret_config reality &&
+            pnm_xray_config_matches_node PNM_NODE_CONFIG reality; then
+            pnm_check_add xray_config_consistency OK 'Runtime Xray configuration matches desired settings' ''
+        else
+            pnm_check_add xray_config_consistency FAIL 'Runtime Xray configuration differs from desired settings' 'candidate/runtime comparison failed'
+        fi
+    else
+        pnm_check_hysteria
+        pnm_check_file_metadata hysteria_permissions "$PNM_HY2_CONFIG" 600 hysteria hysteria
+        pnm_check_hysteria_tls
+        pnm_check_hysteria_tls_permissions
+        local -A hysteria=()
+        if pnm_load_hysteria_secret hysteria && pnm_validate_hysteria_secret_config hysteria &&
+            pnm_hysteria_config_validate_candidate "$PNM_HY2_CONFIG" PNM_NODE_CONFIG hysteria; then
+            pnm_check_add hysteria2_config_syntax OK 'Runtime Hysteria2 configuration is valid and matches desired settings' ''
+        else
+            pnm_check_add hysteria2_config_syntax FAIL 'Runtime Hysteria2 configuration is invalid or differs from desired settings' "${PNM_HY2_CONFIG_DIAGNOSTIC:-candidate validation failed}"
+        fi
+    fi
+    for index in "${!PNM_CHECK_IDS[@]}"; do
+        id="${PNM_CHECK_IDS[$index]}"
+        status="${PNM_CHECK_STATUSES[$index]}"
+        case "$id" in
+            xray | xray_permissions | xray_config_consistency | hysteria2 | hysteria_permissions | hysteria_tls | hysteria_tls_permissions | hysteria2_config_syntax)
+                if [[ "$status" != OK ]]; then
+                    pnm_error "$core post-health failed at $id ($status); deployment must roll back before commit."
+                    return "$PNM_EXIT_CONFIG"
+                fi
+                ;;
+        esac
+    done
+}
+
 pnm_check_hysteria_tls() {
     local result status detail
     local -A hysteria_secret=()
@@ -254,6 +306,93 @@ pnm_check_hysteria_tls() {
         FAIL) pnm_check_add hysteria_tls FAIL 'TLS certificate is outside its validity period' "$detail" ;;
         SKIP) pnm_check_add hysteria_tls SKIP 'TLS certificate check skipped' "$detail" ;;
         *) pnm_check_add hysteria_tls WARN 'TLS certificate validity cannot be determined' "$detail" ;;
+    esac
+}
+
+pnm_check_hysteria_tls_permissions() {
+    local cert key cert_meta key_meta
+    local -A secret=()
+
+    if ((PNM_CHECK_CONFIGURED == 0)); then
+        pnm_check_add hysteria_tls_permissions SKIP 'HY2 TLS file permission check skipped' 'PNM node is not configured'
+        return 0
+    fi
+    case "${PNM_NODE_CONFIG[HY2_TLS_MODE]-}" in
+        selfsigned-pin | external-ca) ;;
+        *) pnm_check_add hysteria_tls_permissions SKIP 'HY2 TLS file permission check skipped' 'TLS mode is not backed by static certificate files'; return 0 ;;
+    esac
+    if ! pnm_load_hysteria_secret secret || ! pnm_validate_hysteria_secret_config secret; then
+        pnm_check_add hysteria_tls_permissions UNKNOWN 'HY2 TLS file access cannot be determined' 'certificate path metadata is unavailable'
+        return 0
+    fi
+    cert="${secret[HY2_TLS_CERT_PATH]}"
+    key="${secret[HY2_TLS_KEY_PATH]}"
+    if [[ ! -f "$cert" || -L "$cert" || ! -f "$key" || -L "$key" ]]; then
+        pnm_check_add hysteria_tls_permissions FAIL 'HY2 TLS certificate or private key is missing or unsafe' 'expected regular non-symlink certificate and private key files'
+        return 0
+    fi
+    if ! cert_meta="$(stat -c '%a|%U|%G' -- "$cert" 2>/dev/null)" ||
+        ! key_meta="$(stat -c '%a|%U|%G' -- "$key" 2>/dev/null)"; then
+        pnm_check_add hysteria_tls_permissions UNKNOWN 'HY2 TLS file ownership cannot be determined' 'stat metadata unavailable'
+        return 0
+    fi
+    if [[ "$cert_meta" != '644|root|hysteria' || "$key_meta" != '600|hysteria|hysteria' ]]; then
+        pnm_check_add hysteria_tls_permissions FAIL 'HY2 TLS file permissions do not match service access policy' \
+            "certificate=$cert_meta; private_key=$key_meta; expected certificate=644 root:hysteria and private_key=600 hysteria:hysteria"
+        return 0
+    fi
+    if declare -F pnm_service_account_existing_valid >/dev/null 2>&1 && ! pnm_service_account_existing_valid hysteria; then
+        pnm_check_add hysteria_tls_permissions FAIL 'HY2 service account cannot be verified for TLS access' 'hysteria account does not match the PNM service policy'
+        return 0
+    fi
+    if ((EUID == 0)); then
+        if ! pnm_command_exists runuser; then
+            pnm_check_add hysteria_tls_permissions UNKNOWN 'HY2 service-account file access cannot be probed' 'runuser is unavailable; ownership and mode policy matched'
+            return 0
+        fi
+        if ! runuser -u hysteria -- test -r "$cert" || ! runuser -u hysteria -- test -r "$key"; then
+            pnm_check_add hysteria_tls_permissions FAIL 'Hysteria2 service account cannot read its TLS files' 'effective read probe failed; no permissions were changed'
+            return 0
+        fi
+    elif [[ ! -r "$cert" || ! -r "$key" ]]; then
+        pnm_check_add hysteria_tls_permissions WARN 'HY2 TLS file access cannot be fully verified without root' 'permissions prevent the current user from reading the certificate or private key'
+        return 0
+    fi
+    pnm_check_add hysteria_tls_permissions OK 'HY2 TLS files are readable under the service account policy' 'certificate and private key ownership and modes match policy'
+}
+
+pnm_check_core_runtime_consistency() {
+    local core="${1:?Core id required}"
+    local status_line status service config_state applied reason severity='FAIL'
+    local secret_name=PNM_CHECK_CORE_SECRET
+    local -A PNM_CHECK_CORE_SECRET=()
+
+    if ((PNM_CHECK_CONFIGURED == 0)); then
+        pnm_check_add "${core}_runtime_config" SKIP 'Applied configuration check skipped' 'PNM node is not configured'
+        return 0
+    fi
+    if [[ "$core" == xray ]]; then
+        if ! pnm_load_reality_secret "$secret_name" || ! pnm_validate_reality_secret_config "$secret_name"; then
+            pnm_check_add xray_runtime_config UNKNOWN 'Applied Xray configuration cannot be confirmed' 'REALITY credential metadata is unavailable or invalid'
+            return 0
+        fi
+    elif ! pnm_load_hysteria_secret "$secret_name" || ! pnm_validate_hysteria_secret_config "$secret_name"; then
+        pnm_check_add hysteria2_runtime_config UNKNOWN 'Applied Hysteria2 configuration cannot be confirmed' 'Hysteria2 credential metadata is unavailable or invalid'
+        return 0
+    fi
+
+    status_line="$(pnm_node_core_link_status "$core" PNM_NODE_CONFIG "$secret_name" 2>/dev/null)" || {
+        pnm_check_add "${core}_runtime_config" UNKNOWN 'Applied configuration cannot be confirmed' 'runtime state query failed'
+        return 0
+    }
+    IFS='|' read -r status service config_state applied reason <<<"$status_line"
+    [[ "$status" == ready ]] && severity=OK
+    case "$status" in
+        ready) pnm_check_add "${core}_runtime_config" OK 'Runtime configuration matches the last successful PNM apply' "service=$service config=$config_state applied=$applied" ;;
+        drift) pnm_check_add "${core}_runtime_config" FAIL 'Runtime configuration drift detected' "service=$service config=$config_state applied=$applied${reason:+; $reason}" ;;
+        inactive) pnm_check_add "${core}_runtime_config" FAIL 'Core service is not active' "service=$service config=$config_state applied=$applied" ;;
+        damaged) pnm_check_add "${core}_runtime_config" FAIL 'Runtime configuration or apply evidence is damaged' "service=$service config=$config_state applied=$applied" ;;
+        *) pnm_check_add "${core}_runtime_config" UNKNOWN 'Applied Core configuration cannot be confirmed' "service=$service config=$config_state applied=$applied${reason:+; $reason}" ;;
     esac
 }
 
@@ -306,7 +445,10 @@ pnm_check_collect() {
     pnm_check_systemd_runtime
     pnm_check_xray
     pnm_check_hysteria
+    pnm_check_core_runtime_consistency xray
+    pnm_check_core_runtime_consistency hysteria2
     pnm_check_hysteria_tls
+    pnm_check_hysteria_tls_permissions
     pnm_check_file_metadata xray_permissions "$PNM_XRAY_CONFIG" 640 root xray
     pnm_check_file_metadata hysteria_permissions "$PNM_HY2_CONFIG" 600 hysteria hysteria
     pnm_check_file_metadata secret_directory "$PNM_CONFIG_DIR/secrets" 700 root root

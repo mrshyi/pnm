@@ -38,6 +38,8 @@ pnm_test_apply_setup() {
     cp -- "$TEST_ROOT/fixtures/config-secrets/node.conf" "$PNM_TEST_APPLY_ROOT/config/node.conf"
     cp -- "$TEST_ROOT/fixtures/config-secrets/secrets/reality.env" "$PNM_TEST_APPLY_ROOT/config/secrets/reality.env"
     PNM_CONFIG_DIR="$PNM_TEST_APPLY_ROOT/config"
+    PNM_STATE_DIR="$PNM_TEST_APPLY_ROOT/state"
+    mkdir -p -- "$PNM_STATE_DIR"
     PNM_XRAY_CONFIG="$PNM_TEST_APPLY_ROOT/xray/config.json"
     PNM_XRAY_BIN="$PNM_TEST_APPLY_ROOT/xray-bin"
     PNM_TEST_APPLY_BACKUP="$PNM_TEST_APPLY_ROOT/backup"
@@ -70,6 +72,7 @@ pnm_test_apply_cleanup() {
 }
 
 pnm_require_root() { return 0; }
+pnm_systemd_show_value() { printf '0123456789abcdef0123456789abcdef\n'; }
 pnm_core_lifecycle_snapshot() {
     PNM_LIFECYCLE_PRE_ACTIVE=active
     PNM_LIFECYCLE_PRE_ENABLED=enabled
@@ -86,8 +89,12 @@ pnm_systemd_unit_healthy() {
 pnm_tx_begin() { PNM_TX_ACTIVE=1; }
 pnm_tx_add_rollback() { PNM_TEST_APPLY_ROLLBACK="$1"; }
 pnm_tx_write_file() {
-    cp -- "$2" "$PNM_TEST_APPLY_BACKUP" || return 1
+    if [[ "$2" == "$PNM_XRAY_CONFIG" ]]; then
+        cp -- "$2" "$PNM_TEST_APPLY_BACKUP" || return 1
+    fi
+    mkdir -p -- "$(dirname -- "$2")" || return 1
     cp -- "$1" "$2"
+    chmod "$4" -- "$2" || return 1
     PNM_TEST_APPLY_WRITTEN=1
 }
 pnm_tx_restore_written_files() {
@@ -151,6 +158,17 @@ test_xray_apply_is_stable_when_repeated() {
     assert_eq 0 "$rc"
 }
 
+test_successful_apply_records_the_exact_runtime_config_digest() {
+    local record status
+    pnm_test_apply_setup || return 1
+    pnm_core_apply_config xray || { pnm_test_apply_cleanup; return 1; }
+    record="$PNM_STATE_DIR/cores/xray/applied.env"
+    [[ -f "$record" ]] || { pnm_test_apply_cleanup; return 1; }
+    status="$(pnm_core_applied_config_status xray "$PNM_XRAY_CONFIG")" || { pnm_test_apply_cleanup; return 1; }
+    pnm_test_apply_cleanup
+    assert_eq confirmed "$status"
+}
+
 test_hysteria_apply_rejects_unreadable_tls_before_apply() {
     local original rc old_hy2_config
     pnm_test_apply_setup || return 1
@@ -169,6 +187,103 @@ test_hysteria_apply_rejects_unreadable_tls_before_apply() {
     assert_eq 0 "$PNM_TEST_APPLY_RESTARTS" || { PNM_HY2_CONFIG="$old_hy2_config"; pnm_test_apply_cleanup; return 1; }
     PNM_HY2_CONFIG="$old_hy2_config"
     pnm_test_apply_cleanup
+}
+
+test_core_update_metadata_publish_failure_keeps_original_code_and_reports_rollback_failure() {
+    local temp_dir rc writes=0 rollback_calls=0
+    temp_dir="$(mktemp -d)"
+    printf 'binary-old\n' >"$temp_dir/previous"
+    printf 'metadata\n' >"$temp_dir/previous.env"
+    pnm_tx_write_file() {
+        ((writes += 1))
+        [[ "$3" != previous_metadata ]] || return 69
+        cp -- "$1" "$2"
+    }
+    pnm_tx_rollback() { ((rollback_calls += 1)); return 70; }
+    pnm_tx_close() { :; }
+    if pnm_core_publish_previous_state "$temp_dir/previous" "$temp_dir/previous.env" \
+        "$temp_dir/published-binary" "$temp_dir/published-meta"; then
+        rc=0
+    else
+        rc=$?
+    fi
+    assert_eq 69 "$rc" || { rm -rf -- "$temp_dir"; return 1; }
+    assert_eq 'previous version metadata publication' "$PNM_CORE_UPDATE_FAILURE_STAGE" || { rm -rf -- "$temp_dir"; return 1; }
+    run_capture pnm_core_update_abort update "$PNM_CORE_UPDATE_FAILURE_STAGE" "$rc"
+    rc="$RUN_RC"
+    rm -rf -- "$temp_dir"
+    assert_eq 69 "$rc" || return 1
+    assert_eq 2 "$writes" || return 1
+    assert_eq 1 "$rollback_calls" || return 1
+    assert_contains "$RUN_ERROR" 'rollback failed (rc=70)' || return 1
+    assert_contains "$RUN_ERROR" 'recovery files were retained'
+}
+
+test_restore_validates_all_staged_assets_before_apply() {
+    local temp_dir rc
+    temp_dir="$(mktemp -d)"
+    mkdir -p "$temp_dir/etc/pnm/secrets" "$temp_dir/etc/hysteria/tls" \
+        "$temp_dir/etc/systemd/system" "$temp_dir/usr/local/bin" "$temp_dir/usr/local/etc/xray"
+    touch "$temp_dir/etc/pnm/node.conf" "$temp_dir/etc/pnm/versions.conf" \
+        "$temp_dir/etc/pnm/secrets/reality.env" "$temp_dir/etc/pnm/secrets/hysteria.env" \
+        "$temp_dir/etc/hysteria/tls/server.crt" "$temp_dir/etc/hysteria/tls/server.key" \
+        "$temp_dir/etc/hysteria/config.yaml" "$temp_dir/usr/local/etc/xray/config.json" \
+        "$temp_dir/usr/local/bin/xray" "$temp_dir/usr/local/bin/hysteria"
+    cat >"$temp_dir/etc/systemd/system/xray.service" <<'EOF'
+[Service]
+User=xray
+ExecStart=/usr/local/bin/xray run -config /usr/local/etc/xray/config.json
+NoNewPrivileges=true
+ProtectSystem=strict
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+EOF
+    cat >"$temp_dir/etc/systemd/system/hysteria-server.service" <<'EOF'
+[Service]
+User=hysteria
+ExecStart=/usr/local/bin/hysteria server -c /etc/hysteria/config.yaml
+NoNewPrivileges=true
+ProtectSystem=strict
+CapabilityBoundingSet=
+AmbientCapabilities=
+EOF
+    PNM_TEST_RESTORE_XRAY_INVALID=1
+    PNM_TEST_RESTORE_HY2_CALLS=0
+    pnm_config_load() {
+        local file="$1" target_name="$2"
+        local -n target="$target_name"
+        target=()
+        case "$file" in
+            */node.conf) target[HY2_TLS_MODE]=selfsigned-pin ;;
+            */versions.conf) target[XRAY_VERSION]=v1.8.24 target[HY2_VERSION]=v2.13.0 ;;
+            */reality.env) target[XRAY_UUID]=fixture ;;
+            */hysteria.env)
+                target[HY2_TLS_CERT_PATH]=/etc/hysteria/tls/server.crt
+                target[HY2_TLS_KEY_PATH]=/etc/hysteria/tls/server.key
+                ;;
+        esac
+    }
+    pnm_validate_node_config() { return 0; }
+    pnm_validate_versions_config() { return 0; }
+    pnm_validate_reality_secret_config() { return 0; }
+    pnm_validate_hysteria_secret_config() { return 0; }
+    pnm_unit_validate_text() { return 0; }
+    pnm_systemd_validate_unit_file() { return 0; }
+    pnm_systemd_validate_unit_file() { return 0; }
+    pnm_binary_version_number() { [[ "$2" == xray ]] && printf '1.8.24\n' || printf '2.13.0\n'; }
+    pnm_capture() { [[ "$PNM_TEST_RESTORE_XRAY_INVALID" != 1 ]]; }
+    pnm_hysteria_config_validate_candidate() { ((PNM_TEST_RESTORE_HY2_CALLS += 1)); }
+    pnm_tls_validate_pair() { return 0; }
+    pnm_tls_certificate_check() { printf 'OK|fixture certificate is valid\n'; }
+    pnm_hysteria_tls_server_name() { return 0; }
+
+    if pnm_core_restore_validate_staged "$temp_dir"; then rc=0; else rc=$?; fi
+    assert_eq "$PNM_EXIT_CONFIG" "$rc" || { rm -rf -- "$temp_dir"; return 1; }
+    assert_eq 0 "$PNM_TEST_RESTORE_HY2_CALLS" || { rm -rf -- "$temp_dir"; return 1; }
+    PNM_TEST_RESTORE_XRAY_INVALID=0
+    pnm_core_restore_validate_staged "$temp_dir" || { rm -rf -- "$temp_dir"; return 1; }
+    assert_eq 1 "$PNM_TEST_RESTORE_HY2_CALLS"
+    rm -rf -- "$temp_dir"
 }
 
 test_core_mapping_is_fixed() {
@@ -214,5 +329,8 @@ run_test 'invalid Xray candidate leaves current runtime config untouched' test_x
 run_test 'Xray restart failure restores previous config and service' test_xray_apply_restart_failure_restores_previous_config_and_service
 run_test 'Xray health-check failure restores previous config and service' test_xray_apply_health_failure_restores_previous_config_and_service
 run_test 'repeated Xray apply produces stable runtime config' test_xray_apply_is_stable_when_repeated
+run_test 'successful Xray apply records the exact applied configuration digest' test_successful_apply_records_the_exact_runtime_config_digest
 run_test 'Hysteria2 apply rejects invalid TLS before changing runtime config' test_hysteria_apply_rejects_unreadable_tls_before_apply
+run_test 'Core update preserves the original error and reports rollback failure' test_core_update_metadata_publish_failure_keeps_original_code_and_reports_rollback_failure
+run_test 'Restore validates staged Core, unit, and TLS resources before applying them' test_restore_validates_all_staged_assets_before_apply
 finish_tests
