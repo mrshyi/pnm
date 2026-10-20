@@ -1,0 +1,27 @@
+{
+  "log": {"loglevel": "warning"},
+  "inbounds": [
+    {
+      "listen": "0.0.0.0",
+      "port": 443,
+      "protocol": "vless",
+      "settings": {
+        "clients": [{"id": "11111111-2222-4333-8444-555555555555", "flow": "xtls-rprx-vision"}],
+        "decryption": "none"
+      },
+      "streamSettings": {
+        "network": "tcp",
+        "security": "reality",
+        "realitySettings": {
+          "show": false,
+          "dest": "example.com:443",
+          "xver": 0,
+          "serverNames": ["example.com"],
+          "privateKey": "AbCdEfGhIjKlMnOpQrStUvWxYz0123456789_-abc",
+          "shortIds": ["1a2b3c4d"]
+        }
+      }
+    }
+  ],
+  "outbounds": [{"protocol": "freedom", "tag": "direct"}]
+}

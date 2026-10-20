@@ -313,6 +313,71 @@ PY
     assert_eq '' "$RUN_OUTPUT"
 }
 
+test_historical_release_runtime_config_matches_current_template() {
+    local old_config
+    old_config="$PNM_XRAY_CONFIG"
+    PNM_CONFIG_DIR="$TEST_ROOT/fixtures/config-secrets"
+    PNM_XRAY_CONFIG="$TEST_ROOT/fixtures/xray-runtime-v0.16.0-rc.1.json"
+    declare -gA NODE=() REALITY=()
+    pnm_load_node_config NODE && pnm_load_reality_secret REALITY || return 1
+    run_capture pnm_xray_config_matches_node NODE REALITY
+    PNM_XRAY_CONFIG="$old_config"
+    assert_eq 0 "$RUN_RC" || return 1
+    assert_eq '' "$RUN_OUTPUT$RUN_ERROR"
+}
+
+test_xray_log_subfields_and_reality_show_are_strict_and_report_json_paths() {
+    local temp_dir old_config rc old_output_mode
+    temp_dir="$(mktemp -d)"
+    old_config="$PNM_XRAY_CONFIG"
+    old_output_mode="$PNM_OUTPUT_MODE"
+    PNM_CONFIG_DIR="$TEST_ROOT/fixtures/config-secrets"
+    PNM_XRAY_CONFIG="$temp_dir/runtime.json"
+    PNM_OUTPUT_MODE=text
+    declare -gA NODE=() REALITY=()
+    pnm_load_node_config NODE && pnm_load_reality_secret REALITY || { rm -rf -- "$temp_dir"; return 1; }
+    cp -- "$TEST_ROOT/fixtures/xray-runtime-v0.16.0-rc.1.json" "$PNM_XRAY_CONFIG"
+    python3 - "$PNM_XRAY_CONFIG" <<'PY'
+import json
+import sys
+path = sys.argv[1]
+with open(path, encoding="utf-8") as source:
+    config = json.load(source)
+config["log"]["loglevel"] = "debug"
+with open(path, "w", encoding="utf-8") as destination:
+    json.dump(config, destination)
+PY
+    run_capture pnm_xray_config_matches_node NODE REALITY
+    rc="$RUN_RC"
+    if ((rc != 1)) || [[ -n "$RUN_OUTPUT" || "$RUN_ERROR" != *'$.log.loglevel'* || "$RUN_ERROR" == *debug* ]]; then
+        PNM_XRAY_CONFIG="$old_config"
+        PNM_OUTPUT_MODE="$old_output_mode"
+        rm -rf -- "$temp_dir"
+        return 1
+    fi
+
+    cp -- "$TEST_ROOT/fixtures/xray-runtime-v0.16.0-rc.1.json" "$PNM_XRAY_CONFIG"
+    python3 - "$PNM_XRAY_CONFIG" <<'PY'
+import json
+import sys
+path = sys.argv[1]
+with open(path, encoding="utf-8") as source:
+    config = json.load(source)
+config["inbounds"][0]["streamSettings"]["realitySettings"]["show"] = True
+with open(path, "w", encoding="utf-8") as destination:
+    json.dump(config, destination)
+PY
+    run_capture pnm_xray_config_matches_node NODE REALITY
+    rc="$RUN_RC"
+    PNM_XRAY_CONFIG="$old_config"
+    PNM_OUTPUT_MODE="$old_output_mode"
+    rm -rf -- "$temp_dir"
+    assert_eq 1 "$rc" || return 1
+    assert_eq '' "$RUN_OUTPUT" || return 1
+    assert_contains "$RUN_ERROR" '$.inbounds[0].streamSettings.realitySettings.show' || return 1
+    assert_not_contains "$RUN_ERROR" 'true'
+}
+
 test_xray_drift_diagnostic_lists_field_names_without_values() {
     local temp_dir old_config rc
     temp_dir="$(mktemp -d)"
@@ -499,6 +564,8 @@ run_test 'node show reports runtime drift without exposing credentials' test_nod
 run_test 'new defaults do not migrate an existing Microsoft node' test_node_init_does_not_migrate_existing_microsoft_config
 run_test 'node links refuse to emit credentials when runtime Xray config has drifted' test_node_links_refuse_runtime_configuration_drift
 run_test 'Xray runtime comparison ignores JSON formatting differences' test_xray_config_semantic_match_ignores_json_formatting
+run_test 'historical v0.16.0-rc.1 runtime config matches the current render template' test_historical_release_runtime_config_matches_current_template
+run_test 'Xray log subfields and REALITY show drift are strict and use stderr JSON paths' test_xray_log_subfields_and_reality_show_are_strict_and_report_json_paths
 run_test 'Xray drift diagnostic lists field paths without values or secrets' test_xray_drift_diagnostic_lists_field_names_without_values
 run_test 'Xray drift diagnostics redact unrecognized JSON field names' test_xray_drift_diagnostic_redacts_unknown_field_names
 run_test 'node validation rejects invalid values' test_invalid_node_is_rejected

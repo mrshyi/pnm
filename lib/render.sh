@@ -75,13 +75,7 @@ pnm_xray_config_matches_node() {
     rm -f -- "$expected"
     case "$rc" in
         0) ;;
-        1)
-            if [[ "$PNM_OUTPUT_MODE" == json ]]; then
-                pnm_error "Xray runtime configuration drift; $comparison"
-            else
-                pnm_warn "Xray runtime configuration drift; $comparison"
-            fi
-            ;;
+        1) pnm_error "Xray runtime configuration drift; $comparison" ;;
         "$PNM_EXIT_CONFIG") pnm_error 'Xray runtime configuration is invalid JSON; consistency cannot be determined.' ;;
         *) return "$rc" ;;
     esac
@@ -96,6 +90,8 @@ pnm_xray_config_compare_files() {
 import json
 import sys
 
+# JSON decoding ignores whitespace and object-key order, while values, types,
+# and array order remain significant for the runtime configuration.
 def field_name(key):
     text = str(key)
     known = {
@@ -106,13 +102,13 @@ def field_name(key):
     }
     return text if text in known else "<field>"
 
-def differences(expected, actual, path=""):
+def differences(expected, actual, path="$"):
     if type(expected) is not type(actual):
         return [path or "$"]
     if isinstance(expected, dict):
         result = []
         for key in sorted(expected.keys() | actual.keys(), key=str):
-            child = f"{path}.{field_name(key)}" if path else field_name(key)
+            child = f"{path}.{field_name(key)}"
             if key not in expected or key not in actual:
                 result.append(child)
             else:
@@ -121,7 +117,7 @@ def differences(expected, actual, path=""):
     if isinstance(expected, list):
         result = []
         if len(expected) != len(actual):
-            result.append(f"{path}.length" if path else "$.length")
+            result.append(f"{path}.length")
         for index, (left, right) in enumerate(zip(expected, actual)):
             result.extend(differences(left, right, f"{path}[{index}]"))
         return result
