@@ -52,6 +52,9 @@ pnm_status_collect() {
         version_rc=$?
         case "$version_rc" in
             127) PNM_STATUS_XRAY_VERSION='not-installed' ;;
+            126) PNM_STATUS_XRAY_VERSION='not-executable' ;;
+            69) PNM_STATUS_XRAY_VERSION='version-command-failed' ;;
+            78) PNM_STATUS_XRAY_VERSION='version-parse-failed' ;;
             *) PNM_STATUS_XRAY_VERSION='unknown' ;;
         esac
     fi
@@ -59,6 +62,9 @@ pnm_status_collect() {
         version_rc=$?
         case "$version_rc" in
             127) PNM_STATUS_HY2_VERSION='not-installed' ;;
+            126) PNM_STATUS_HY2_VERSION='not-executable' ;;
+            69) PNM_STATUS_HY2_VERSION='version-command-failed' ;;
+            78) PNM_STATUS_HY2_VERSION='version-parse-failed' ;;
             *) PNM_STATUS_HY2_VERSION='unknown' ;;
         esac
     fi

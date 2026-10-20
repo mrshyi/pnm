@@ -265,7 +265,7 @@ pnm_core_update() {
     [[ -x "$PNM_CORE_BINARY" && -f "$PNM_CORE_CONFIG" ]] || return "$PNM_EXIT_CONFIG"
     pnm_core_lifecycle_snapshot "$PNM_CORE_ID" || return $?
     [[ "$PNM_LIFECYCLE_PRE_ACTIVE" == active ]] || return "$PNM_EXIT_CONFIG"
-    old_version="$(pnm_binary_version "$PNM_CORE_BINARY" "$style" | grep -Eo '[0-9]+(\.[A-Za-z0-9+-]+){2}' | head -n 1)" || return "$PNM_EXIT_CONFIG"
+    old_version="$(pnm_binary_version_number "$PNM_CORE_BINARY" "$style")" || return "$PNM_EXIT_CONFIG"
     [[ -n "$old_version" ]] || return "$PNM_EXIT_CONFIG"
     PNM_CORE_STAGE="$(pnm_make_temp_dir)" || return $?
     asset="$PNM_CORE_STAGE/asset"
@@ -287,7 +287,7 @@ pnm_core_update() {
     pnm_tx_write_file "$staged" "$PNM_CORE_BINARY" core_binary 0755 || {
         rc=$?; pnm_tx_rollback || true; pnm_tx_close; rm -f -- "$tmp"; return "$rc";
     }
-    if [[ "$(pnm_binary_version "$PNM_CORE_BINARY" "$style")" != *"${version#v}"* ]]; then
+    if [[ "$(pnm_binary_version_number "$PNM_CORE_BINARY" "$style")" != "${version#v}" ]]; then
         pnm_tx_rollback || true; pnm_tx_close; rm -f -- "$tmp"; return "$PNM_EXIT_CONFIG"
     fi
     pnm_systemctl restart "$PNM_CORE_UNIT" || { rc=$?; pnm_tx_rollback || true; pnm_tx_close; rm -f -- "$tmp"; return "$rc"; }
@@ -326,11 +326,11 @@ pnm_core_rollback() {
     pnm_config_load "$previous_meta" previous SCHEMA_VERSION CORE VERSION || return "$PNM_EXIT_CONFIG"
     [[ "${previous[SCHEMA_VERSION]-}" == 1 && "${previous[CORE]-}" == "$core" && "${previous[VERSION]-}" =~ ^[A-Za-z0-9._+-]+$ ]] || return "$PNM_EXIT_CONFIG"
     version=${previous[VERSION]}
-    [[ "$(pnm_binary_version "$previous_file" "$style")" == *"$version"* ]] || return "$PNM_EXIT_CONFIG"
+    [[ "$(pnm_binary_version_number "$previous_file" "$style")" == "$version" ]] || return "$PNM_EXIT_CONFIG"
     pnm_core_lifecycle_snapshot "$core" || return $?
     [[ "$PNM_LIFECYCLE_PRE_ACTIVE" == active ]] || return "$PNM_EXIT_CONFIG"
     PNM_CORE_STAGE="$(pnm_make_temp_dir)" || return $?
-    current_version="$(pnm_binary_version "$PNM_CORE_BINARY" "$style" | grep -Eo '[0-9]+(\.[A-Za-z0-9+-]+){2}' | head -n 1)" || return "$PNM_EXIT_CONFIG"
+    current_version="$(pnm_binary_version_number "$PNM_CORE_BINARY" "$style")" || return "$PNM_EXIT_CONFIG"
     install -m 0755 -- "$PNM_CORE_BINARY" "$PNM_CORE_STAGE/current" || return "$PNM_EXIT_CANTCREAT"
     pnm_tx_begin "core-rollback-$core" || return $?
     pnm_tx_add_rollback pnm_core_update_rollback || { pnm_tx_close; return "$PNM_EXIT_SOFTWARE"; }

@@ -329,6 +329,8 @@ path = sys.argv[1]
 with open(path, encoding="utf-8") as source:
     config = json.load(source)
 config["inbounds"][0]["streamSettings"]["realitySettings"]["dest"] = "different.example:443"
+config["inbounds"][0]["streamSettings"]["realitySettings"]["privateKey"] = "DO-NOT-PRINT-PRIVATE-KEY"
+config["inbounds"][0]["settings"]["clients"][0]["id"] = "DO-NOT-PRINT-UUID"
 with open(path, "w", encoding="utf-8") as destination:
     json.dump(config, destination)
 PY
@@ -339,9 +341,41 @@ PY
     assert_eq 1 "$rc" || return 1
     assert_contains "$RUN_OUTPUT$RUN_ERROR" 'drift fields:' || return 1
     assert_contains "$RUN_OUTPUT$RUN_ERROR" 'realitySettings.dest' || return 1
+    assert_contains "$RUN_OUTPUT$RUN_ERROR" 'realitySettings.privateKey' || return 1
+    assert_contains "$RUN_OUTPUT$RUN_ERROR" 'clients[0].id' || return 1
     assert_not_contains "$RUN_OUTPUT$RUN_ERROR" 'different.example' || return 1
+    assert_not_contains "$RUN_OUTPUT$RUN_ERROR" 'DO-NOT-PRINT-PRIVATE-KEY' || return 1
+    assert_not_contains "$RUN_OUTPUT$RUN_ERROR" 'DO-NOT-PRINT-UUID' || return 1
     assert_not_contains "$RUN_OUTPUT$RUN_ERROR" '11111111-2222-4333-8444-555555555555' || return 1
     assert_not_contains "$RUN_OUTPUT$RUN_ERROR" 'fixture-private'
+}
+
+test_xray_drift_diagnostic_redacts_unknown_field_names() {
+    local temp_dir old_config rc
+    temp_dir="$(mktemp -d)"
+    old_config="$PNM_XRAY_CONFIG"
+    PNM_CONFIG_DIR="$TEST_ROOT/fixtures/config-secrets"
+    PNM_XRAY_CONFIG="$temp_dir/runtime.json"
+    declare -gA NODE=() REALITY=()
+    pnm_load_node_config NODE && pnm_load_reality_secret REALITY || { rm -rf -- "$temp_dir"; return 1; }
+    pnm_render_xray_config NODE REALITY >"$PNM_XRAY_CONFIG" || { rm -rf -- "$temp_dir"; return 1; }
+    python3 - "$PNM_XRAY_CONFIG" <<'PY'
+import json
+import sys
+path = sys.argv[1]
+with open(path, encoding="utf-8") as source:
+    config = json.load(source)
+config["inbounds"][0]["settings"]["fixture-secret-as-key-DO-NOT-PRINT"] = True
+with open(path, "w", encoding="utf-8") as destination:
+    json.dump(config, destination)
+PY
+    run_capture pnm_xray_config_matches_node NODE REALITY
+    rc="$RUN_RC"
+    PNM_XRAY_CONFIG="$old_config"
+    rm -rf -- "$temp_dir"
+    assert_eq 1 "$rc" || return 1
+    assert_contains "$RUN_OUTPUT$RUN_ERROR" 'settings.<field>' || return 1
+    assert_not_contains "$RUN_OUTPUT$RUN_ERROR" 'fixture-secret-as-key-DO-NOT-PRINT'
 }
 
 test_invalid_node_is_rejected() {
@@ -466,6 +500,7 @@ run_test 'new defaults do not migrate an existing Microsoft node' test_node_init
 run_test 'node links refuse to emit credentials when runtime Xray config has drifted' test_node_links_refuse_runtime_configuration_drift
 run_test 'Xray runtime comparison ignores JSON formatting differences' test_xray_config_semantic_match_ignores_json_formatting
 run_test 'Xray drift diagnostic lists field paths without values or secrets' test_xray_drift_diagnostic_lists_field_names_without_values
+run_test 'Xray drift diagnostics redact unrecognized JSON field names' test_xray_drift_diagnostic_redacts_unknown_field_names
 run_test 'node validation rejects invalid values' test_invalid_node_is_rejected
 run_test 'latest release metadata parsers return pinned values' test_release_metadata_parsers
 run_test 'latest lookup returns concrete pinned versions and hashes' test_latest_version_lookup_persists_concrete_values

@@ -26,6 +26,12 @@ done
 
 # shellcheck source=../testlib.sh
 source "$TEST_ROOT/testlib.sh"
+# shellcheck source=../../lib/common.sh
+source "$PROJECT_ROOT/lib/common.sh"
+# shellcheck source=../../adapters/network.sh
+source "$PROJECT_ROOT/adapters/network.sh"
+# Keep the sourced library defaults from shadowing this script's fixture paths.
+unset PNM_CONFIG_DIR PNM_OS_RELEASE_FILE PNM_XRAY_CONFIG PNM_HY2_CONFIG PNM_XRAY_BIN PNM_HY2_BIN
 
 run_fake_pnm() {
     env \
@@ -70,6 +76,13 @@ test_expired_hysteria_certificate_fails_health_check() {
 }
 
 test_hysteria_v213_binary_is_detected_and_version_reported() {
+    run_capture pnm_binary_version "$FAKE_DIR/hysteria" hysteria
+    assert_eq 0 "$RUN_RC" || return 1
+    assert_eq 'v2.13.0' "$RUN_OUTPUT" || return 1
+    run_capture pnm_binary_version_number "$FAKE_DIR/hysteria" hysteria
+    assert_eq 0 "$RUN_RC" || return 1
+    assert_eq '2.13.0' "$RUN_OUTPUT" || return 1
+
     PNM_FAKE_PROFILE=pass run_capture run_fake_pnm --json check
     assert_eq 0 "$RUN_RC" || return 1
     assert_contains "$RUN_OUTPUT" 'Hysteria2 local checks passed' || return 1
@@ -89,6 +102,29 @@ test_hysteria_missing_binary_is_distinct_from_version_failure() {
     assert_eq 2 "$RUN_RC" || return 1
     assert_contains "$RUN_OUTPUT" 'Hysteria2 version could not be determined' || return 1
     assert_not_contains "$RUN_OUTPUT" 'Hysteria2 is not installed'
+}
+
+test_hysteria_version_failures_are_distinguished() {
+    local non_executable="$FAKE_DIR/hysteria-not-executable"
+    cp -- "$FAKE_COMMAND" "$non_executable"
+    chmod 0644 -- "$non_executable"
+    if [[ ! -x "$non_executable" ]]; then
+        PNM_HY2_BIN="$non_executable" run_capture run_fake_pnm --json check
+        assert_eq 2 "$RUN_RC" || return 1
+        assert_contains "$RUN_OUTPUT" 'not executable' || return 1
+    fi
+
+    PNM_HY2_BIN="$FAKE_DIR/hysteria" PNM_FAKE_PROFILE=hysteria-no-version run_capture run_fake_pnm --json check
+    assert_eq 2 "$RUN_RC" || return 1
+    assert_contains "$RUN_OUTPUT" 'version output could not be parsed' || return 1
+
+    PNM_HY2_BIN="$FAKE_DIR/hysteria" PNM_FAKE_PROFILE=hysteria-exec-fails run_capture run_fake_pnm --json check
+    assert_eq 2 "$RUN_RC" || return 1
+    assert_contains "$RUN_OUTPUT" 'version command failed' || return 1
+
+    PNM_HY2_BIN="$FAKE_DIR/hysteria" PNM_FAKE_PROFILE=hysteria-no-version run_capture run_fake_pnm --json status
+    assert_eq 0 "$RUN_RC" || return 1
+    assert_contains "$RUN_OUTPUT" 'version-parse-failed' || return 1
 }
 
 test_status_reports_hysteria_version() {
@@ -113,6 +149,7 @@ run_test 'check output does not expose config secret fixture' test_json_contains
 run_test 'expired Hysteria2 certificate fails the health check' test_expired_hysteria_certificate_fails_health_check
 run_test 'official Hysteria2 v2.13.0 banner is detected and reported' test_hysteria_v213_binary_is_detected_and_version_reported
 run_test 'missing Hysteria binary differs from version-command failure' test_hysteria_missing_binary_is_distinct_from_version_failure
+run_test 'Hysteria binary, invocation, and parse failures are distinguished' test_hysteria_version_failures_are_distinguished
 run_test 'status reports the detected Hysteria2 version' test_status_reports_hysteria_version
 run_test 'supported Debian and Ubuntu platform matrix passes' test_supported_platform_matrix
 finish_tests

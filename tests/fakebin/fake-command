@@ -65,6 +65,7 @@ case "$command_name" in
     hysteria)
         [[ "${1-}" == version ]] || exit 1
         [[ "$profile" == hysteria-exec-fails ]] && exit 23
+        [[ "$profile" == hysteria-no-version ]] && { printf 'Hysteria2 release information unavailable\n'; exit 0; }
         [[ "$profile" == hysteria-stderr ]] && exec 1>&2
         cat <<'EOF'
 ░█░█░█░█░█▀▀░▀█▀░█▀▀░█▀▄░▀█▀░█▀█░░░▀▀▄

@@ -68,26 +68,47 @@ pnm_binary_version() {
 
     if [[ "$binary" == */* ]]; then
         [[ -f "$binary" ]] || return 127
-        [[ -x "$binary" ]] || return 69
+        [[ -x "$binary" ]] || return 126
     elif ! pnm_command_exists "$binary"; then
         return 127
     fi
     case "$style" in
         xray)
-            output="$("$binary" version 2>/dev/null)" || return 69
+            output="$("$binary" version 2>/dev/null)" || return "$PNM_EXIT_UNAVAILABLE"
             version="$(head -n 1 <<<"$output")"
             ;;
         hysteria)
-            output="$("$binary" version 2>&1)" || return 69
-            version="$(sed -nE 's/^Version:?[[:space:]]*(v?[0-9][^[:space:]]*).*/\1/p' <<<"$output" | head -n 1)"
+            output="$("$binary" version 2>&1)" || return "$PNM_EXIT_UNAVAILABLE"
+            if version="$(sed 's/\r$//' <<<"$output" | sed -nE 's/^[[:space:]]*Version:[[:space:]]*(v?[0-9]+(\.[0-9]+){2}([._+-][A-Za-z0-9.-]+)?)([[:space:]].*)?$/\1/p' | head -n 1)"; then :; else version=''; fi
             ;;
         *)
-            return 1
+            return "$PNM_EXIT_USAGE"
             ;;
     esac
-    [[ -n "$version" ]] || return 69
+    [[ -n "$version" ]] || return "$PNM_EXIT_CONFIG"
     pnm_one_line "$version"
     printf '\n'
+}
+
+pnm_binary_version_failure_reason() {
+    case "${1:?version command exit status required}" in
+        126) printf 'binary is not executable\n' ;;
+        127) printf 'binary was not found\n' ;;
+        "$PNM_EXIT_UNAVAILABLE") printf 'version command failed\n' ;;
+        "$PNM_EXIT_CONFIG") printf 'version output could not be parsed\n' ;;
+        *) printf 'version could not be determined\n' ;;
+    esac
+}
+
+pnm_binary_version_number() {
+    local binary="${1:?binary required}"
+    local style="${2:?version style required}"
+    local output version
+
+    output="$(pnm_binary_version "$binary" "$style")" || return $?
+    if version="$(grep -Eo 'v?[0-9]+\.[0-9]+\.[0-9]+([._+-][A-Za-z0-9.-]+)?' <<<"$output" | head -n 1)"; then :; else version=''; fi
+    [[ -n "$version" ]] || return "$PNM_EXIT_CONFIG"
+    printf '%s\n' "${version#v}"
 }
 
 pnm_apt_simulated_upgrades() {

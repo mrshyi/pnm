@@ -94,12 +94,17 @@ pnm_xray_config_compare_files() {
 
     python3 - "$expected" "$runtime" <<'PY'
 import json
-import re
 import sys
 
 def field_name(key):
     text = str(key)
-    return text if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_.-]*", text) else "<key>"
+    known = {
+        "log", "loglevel", "inbounds", "listen", "port", "protocol", "settings",
+        "clients", "id", "flow", "decryption", "streamSettings", "network",
+        "security", "realitySettings", "show", "dest", "xver", "serverNames",
+        "privateKey", "shortIds", "outbounds", "tag",
+    }
+    return text if text in known else "<field>"
 
 def differences(expected, actual, path=""):
     if type(expected) is not type(actual):

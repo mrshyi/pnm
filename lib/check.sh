@@ -171,7 +171,7 @@ pnm_check_xray() {
         return 0
     fi
     if ((version_rc != 0)); then
-        pnm_check_add xray "$severity" 'Xray version could not be determined' 'xray version command failed or returned an unsupported format'
+        pnm_check_add xray "$severity" 'Xray version could not be determined' "$(pnm_binary_version_failure_reason "$version_rc")"
         return 0
     fi
     if [[ ! -r "$PNM_XRAY_CONFIG" ]]; then
@@ -212,7 +212,7 @@ pnm_check_hysteria() {
         return 0
     fi
     if ((version_rc != 0)); then
-        pnm_check_add hysteria2 "$severity" 'Hysteria2 version could not be determined' 'hysteria version command failed or returned an unsupported format'
+        pnm_check_add hysteria2 "$severity" 'Hysteria2 version could not be determined' "$(pnm_binary_version_failure_reason "$version_rc")"
         return 0
     fi
     if [[ ! -r "$PNM_HY2_CONFIG" ]]; then
