@@ -125,6 +125,7 @@ test_node_links_omit_hy2_when_runtime_port_drifts() {
     assert_contains "$RUN_OUTPUT" 'vless://11111111-2222-4333-8444-555555555555@203.0.113.10:443' || return 1
     assert_not_contains "$RUN_OUTPUT" 'hysteria2://' || return 1
     assert_contains "$RUN_OUTPUT" 'Hysteria2 link omitted' || assert_contains "$RUN_ERROR" 'Hysteria2 link omitted'
+    assert_contains "$RUN_OUTPUT$RUN_ERROR" 'listen'
 }
 
 test_node_links_omit_hy2_when_runtime_auth_drifts_without_leaking_password() {
@@ -188,6 +189,199 @@ test_node_links_omit_hy2_for_damaged_runtime_config() {
     assert_contains "$RUN_OUTPUT" 'vless://' || return 1
     assert_not_contains "$RUN_OUTPUT" 'hysteria2://' || return 1
     assert_contains "$RUN_OUTPUT$RUN_ERROR" 'Hysteria2 link omitted'
+}
+
+pnm_test_prepare_hy2_runtime_config() {
+    local temp_dir="${1:?temporary test directory required}"
+    mkdir -p -- "$temp_dir/config/secrets"
+    cp -- "$TEST_ROOT/fixtures/config-secrets/node.conf" "$temp_dir/config/node.conf"
+    cp -- "$TEST_ROOT/fixtures/config-secrets/secrets/hysteria.env" "$temp_dir/config/secrets/hysteria.env"
+    PNM_CONFIG_DIR="$temp_dir/config"
+    PNM_HY2_CONFIG="$temp_dir/runtime.yaml"
+    declare -gA HY2_TEST_NODE=() HY2_TEST_SECRET=()
+    pnm_load_node_config HY2_TEST_NODE && pnm_load_hysteria_secret HY2_TEST_SECRET || return 1
+    pnm_render_hysteria_config HY2_TEST_NODE HY2_TEST_SECRET >"$PNM_HY2_CONFIG"
+}
+
+test_hy2_runtime_config_matches_rendered_config() {
+    local temp_dir old_config_dir old_hy2_config
+    temp_dir="$(mktemp -d)"
+    old_config_dir="$PNM_CONFIG_DIR"
+    old_hy2_config="$PNM_HY2_CONFIG"
+    pnm_test_prepare_hy2_runtime_config "$temp_dir" || return 1
+    run_capture pnm_hysteria_config_matches_node HY2_TEST_NODE HY2_TEST_SECRET
+    PNM_CONFIG_DIR="$old_config_dir"
+    PNM_HY2_CONFIG="$old_hy2_config"
+    rm -rf -- "$temp_dir"
+    assert_eq 0 "$RUN_RC" || return 1
+    assert_eq '' "$RUN_OUTPUT$RUN_ERROR"
+}
+
+test_hy2_runtime_config_ignores_line_ending_and_trailing_space_differences() {
+    local temp_dir old_config_dir old_hy2_config
+    temp_dir="$(mktemp -d)"
+    old_config_dir="$PNM_CONFIG_DIR"
+    old_hy2_config="$PNM_HY2_CONFIG"
+    pnm_test_prepare_hy2_runtime_config "$temp_dir" || return 1
+    sed 's/'"'"'/"/g' "$PNM_HY2_CONFIG" | awk '{ sub(/[[:space:]]+$/, ""); printf "%s  \r\n", $0 }' >"$temp_dir/formatted.yaml"
+    mv -- "$temp_dir/formatted.yaml" "$PNM_HY2_CONFIG"
+    run_capture pnm_hysteria_config_matches_node HY2_TEST_NODE HY2_TEST_SECRET
+    PNM_CONFIG_DIR="$old_config_dir"
+    PNM_HY2_CONFIG="$old_hy2_config"
+    rm -rf -- "$temp_dir"
+    assert_eq 0 "$RUN_RC" || return 1
+    assert_eq '' "$RUN_OUTPUT$RUN_ERROR"
+}
+
+test_hy2_runtime_config_reports_drift_without_values() {
+    local temp_dir old_config_dir old_hy2_config rc
+    temp_dir="$(mktemp -d)"
+    old_config_dir="$PNM_CONFIG_DIR"
+    old_hy2_config="$PNM_HY2_CONFIG"
+    pnm_test_prepare_hy2_runtime_config "$temp_dir" || return 1
+    sed -i 's/^listen: :8443$/listen: :9443/' "$PNM_HY2_CONFIG"
+    run_capture pnm_hysteria_config_matches_node HY2_TEST_NODE HY2_TEST_SECRET
+    rc="$RUN_RC"
+    if ((rc != 1)) || [[ "$PNM_HY2_CONFIG_DIAGNOSTIC" != *'listen'* || "$PNM_HY2_CONFIG_DIAGNOSTIC" == *'9443'* ]]; then
+        PNM_CONFIG_DIR="$old_config_dir"
+        PNM_HY2_CONFIG="$old_hy2_config"
+        rm -rf -- "$temp_dir"
+        return 1
+    fi
+    pnm_render_hysteria_config HY2_TEST_NODE HY2_TEST_SECRET >"$PNM_HY2_CONFIG" || return 1
+    sed -i "s@^  password: .*@  password: 'RUNTIME-SECRET-MUST-NOT-LEAK'@" "$PNM_HY2_CONFIG"
+    run_capture pnm_hysteria_config_matches_node HY2_TEST_NODE HY2_TEST_SECRET
+    PNM_CONFIG_DIR="$old_config_dir"
+    PNM_HY2_CONFIG="$old_hy2_config"
+    rm -rf -- "$temp_dir"
+    assert_eq 1 "$RUN_RC" || return 1
+    assert_contains "$PNM_HY2_CONFIG_DIAGNOSTIC" 'auth.password' || return 1
+    assert_not_contains "$PNM_HY2_CONFIG_DIAGNOSTIC" 'RUNTIME-SECRET-MUST-NOT-LEAK' || return 1
+    assert_not_contains "$PNM_HY2_CONFIG_DIAGNOSTIC" 'abcdefghijklmnopqrstuvwxyz012345'
+}
+
+test_hy2_runtime_config_reports_missing_field() {
+    local temp_dir old_config_dir old_hy2_config
+    temp_dir="$(mktemp -d)"
+    old_config_dir="$PNM_CONFIG_DIR"
+    old_hy2_config="$PNM_HY2_CONFIG"
+    pnm_test_prepare_hy2_runtime_config "$temp_dir" || return 1
+    sed -i '/^  password:/d' "$PNM_HY2_CONFIG"
+    run_capture pnm_hysteria_config_matches_node HY2_TEST_NODE HY2_TEST_SECRET
+    PNM_CONFIG_DIR="$old_config_dir"
+    PNM_HY2_CONFIG="$old_hy2_config"
+    rm -rf -- "$temp_dir"
+    assert_eq 1 "$RUN_RC" || return 1
+    assert_contains "$PNM_HY2_CONFIG_DIAGNOSTIC" 'auth.password'
+}
+
+test_node_links_keep_partial_success_and_report_hy2_drift() {
+    local temp_dir fake_xray old_config_dir old_hy2_config old_xray_config old_xray_bin old_output_mode
+    temp_dir="$(mktemp -d)"
+    old_config_dir="$PNM_CONFIG_DIR"
+    old_hy2_config="$PNM_HY2_CONFIG"
+    old_xray_config="$PNM_XRAY_CONFIG"
+    old_xray_bin="$PNM_XRAY_BIN"
+    old_output_mode="$PNM_OUTPUT_MODE"
+    pnm_test_prepare_hy2_runtime_config "$temp_dir" || return 1
+    cp -- "$TEST_ROOT/fixtures/config-secrets/secrets/reality.env" "$PNM_CONFIG_DIR/secrets/reality.env"
+    PNM_XRAY_CONFIG="$temp_dir/runtime.json"
+    PNM_XRAY_BIN="$temp_dir/xray"
+    fake_xray="$PNM_XRAY_BIN"
+    printf '#!/usr/bin/env bash\nprintf "PrivateKey: fixture-private\\nPassword (PublicKey): AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\\n"\n' >"$fake_xray"
+    chmod 0755 -- "$fake_xray"
+    declare -gA REALITY=()
+    pnm_load_reality_secret REALITY || return 1
+    pnm_render_xray_config HY2_TEST_NODE REALITY >"$PNM_XRAY_CONFIG" || return 1
+    sed -i "s@^  password: .*@  password: 'RUNTIME-SECRET-MUST-NOT-LEAK'@" "$PNM_HY2_CONFIG"
+    pnm_xray_config_matches_node() { return 0; }
+    pnm_require_root() { return 0; }
+    run_capture pnm_node_links --address 203.0.113.10
+    assert_eq 0 "$RUN_RC" || return 1
+    assert_contains "$RUN_OUTPUT" 'vless://' || return 1
+    assert_not_contains "$RUN_OUTPUT" 'hysteria2://' || return 1
+    assert_contains "$RUN_OUTPUT" 'auth.password' || return 1
+    assert_not_contains "$RUN_OUTPUT$RUN_ERROR" 'RUNTIME-SECRET-MUST-NOT-LEAK' || return 1
+
+    PNM_OUTPUT_MODE=json
+    run_capture pnm_node_links --address 203.0.113.10
+    source "$PROJECT_ROOT/lib/render.sh"
+    PNM_OUTPUT_MODE="$old_output_mode"
+    PNM_CONFIG_DIR="$old_config_dir"
+    PNM_HY2_CONFIG="$old_hy2_config"
+    PNM_XRAY_CONFIG="$old_xray_config"
+    PNM_XRAY_BIN="$old_xray_bin"
+    rm -rf -- "$temp_dir"
+    assert_eq 0 "$RUN_RC" || return 1
+    assert_contains "$RUN_OUTPUT" '"hysteria2":null' || return 1
+    assert_contains "$RUN_OUTPUT" '"hysteria2_status":"omitted"' || return 1
+    assert_contains "$RUN_ERROR" 'auth.password' || return 1
+    assert_not_contains "$RUN_OUTPUT$RUN_ERROR" 'RUNTIME-SECRET-MUST-NOT-LEAK' || return 1
+    assert_not_contains "$RUN_OUTPUT$RUN_ERROR" 'abcdefghijklmnopqrstuvwxyz012345'
+}
+
+test_hy2_runtime_config_classifies_malformed_and_missing_files() {
+    local temp_dir old_config_dir old_hy2_config rc
+    temp_dir="$(mktemp -d)"
+    old_config_dir="$PNM_CONFIG_DIR"
+    old_hy2_config="$PNM_HY2_CONFIG"
+    pnm_test_prepare_hy2_runtime_config "$temp_dir" || return 1
+    printf 'auth: [broken\n' >"$PNM_HY2_CONFIG"
+    run_capture pnm_hysteria_config_matches_node HY2_TEST_NODE HY2_TEST_SECRET
+    rc="$RUN_RC"
+    if ((rc != 78)) || [[ "$PNM_HY2_CONFIG_DIAGNOSTIC" != *'damaged'* ]]; then
+        PNM_CONFIG_DIR="$old_config_dir"
+        PNM_HY2_CONFIG="$old_hy2_config"
+        rm -rf -- "$temp_dir"
+        return 1
+    fi
+    printf '\n# no YAML mapping\n' >"$PNM_HY2_CONFIG"
+    run_capture pnm_hysteria_config_matches_node HY2_TEST_NODE HY2_TEST_SECRET
+    if ((RUN_RC != 78)) || [[ "$PNM_HY2_CONFIG_DIAGNOSTIC" != *'damaged'* ]]; then
+        PNM_CONFIG_DIR="$old_config_dir"
+        PNM_HY2_CONFIG="$old_hy2_config"
+        rm -rf -- "$temp_dir"
+        return 1
+    fi
+    PNM_HY2_CONFIG="$temp_dir/missing.yaml"
+    run_capture pnm_hysteria_config_matches_node HY2_TEST_NODE HY2_TEST_SECRET
+    PNM_CONFIG_DIR="$old_config_dir"
+    PNM_HY2_CONFIG="$old_hy2_config"
+    rm -rf -- "$temp_dir"
+    assert_eq 69 "$RUN_RC" || return 1
+    assert_contains "$PNM_HY2_CONFIG_DIAGNOSTIC" 'missing'
+}
+
+test_hy2_runtime_config_reports_permission_errors() {
+    local temp_dir old_config_dir old_hy2_config
+    temp_dir="$(mktemp -d)"
+    old_config_dir="$PNM_CONFIG_DIR"
+    old_hy2_config="$PNM_HY2_CONFIG"
+    pnm_test_prepare_hy2_runtime_config "$temp_dir" || return 1
+    pnm_hysteria_config_parse_candidate() {
+        local candidate="${1:?candidate config required}"
+        local target_name="${2:?parsed field map required}"
+        local -n fields="$target_name"
+        if [[ "$candidate" == "$PNM_HY2_CONFIG" ]]; then
+            return "$PNM_EXIT_NOPERM"
+        fi
+        fields=(
+            [listen]=":${HY2_TEST_NODE[HY2_PORT]}"
+            [tls.cert]="${HY2_TEST_SECRET[HY2_TLS_CERT_PATH]}"
+            [tls.key]="${HY2_TEST_SECRET[HY2_TLS_KEY_PATH]}"
+            [auth.type]=password
+            [auth.password]="${HY2_TEST_SECRET[HY2_AUTH_PASSWORD]}"
+            [masquerade.type]=proxy
+            [masquerade.proxy.url]="https://${HY2_TEST_NODE[XRAY_SERVER_NAME]}"
+        )
+    }
+    run_capture pnm_hysteria_config_matches_node HY2_TEST_NODE HY2_TEST_SECRET
+    source "$PROJECT_ROOT/lib/render.sh"
+    PNM_CONFIG_DIR="$old_config_dir"
+    PNM_HY2_CONFIG="$old_hy2_config"
+    rm -rf -- "$temp_dir"
+    assert_eq 77 "$RUN_RC" || return 1
+    assert_contains "$PNM_HY2_CONFIG_DIAGNOSTIC" 'permissions'
 }
 
 test_node_validation_rejects_single_label_reality_sni() {
@@ -557,6 +751,13 @@ run_test 'node links render client import URIs without private keys' test_node_l
 run_test 'node links omit HY2 URI but retain REALITY URI on HY2 port drift' test_node_links_omit_hy2_when_runtime_port_drifts
 run_test 'node links omit HY2 URI without exposing credentials on auth drift' test_node_links_omit_hy2_when_runtime_auth_drifts_without_leaking_password
 run_test 'node links omit HY2 URI for malformed runtime config while retaining REALITY' test_node_links_omit_hy2_for_damaged_runtime_config
+run_test 'HY2 runtime config matches the PNM rendered config' test_hy2_runtime_config_matches_rendered_config
+run_test 'HY2 runtime config ignores CRLF and trailing whitespace' test_hy2_runtime_config_ignores_line_ending_and_trailing_space_differences
+run_test 'HY2 runtime config reports only drift field names' test_hy2_runtime_config_reports_drift_without_values
+run_test 'HY2 runtime config reports missing fields' test_hy2_runtime_config_reports_missing_field
+run_test 'HY2 runtime config distinguishes damaged from missing files' test_hy2_runtime_config_classifies_malformed_and_missing_files
+run_test 'HY2 runtime config reports permission errors separately' test_hy2_runtime_config_reports_permission_errors
+run_test 'node links keep exit-zero partial success and diagnose HY2 drift' test_node_links_keep_partial_success_and_report_hy2_drift
 run_test 'node validation rejects a single-label REALITY SNI' test_node_validation_rejects_single_label_reality_sni
 run_test 'node links refuse a VPS hostname as REALITY SNI' test_node_links_refuse_single_label_reality_sni
 run_test 'node show reports an invalid REALITY SNI for diagnosis' test_node_show_reports_invalid_reality_sni

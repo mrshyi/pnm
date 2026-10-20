@@ -211,39 +211,186 @@ masquerade:
 EOF
 }
 
-# Hysteria v2.13.0 has no independent config-check command. Require exact
-# output from PNM's validated deterministic renderer; this avoids starting a
-# server or binding a port and deliberately rejects custom YAML.
+# Decode the scalar subset emitted by PNM's Hysteria2 renderer. Unsupported
+# YAML syntax is rejected so consistency checks never guess at its meaning.
+pnm_hysteria_yaml_decode_scalar() {
+    local raw="${1-}"
+    local target_name="${2:?decoded scalar target required}"
+    local decoded='' body char next_char index=0 length
+    local -n result="$target_name"
+
+    length="${#raw}"
+    if [[ "$raw" == \'* ]]; then
+        ((length >= 2)) && [[ "${raw: -1}" == \' ]] || return "$PNM_EXIT_CONFIG"
+        body="${raw:1:length-2}"
+        while ((index < ${#body})); do
+            char="${body:index:1}"
+            if [[ "$char" == \' ]]; then
+                next_char="${body:index+1:1}"
+                [[ "$next_char" == \' ]] || return "$PNM_EXIT_CONFIG"
+                decoded+="'"
+                ((index += 2))
+            else
+                decoded+="$char"
+                ((index += 1))
+            fi
+        done
+    elif [[ "$raw" == \"* ]]; then
+        ((length >= 2)) && [[ "${raw: -1}" == \" ]] || return "$PNM_EXIT_CONFIG"
+        body="${raw:1:length-2}"
+        while ((index < ${#body})); do
+            char="${body:index:1}"
+            if [[ "$char" == \\ ]]; then
+                ((index + 1 < ${#body})) || return "$PNM_EXIT_CONFIG"
+                next_char="${body:index+1:1}"
+                case "$next_char" in
+                    \\ | \" | /) decoded+="$next_char" ;;
+                    n) decoded+=$'\n' ;;
+                    r) decoded+=$'\r' ;;
+                    t) decoded+=$'\t' ;;
+                    *) return "$PNM_EXIT_CONFIG" ;;
+                esac
+                ((index += 2))
+            else
+                [[ "$char" != \" ]] || return "$PNM_EXIT_CONFIG"
+                decoded+="$char"
+                ((index += 1))
+            fi
+        done
+    else
+        [[ -n "$raw" && "$raw" != '['* && "$raw" != '{'* && "$raw" != '|'* && "$raw" != '>'* ]] || return "$PNM_EXIT_CONFIG"
+        if [[ "$raw" =~ ^(.*[^[:space:]])[[:space:]]+#.*$ ]]; then
+            raw="${BASH_REMATCH[1]}"
+        fi
+        decoded="$raw"
+    fi
+
+    result="$decoded"
+}
+
+pnm_hysteria_config_parse_candidate() {
+    local candidate="${1:?candidate config required}"
+    local target_name="${2:?parsed field map required}"
+    local -n fields="$target_name"
+    local line indent key raw parent path value parsed=0
+    local -a lines=() stack_indents=() stack_paths=()
+    local -A seen=()
+
+    fields=()
+    if ! mapfile -t lines <"$candidate" 2>/dev/null; then
+        [[ -e "$candidate" || -L "$candidate" ]] && return "$PNM_EXIT_NOPERM"
+        return "$PNM_EXIT_UNAVAILABLE"
+    fi
+    for line in "${lines[@]}"; do
+        line="${line%$'\r'}"
+        while [[ "$line" == *' ' || "$line" == *$'\t' ]]; do line="${line%?}"; done
+        [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+        [[ "$line" != *$'\t'* ]] || return "$PNM_EXIT_CONFIG"
+        [[ "$line" =~ ^([[:space:]]*)([A-Za-z][A-Za-z0-9_-]*)[[:space:]]*:[[:space:]]*(.*)$ ]] || return "$PNM_EXIT_CONFIG"
+        indent="${#BASH_REMATCH[1]}"
+        key="${BASH_REMATCH[2]}"
+        raw="${BASH_REMATCH[3]}"
+        while ((${#stack_indents[@]} > 0)) && ((indent <= stack_indents[${#stack_indents[@]} - 1])); do
+            unset 'stack_indents[-1]' 'stack_paths[-1]'
+        done
+        parent=''
+        if ((${#stack_paths[@]} > 0)); then
+            parent="${stack_paths[${#stack_paths[@]} - 1]}"
+        fi
+        path="${parent:+$parent.}$key"
+
+        case "$path" in
+            tls | auth | masquerade | masquerade.proxy)
+                [[ -z "$raw" && -z "${seen[$path]+present}" ]] || return "$PNM_EXIT_CONFIG"
+                seen[$path]=map
+                stack_indents+=("$indent")
+                stack_paths+=("$path")
+                parsed=1
+                ;;
+            listen | tls.cert | tls.key | auth.type | auth.password | masquerade.type | masquerade.proxy.url)
+                [[ -n "$raw" && -z "${seen[$path]+present}" ]] || return "$PNM_EXIT_CONFIG"
+                pnm_hysteria_yaml_decode_scalar "$raw" value || return "$PNM_EXIT_CONFIG"
+                fields[$path]="$value"
+                seen[$path]=scalar
+                parsed=1
+                ;;
+            *) return "$PNM_EXIT_CONFIG" ;;
+        esac
+    done
+    ((parsed == 1)) || return "$PNM_EXIT_CONFIG"
+}
+
+# Hysteria v2.13.0 has no independent config-check command. Compare the
+# supported PNM YAML subset against the deterministic rendered configuration.
 pnm_hysteria_config_validate_candidate() {
     local candidate="${1:?candidate config required}"
     local node_name="${2:?node config array required}"
     local hysteria_name="${3:?hysteria secret array required}"
-    local -n node="$node_name"
-    local -n hysteria="$hysteria_name"
-    local -a lines=()
+    local expected expected_rc path
+    local -a differences=() required_fields=(listen tls.cert tls.key auth.type auth.password masquerade.type masquerade.proxy.url)
+    local -A expected_fields=() actual_fields=()
 
-    [[ -f "$candidate" && ! -L "$candidate" && -r "$candidate" ]] || return "$PNM_EXIT_CONFIG"
+    PNM_HY2_CONFIG_DIAGNOSTIC=''
+
+    if [[ ! -e "$candidate" && ! -L "$candidate" ]]; then
+        PNM_HY2_CONFIG_DIAGNOSTIC='runtime configuration is missing'
+        return "$PNM_EXIT_UNAVAILABLE"
+    fi
+    if [[ -L "$candidate" || ! -f "$candidate" ]]; then
+        PNM_HY2_CONFIG_DIAGNOSTIC='runtime configuration is damaged or is not a regular file'
+        return "$PNM_EXIT_CONFIG"
+    fi
+    if [[ ! -r "$candidate" ]]; then
+        PNM_HY2_CONFIG_DIAGNOSTIC='runtime configuration cannot be read due to permissions'
+        return "$PNM_EXIT_NOPERM"
+    fi
     pnm_validate_node_config "$node_name" && pnm_validate_hysteria_secret_config "$hysteria_name" || return "$PNM_EXIT_CONFIG"
-    mapfile -t lines <"$candidate" || return "$PNM_EXIT_CONFIG"
-    ((${#lines[@]} == 11)) || return "$PNM_EXIT_CONFIG"
-    [[ "${lines[0]}" == "listen: :${node[HY2_PORT]}" &&
-        "${lines[1]}" == 'tls:' &&
-        "${lines[2]}" == "  cert: $(pnm_yaml_scalar "${hysteria[HY2_TLS_CERT_PATH]}")" &&
-        "${lines[3]}" == "  key: $(pnm_yaml_scalar "${hysteria[HY2_TLS_KEY_PATH]}")" &&
-        "${lines[4]}" == 'auth:' &&
-        "${lines[5]}" == '  type: password' &&
-        "${lines[6]}" == "  password: $(pnm_yaml_scalar "${hysteria[HY2_AUTH_PASSWORD]}")" &&
-        "${lines[7]}" == 'masquerade:' &&
-        "${lines[8]}" == '  type: proxy' &&
-        "${lines[9]}" == '  proxy:' &&
-        "${lines[10]}" == "    url: $(pnm_yaml_scalar "https://${node[XRAY_SERVER_NAME]}")" ]]
+
+    expected="$(mktemp -- "${TMPDIR:-/tmp}/pnm-hysteria-config.XXXXXXXX")" || return "$PNM_EXIT_CANTCREAT"
+    chmod 0600 -- "$expected" || { rm -f -- "$expected"; return "$PNM_EXIT_NOPERM"; }
+    if ! pnm_render_hysteria_config "$node_name" "$hysteria_name" >"$expected"; then
+        rm -f -- "$expected"
+        PNM_HY2_CONFIG_DIAGNOSTIC='PNM could not render the expected configuration'
+        return "$PNM_EXIT_CONFIG"
+    fi
+    if ! pnm_hysteria_config_parse_candidate "$expected" expected_fields; then
+        rm -f -- "$expected"
+        PNM_HY2_CONFIG_DIAGNOSTIC='PNM rendered an invalid configuration'
+        return "$PNM_EXIT_SOFTWARE"
+    fi
+    if pnm_hysteria_config_parse_candidate "$candidate" actual_fields; then
+        :
+    else
+        expected_rc=$?
+        rm -f -- "$expected"
+        if ((expected_rc == PNM_EXIT_NOPERM)); then
+            PNM_HY2_CONFIG_DIAGNOSTIC='runtime configuration cannot be read due to permissions'
+            return "$PNM_EXIT_NOPERM"
+        fi
+        if ((expected_rc == PNM_EXIT_UNAVAILABLE)); then
+            PNM_HY2_CONFIG_DIAGNOSTIC='runtime configuration is missing'
+            return "$PNM_EXIT_UNAVAILABLE"
+        fi
+        PNM_HY2_CONFIG_DIAGNOSTIC='runtime configuration is damaged or uses unsupported YAML syntax'
+        return "$PNM_EXIT_CONFIG"
+    fi
+    rm -f -- "$expected"
+
+    for path in "${required_fields[@]}"; do
+        if [[ -z "${actual_fields[$path]+present}" || "${expected_fields[$path]}" != "${actual_fields[$path]}" ]]; then
+            differences+=("$path")
+        fi
+    done
+    if ((${#differences[@]} > 0)); then
+        PNM_HY2_CONFIG_DIAGNOSTIC="runtime configuration differs from PNM settings; fields: ${differences[*]}"
+        return 1
+    fi
 }
 
 pnm_hysteria_config_matches_node() {
     local node_name="${1:?node config array required}"
     local hysteria_name="${2:?hysteria secret array required}"
 
-    [[ -f "$PNM_HY2_CONFIG" && ! -L "$PNM_HY2_CONFIG" && -r "$PNM_HY2_CONFIG" ]] || return "$PNM_EXIT_UNAVAILABLE"
     pnm_hysteria_config_validate_candidate "$PNM_HY2_CONFIG" "$node_name" "$hysteria_name"
 }
 

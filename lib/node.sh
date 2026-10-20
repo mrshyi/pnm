@@ -624,10 +624,16 @@ pnm_node_links() {
         :
     else
         rc=$?
-        if ((rc == 1 || rc == PNM_EXIT_CONFIG)); then
-            hy2_omission_reason='runtime configuration differs from PNM settings or is damaged'
+        if [[ -n "${PNM_HY2_CONFIG_DIAGNOSTIC-}" ]]; then
+            hy2_omission_reason="$PNM_HY2_CONFIG_DIAGNOSTIC"
         else
-            hy2_omission_reason='runtime configuration is unavailable and could not be verified'
+            case "$rc" in
+                1) hy2_omission_reason='runtime configuration differs from PNM settings' ;;
+                "$PNM_EXIT_CONFIG") hy2_omission_reason='runtime configuration is damaged' ;;
+                "$PNM_EXIT_UNAVAILABLE") hy2_omission_reason='runtime configuration is missing' ;;
+                "$PNM_EXIT_NOPERM") hy2_omission_reason='runtime configuration cannot be read due to permissions' ;;
+                *) hy2_omission_reason='runtime configuration could not be verified' ;;
+            esac
         fi
     fi
 
