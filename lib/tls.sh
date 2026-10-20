@@ -31,6 +31,75 @@ pnm_tls_validate_pair() {
     [[ -n "$certificate_pin" && "$certificate_pin" == "$key_pin" ]]
 }
 
+pnm_tls_certificate_dns_names() {
+    local certificate="${1:?certificate path required}"
+    local extension entry names=''
+
+    pnm_tls_require_openssl || return $?
+    [[ -f "$certificate" && ! -L "$certificate" && -r "$certificate" ]] || return "$PNM_EXIT_CONFIG"
+    extension="$(openssl x509 -in "$certificate" -noout -ext subjectAltName 2>/dev/null)" || return "$PNM_EXIT_CONFIG"
+    [[ "$extension" == *'X509v3 Subject Alternative Name'* ]] || return "$PNM_EXIT_CONFIG"
+    while IFS= read -r entry; do
+        entry="${entry#"${entry%%[![:space:]]*}"}"
+        [[ "$entry" == DNS:* ]] || continue
+        names+="${entry#DNS:}"$'\n'
+    done < <(tr ',' '\n' <<<"$extension")
+    [[ -n "$names" ]] || return "$PNM_EXIT_CONFIG"
+    printf '%s' "$names"
+}
+
+pnm_tls_certificate_matches_dns_name() {
+    local certificate="${1:?certificate path required}"
+    local server_name="${2:?TLS server name required}"
+    local dns_names
+
+    pnm_validate_hy2_tls_server_name "$server_name" || return "$PNM_EXIT_CONFIG"
+    dns_names="$(pnm_tls_certificate_dns_names "$certificate")" || return "$PNM_EXIT_CONFIG"
+    [[ -n "$dns_names" ]] || return "$PNM_EXIT_CONFIG"
+    openssl x509 -in "$certificate" -noout -checkhost "$server_name" >/dev/null 2>&1
+}
+
+# Legacy nodes may omit HY2_TLS_SERVER_NAME. Infer only an unambiguous name
+# from the existing certificate; never rewrite node.conf or replace its cert.
+pnm_hysteria_tls_server_name() {
+    local node_name="${1:?node config array required}"
+    local hysteria_name="${2:?Hysteria secret array required}"
+    local certificate="${3:-}"
+    local -n node_ref="$node_name"
+    local -n hysteria_ref="$hysteria_name"
+    local configured_name="${node_ref[HY2_TLS_SERVER_NAME]-}"
+    local address="${node_ref[NODE_ADDRESS]-}"
+    local dns_names
+    local -a names=()
+
+    [[ -n "$certificate" ]] || certificate="${hysteria_ref[HY2_TLS_CERT_PATH]-}"
+    if [[ -n "$configured_name" ]]; then
+        if ! pnm_tls_certificate_matches_dns_name "$certificate" "$configured_name"; then
+            pnm_error 'HY2_TLS_SERVER_NAME does not match a DNS name in the configured TLS certificate SAN.'
+            return "$PNM_EXIT_CONFIG"
+        fi
+        printf '%s\n' "$configured_name"
+        return 0
+    fi
+
+    if pnm_validate_hy2_tls_server_name "$address" &&
+        pnm_tls_certificate_matches_dns_name "$certificate" "$address"; then
+        printf '%s\n' "$address"
+        return 0
+    fi
+    dns_names="$(pnm_tls_certificate_dns_names "$certificate")" || {
+        pnm_error 'HY2 TLS server name cannot be resolved because the configured certificate has no readable DNS SAN.'
+        return "$PNM_EXIT_CONFIG"
+    }
+    mapfile -t names <<<"$dns_names"
+    if ((${#names[@]} == 1)) && pnm_validate_hy2_tls_server_name "${names[0]}"; then
+        printf '%s\n' "${names[0]}"
+        return 0
+    fi
+    pnm_error 'HY2_TLS_SERVER_NAME is unset and the existing certificate SAN is ambiguous; set HY2_TLS_SERVER_NAME explicitly.'
+    return "$PNM_EXIT_CONFIG"
+}
+
 pnm_tls_certificate_check() {
     local mode="${1:?TLS mode required}"
     local certificate="${2:?certificate path required}"

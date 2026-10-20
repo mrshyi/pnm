@@ -154,7 +154,7 @@ pnm_sandbox_step_tls() {
                     return "$PNM_EXIT_CONFIG"
                 }
             else
-                pnm_tls_generate_selfsigned "$cert_staged" "$key_staged" "${PNM_SANDBOX_NODE[XRAY_SERVER_NAME]}" || return $?
+                pnm_tls_generate_selfsigned "$cert_staged" "$key_staged" "${PNM_SANDBOX_NODE[HY2_TLS_SERVER_NAME]}" || return $?
                 pnm_tx_write_file "$cert_staged" "$cert_target" hysteria_cert 0644 || return $?
                 pnm_tx_write_file "$key_staged" "$key_target" hysteria_key 0600 || return $?
             fi
@@ -171,7 +171,8 @@ pnm_sandbox_step_tls() {
     esac
     PNM_SANDBOX_HYSTERIA[HY2_TLS_PIN_SHA256]="$(pnm_tls_spki_pin "$cert_target")" || return "$PNM_EXIT_CONFIG"
     pnm_validate_pin_sha256 "${PNM_SANDBOX_HYSTERIA[HY2_TLS_PIN_SHA256]}" || return "$PNM_EXIT_CONFIG"
-    pnm_tls_validate_pair "$cert_target" "$key_target"
+    pnm_tls_validate_pair "$cert_target" "$key_target" || return $?
+    pnm_hysteria_tls_server_name PNM_SANDBOX_NODE PNM_SANDBOX_HYSTERIA "$cert_target" >/dev/null
 }
 
 pnm_sandbox_step_secrets() {

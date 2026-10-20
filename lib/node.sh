@@ -270,10 +270,10 @@ pnm_node_write_staged_files() {
     local -n node_ref="$node_name"
     local -n versions_ref="$versions_name"
 
-    printf 'SCHEMA_VERSION=1\nNODE_REGION=%s\nNODE_ADDRESS=%s\nTIMEZONE=%s\nPNM_CONFIGURED=no\nXRAY_PORT=%s\nXRAY_SERVER_NAME=%s\nXRAY_TARGET=%s\nHY2_PORT=%s\nHY2_TLS_MODE=%s\n' \
+    printf 'SCHEMA_VERSION=1\nNODE_REGION=%s\nNODE_ADDRESS=%s\nTIMEZONE=%s\nPNM_CONFIGURED=no\nXRAY_PORT=%s\nXRAY_SERVER_NAME=%s\nXRAY_TARGET=%s\nHY2_PORT=%s\nHY2_TLS_MODE=%s\nHY2_TLS_SERVER_NAME=%s\n' \
         "${node_ref[NODE_REGION]}" "${node_ref[NODE_ADDRESS]}" "${node_ref[TIMEZONE]}" "${node_ref[XRAY_PORT]}" \
         "${node_ref[XRAY_SERVER_NAME]}" "${node_ref[XRAY_TARGET]}" "${node_ref[HY2_PORT]}" \
-        "${node_ref[HY2_TLS_MODE]}" >"$directory/node.conf" || return "$PNM_EXIT_CANTCREAT"
+        "${node_ref[HY2_TLS_MODE]}" "${node_ref[HY2_TLS_SERVER_NAME]}" >"$directory/node.conf" || return "$PNM_EXIT_CANTCREAT"
     printf 'SCHEMA_VERSION=1\nXRAY_VERSION=%s\nXRAY_SHA256=%s\nHY2_VERSION=%s\nHY2_SHA256=%s\nAPPROVED=yes\n' \
         "${versions_ref[XRAY_VERSION]}" "${versions_ref[XRAY_SHA256]}" \
         "${versions_ref[HY2_VERSION]}" "${versions_ref[HY2_SHA256]}" >"$directory/versions.conf" || return "$PNM_EXIT_CANTCREAT"
@@ -284,7 +284,7 @@ pnm_node_init() {
     local replace_existing="${1:?replace mode required}"
     shift
     local region='' address='' timezone='' xray_port='' server_name='' target=''
-    local hy2_port='' tls_mode=''
+    local hy2_port='' tls_mode='' hy2_server_name='' hy2_server_name_auto=0
     local xray_version='' xray_sha256='' hy2_version='' hy2_sha256=''
     local force=0 argument temp_dir node_stage versions_stage rc
     local node_file="$PNM_CONFIG_DIR/node.conf"
@@ -305,6 +305,7 @@ pnm_node_init() {
             --target) (($# > 0)) || { pnm_error '--target requires a value'; return "$PNM_EXIT_USAGE"; }; target="$1"; shift ;;
             --hy2-port) (($# > 0)) || { pnm_error '--hy2-port requires a value'; return "$PNM_EXIT_USAGE"; }; hy2_port="$1"; shift ;;
             --tls-mode) (($# > 0)) || { pnm_error '--tls-mode requires a value'; return "$PNM_EXIT_USAGE"; }; tls_mode="$1"; shift ;;
+            --hy2-server-name) (($# > 0)) || { pnm_error '--hy2-server-name requires a value'; return "$PNM_EXIT_USAGE"; }; hy2_server_name="$1"; shift ;;
             --xray-version) (($# > 0)) || { pnm_error '--xray-version requires a value'; return "$PNM_EXIT_USAGE"; }; xray_version="$1"; shift ;;
             --xray-sha256) (($# > 0)) || { pnm_error '--xray-sha256 requires a value'; return "$PNM_EXIT_USAGE"; }; xray_sha256="$1"; shift ;;
             --hy2-version) (($# > 0)) || { pnm_error '--hy2-version requires a value'; return "$PNM_EXIT_USAGE"; }; hy2_version="$1"; shift ;;
@@ -332,6 +333,7 @@ pnm_node_init() {
             [[ -n "$target" ]] || target="${existing_node[XRAY_TARGET]}"
             [[ -n "$hy2_port" ]] || hy2_port="${existing_node[HY2_PORT]}"
             [[ -n "$tls_mode" ]] || tls_mode="${existing_node[HY2_TLS_MODE]}"
+            [[ -n "$hy2_server_name" ]] || hy2_server_name="${existing_node[HY2_TLS_SERVER_NAME]-}"
             [[ "${existing_node[PNM_CONFIGURED]}" == no ]] || {
                 pnm_error 'The managed node is already configured; use core-specific apply commands or restore a reviewed backup.'
                 return "$PNM_EXIT_CONFIG"
@@ -357,6 +359,10 @@ pnm_node_init() {
     [[ -n "$target" ]] || target="${server_name}:$PNM_NODE_DEFAULT_XRAY_TARGET_PORT"
     [[ -n "$hy2_port" ]] || hy2_port="$PNM_NODE_DEFAULT_HY2_PORT"
     [[ -n "$tls_mode" ]] || tls_mode="$PNM_NODE_DEFAULT_HY2_TLS_MODE"
+    if [[ -z "$hy2_server_name" && "$tls_mode" == selfsigned-pin ]]; then
+        hy2_server_name_auto=1
+        hy2_server_name="proxy-$region"
+    fi
 
     if pnm_is_tty; then
         if { [[ -z "$xray_version" && -z "$xray_sha256" ]] ||
@@ -384,6 +390,16 @@ pnm_node_init() {
         pnm_node_prompt xray_port 'Xray listen port' "$xray_port" || return $?
         pnm_node_prompt hy2_port 'Hysteria2 listen port' "$hy2_port" || return $?
         pnm_node_prompt tls_mode 'Hysteria2 TLS mode (selfsigned-pin|external-ca)' "$tls_mode" || return $?
+        if ((hy2_server_name_auto == 1)); then
+            if [[ "$tls_mode" == external-ca ]]; then
+                hy2_server_name=''
+            elif pnm_validate_hy2_tls_server_name "$address"; then
+                hy2_server_name="$address"
+            else
+                hy2_server_name="proxy-$region"
+            fi
+        fi
+        pnm_node_prompt hy2_server_name 'Hysteria2 TLS SNI (must match a certificate DNS SAN)' "$hy2_server_name" || return $?
         pnm_node_prompt xray_version 'Pinned Xray version (latest stable if shown)' "$xray_version" || return $?
         pnm_node_prompt xray_sha256 'Xray SHA-256 (official checksum if shown)' "$xray_sha256" || return $?
         pnm_node_prompt hy2_version 'Pinned Hysteria2 version (latest stable if shown)' "$hy2_version" || return $?
@@ -393,6 +409,7 @@ pnm_node_init() {
         pnm_node_require_value '--address' "$address" || return $?
         pnm_node_require_value '--server-name' "$server_name" || return $?
         pnm_node_require_value '--target' "$target" || return $?
+        pnm_node_require_value '--hy2-server-name' "$hy2_server_name" || return $?
         pnm_node_require_value '--xray-version' "$xray_version" || return $?
         pnm_node_require_value '--xray-sha256' "$xray_sha256" || return $?
         pnm_node_require_value '--hy2-version' "$hy2_version" || return $?
@@ -404,7 +421,7 @@ pnm_node_init() {
     node_config=(
         [SCHEMA_VERSION]=1 [NODE_REGION]="$region" [NODE_ADDRESS]="$address" [TIMEZONE]="$timezone" [PNM_CONFIGURED]=no
         [XRAY_PORT]="$xray_port" [XRAY_SERVER_NAME]="$server_name" [XRAY_TARGET]="$target"
-        [HY2_PORT]="$hy2_port" [HY2_TLS_MODE]="$tls_mode"
+        [HY2_PORT]="$hy2_port" [HY2_TLS_MODE]="$tls_mode" [HY2_TLS_SERVER_NAME]="$hy2_server_name"
     )
     versions_config=(
         [SCHEMA_VERSION]=1 [XRAY_VERSION]="$xray_version" [XRAY_SHA256]="$xray_sha256"
@@ -551,7 +568,7 @@ pnm_node_show() {
 }
 
 pnm_node_links() {
-    local address='' argument xray_public_key xray_link hy2_link='' xray_label hy2_label rc hy2_omission_reason=''
+    local address='' argument xray_public_key xray_link hy2_link='' xray_label hy2_label rc hy2_omission_reason='' hy2_server_name=''
     local -A node_config=() reality_secret=() hysteria_secret=()
 
     while (($# > 0)); do
@@ -620,6 +637,8 @@ pnm_node_links() {
 
     if ! pnm_load_hysteria_secret hysteria_secret || ! pnm_validate_hysteria_secret_config hysteria_secret; then
         hy2_omission_reason='Hysteria2 credentials are missing or invalid'
+    elif ! hy2_server_name="$(pnm_hysteria_tls_server_name node_config hysteria_secret 2>/dev/null)"; then
+        hy2_omission_reason='HY2 TLS SNI is missing or does not match the configured certificate SAN'
     elif pnm_hysteria_config_matches_node node_config hysteria_secret; then
         :
     else
@@ -645,7 +664,7 @@ pnm_node_links() {
     xray_link="vless://$(pnm_node_uri_encode "${reality_secret[XRAY_UUID]}")@$address:${node_config[XRAY_PORT]}?encryption=none&flow=xtls-rprx-vision&security=reality&sni=$(pnm_node_uri_encode "${node_config[XRAY_SERVER_NAME]}")&fp=chrome&pbk=$(pnm_node_uri_encode "$xray_public_key")&sid=$(pnm_node_uri_encode "${reality_secret[XRAY_REALITY_SHORT_ID]}")&type=tcp&headerType=none#$xray_label"
     if [[ -z "$hy2_omission_reason" ]]; then
         hy2_label="$(pnm_node_uri_encode "PNM-${node_config[NODE_REGION]}-Hysteria2")"
-        hy2_link="hysteria2://$(pnm_node_uri_encode "${hysteria_secret[HY2_AUTH_PASSWORD]}")@$address:${node_config[HY2_PORT]}/?sni=$(pnm_node_uri_encode "${node_config[XRAY_SERVER_NAME]}")"
+        hy2_link="hysteria2://$(pnm_node_uri_encode "${hysteria_secret[HY2_AUTH_PASSWORD]}")@$address:${node_config[HY2_PORT]}/?sni=$(pnm_node_uri_encode "$hy2_server_name")"
         if [[ "${node_config[HY2_TLS_MODE]}" == selfsigned-pin ]]; then
             hy2_link+="&insecure=1&pinSHA256=$(pnm_node_uri_encode "${hysteria_secret[HY2_TLS_PIN_SHA256]}")"
         fi

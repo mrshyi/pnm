@@ -19,6 +19,18 @@ source "$PROJECT_ROOT/lib/transaction.sh"
 source "$PROJECT_ROOT/lib/node.sh"
 # shellcheck source=../../lib/render.sh
 source "$PROJECT_ROOT/lib/render.sh"
+source "$PROJECT_ROOT/lib/tls.sh"
+
+# Link tests isolate URI selection; certificate SAN validation is covered by
+# test_hy2_sni.sh and sandbox install tests use real generated certificates.
+pnm_hysteria_tls_server_name() {
+    local node_name="${1:?node config array required}"
+    local -n node_ref="$node_name"
+    printf '%s\n' "${node_ref[HY2_TLS_SERVER_NAME]}"
+}
+
+assert_sensitive_output_contains() { [[ "${1-}" == *"${2-}"* ]]; }
+assert_sensitive_output_not_contains() { [[ "${1-}" != *"${2-}"* ]]; }
 
 test_validate_existing_node() {
     run_capture env PNM_CONFIG_DIR="$TEST_ROOT/fixtures/config-valid" "$PROJECT_ROOT/bin/pnm" node validate
@@ -85,15 +97,15 @@ test_node_links_render_client_import_uris() {
     PNM_CONFIG_DIR="$old_config_dir"
     rm -rf -- "$temp_dir"
     assert_eq 0 "$RUN_RC" || return 1
-    assert_contains "$RUN_OUTPUT" 'vless://11111111-2222-4333-8444-555555555555@203.0.113.10:443' || return 1
-    assert_contains "$RUN_OUTPUT" '&sni=front.example.com&fp=chrome' || return 1
-    assert_contains "$RUN_OUTPUT" 'pbk=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' || return 1
-    assert_contains "$RUN_OUTPUT" 'hysteria2://abcdefghijklmnopqrstuvwxyz012345@203.0.113.10:8443/' || return 1
-    assert_contains "$RUN_OUTPUT" '?sni=front.example.com&insecure=1' || return 1
-    assert_contains "$RUN_OUTPUT" 'pinSHA256=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA%3D' || return 1
-    assert_not_contains "$RUN_OUTPUT" '\\'
+    assert_sensitive_output_contains "$RUN_OUTPUT" 'vless://11111111-2222-4333-8444-555555555555@203.0.113.10:443' || return 1
+    assert_sensitive_output_contains "$RUN_OUTPUT" '&sni=front.example.com&fp=chrome' || return 1
+    assert_sensitive_output_contains "$RUN_OUTPUT" 'pbk=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' || return 1
+    assert_sensitive_output_contains "$RUN_OUTPUT" 'hysteria2://abcdefghijklmnopqrstuvwxyz012345@203.0.113.10:8443/' || return 1
+    assert_sensitive_output_contains "$RUN_OUTPUT" '?sni=proxy-frankfurt&insecure=1' || return 1
+    assert_sensitive_output_contains "$RUN_OUTPUT" 'pinSHA256=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA%3D' || return 1
+    assert_sensitive_output_not_contains "$RUN_OUTPUT" '\\' || return 1
     assert_eq 'A%2FB%2BC%3D' "$(pnm_node_uri_encode 'A/B+C=')" || return 1
-    assert_not_contains "$RUN_OUTPUT" 'fixture-private'
+    assert_sensitive_output_not_contains "$RUN_OUTPUT" 'fixture-private'
 }
 
 test_node_links_omit_hy2_when_runtime_port_drifts() {
@@ -122,10 +134,10 @@ test_node_links_omit_hy2_when_runtime_port_drifts() {
     PNM_HY2_CONFIG="$old_hy2_config"; PNM_CONFIG_DIR="$old_config_dir"
     rm -rf -- "$temp_dir"
     assert_eq 0 "$RUN_RC" || return 1
-    assert_contains "$RUN_OUTPUT" 'vless://11111111-2222-4333-8444-555555555555@203.0.113.10:443' || return 1
-    assert_not_contains "$RUN_OUTPUT" 'hysteria2://' || return 1
-    assert_contains "$RUN_OUTPUT" 'Hysteria2 link omitted' || assert_contains "$RUN_ERROR" 'Hysteria2 link omitted'
-    assert_contains "$RUN_OUTPUT$RUN_ERROR" 'listen'
+    assert_sensitive_output_contains "$RUN_OUTPUT" 'vless://11111111-2222-4333-8444-555555555555@203.0.113.10:443' || return 1
+    assert_sensitive_output_not_contains "$RUN_OUTPUT" 'hysteria2://' || return 1
+    assert_sensitive_output_contains "$RUN_OUTPUT$RUN_ERROR" 'Hysteria2 link omitted' || return 1
+    assert_sensitive_output_contains "$RUN_OUTPUT$RUN_ERROR" 'listen'
 }
 
 test_node_links_omit_hy2_when_runtime_auth_drifts_without_leaking_password() {
@@ -155,10 +167,10 @@ test_node_links_omit_hy2_when_runtime_auth_drifts_without_leaking_password() {
     PNM_HY2_CONFIG="$old_hy2_config"; PNM_CONFIG_DIR="$old_config_dir"
     rm -rf -- "$temp_dir"
     assert_eq 0 "$rc" || return 1
-    assert_contains "$RUN_OUTPUT" 'vless://' || return 1
-    assert_not_contains "$RUN_OUTPUT" 'hysteria2://' || return 1
-    assert_not_contains "$RUN_OUTPUT$RUN_ERROR" 'zyxwvutsrqponmlkjihgfedcba654321' || return 1
-    assert_contains "$RUN_OUTPUT$RUN_ERROR" 'Hysteria2 link omitted'
+    assert_sensitive_output_contains "$RUN_OUTPUT" 'vless://' || return 1
+    assert_sensitive_output_not_contains "$RUN_OUTPUT" 'hysteria2://' || return 1
+    assert_sensitive_output_not_contains "$RUN_OUTPUT$RUN_ERROR" 'zyxwvutsrqponmlkjihgfedcba654321' || return 1
+    assert_sensitive_output_contains "$RUN_OUTPUT$RUN_ERROR" 'Hysteria2 link omitted'
 }
 
 test_node_links_omit_hy2_for_damaged_runtime_config() {
@@ -186,9 +198,9 @@ test_node_links_omit_hy2_for_damaged_runtime_config() {
     PNM_HY2_CONFIG="$old_hy2_config"; PNM_CONFIG_DIR="$old_config_dir"
     rm -rf -- "$temp_dir"
     assert_eq 0 "$RUN_RC" || return 1
-    assert_contains "$RUN_OUTPUT" 'vless://' || return 1
-    assert_not_contains "$RUN_OUTPUT" 'hysteria2://' || return 1
-    assert_contains "$RUN_OUTPUT$RUN_ERROR" 'Hysteria2 link omitted'
+    assert_sensitive_output_contains "$RUN_OUTPUT" 'vless://' || return 1
+    assert_sensitive_output_not_contains "$RUN_OUTPUT" 'hysteria2://' || return 1
+    assert_sensitive_output_contains "$RUN_OUTPUT$RUN_ERROR" 'Hysteria2 link omitted'
 }
 
 pnm_test_prepare_hy2_runtime_config() {
@@ -298,10 +310,10 @@ test_node_links_keep_partial_success_and_report_hy2_drift() {
     pnm_require_root() { return 0; }
     run_capture pnm_node_links --address 203.0.113.10
     assert_eq 0 "$RUN_RC" || return 1
-    assert_contains "$RUN_OUTPUT" 'vless://' || return 1
-    assert_not_contains "$RUN_OUTPUT" 'hysteria2://' || return 1
-    assert_contains "$RUN_OUTPUT" 'auth.password' || return 1
-    assert_not_contains "$RUN_OUTPUT$RUN_ERROR" 'RUNTIME-SECRET-MUST-NOT-LEAK' || return 1
+    assert_sensitive_output_contains "$RUN_OUTPUT" 'vless://' || return 1
+    assert_sensitive_output_not_contains "$RUN_OUTPUT" 'hysteria2://' || return 1
+    assert_sensitive_output_contains "$RUN_OUTPUT" 'auth.password' || return 1
+    assert_sensitive_output_not_contains "$RUN_OUTPUT$RUN_ERROR" 'RUNTIME-SECRET-MUST-NOT-LEAK' || return 1
 
     PNM_OUTPUT_MODE=json
     run_capture pnm_node_links --address 203.0.113.10
@@ -313,11 +325,11 @@ test_node_links_keep_partial_success_and_report_hy2_drift() {
     PNM_XRAY_BIN="$old_xray_bin"
     rm -rf -- "$temp_dir"
     assert_eq 0 "$RUN_RC" || return 1
-    assert_contains "$RUN_OUTPUT" '"hysteria2":null' || return 1
-    assert_contains "$RUN_OUTPUT" '"hysteria2_status":"omitted"' || return 1
-    assert_contains "$RUN_ERROR" 'auth.password' || return 1
-    assert_not_contains "$RUN_OUTPUT$RUN_ERROR" 'RUNTIME-SECRET-MUST-NOT-LEAK' || return 1
-    assert_not_contains "$RUN_OUTPUT$RUN_ERROR" 'abcdefghijklmnopqrstuvwxyz012345'
+    assert_sensitive_output_contains "$RUN_OUTPUT" '"hysteria2":null' || return 1
+    assert_sensitive_output_contains "$RUN_OUTPUT" '"hysteria2_status":"omitted"' || return 1
+    assert_sensitive_output_contains "$RUN_ERROR" 'auth.password' || return 1
+    assert_sensitive_output_not_contains "$RUN_OUTPUT$RUN_ERROR" 'RUNTIME-SECRET-MUST-NOT-LEAK' || return 1
+    assert_sensitive_output_not_contains "$RUN_OUTPUT$RUN_ERROR" 'abcdefghijklmnopqrstuvwxyz012345'
 }
 
 test_hy2_runtime_config_classifies_malformed_and_missing_files() {
@@ -432,7 +444,7 @@ test_node_show_reports_runtime_drift_without_secrets() {
     assert_contains "$RUN_OUTPUT" 'xray: 443 -> example.com (example.com:443)' || return 1
     assert_contains "$RUN_OUTPUT" 'service=active config=drift port=443 sni=www.cloudflare.com target=www.cloudflare.com:443' || return 1
     assert_contains "$RUN_ERROR" 'differs from the runtime Xray configuration' || return 1
-    assert_not_contains "$RUN_OUTPUT$RUN_ERROR" '11111111-2222-4333-8444-555555555555'
+    assert_sensitive_output_not_contains "$RUN_OUTPUT$RUN_ERROR" '11111111-2222-4333-8444-555555555555'
 
     old_output_mode="$PNM_OUTPUT_MODE"
     PNM_OUTPUT_MODE=json
@@ -442,7 +454,7 @@ test_node_show_reports_runtime_drift_without_secrets() {
     assert_contains "$RUN_OUTPUT" '{"schema":"pnm.node.v1"' || return 1
     assert_contains "$RUN_OUTPUT" '"configuration_consistency":"drift"' || return 1
     assert_contains "$RUN_ERROR" 'drift fields:' || return 1
-    assert_not_contains "$RUN_OUTPUT$RUN_ERROR" '11111111-2222-4333-8444-555555555555'
+    assert_sensitive_output_not_contains "$RUN_OUTPUT$RUN_ERROR" '11111111-2222-4333-8444-555555555555'
 }
 
 test_node_init_does_not_migrate_existing_microsoft_config() {
@@ -479,7 +491,7 @@ test_node_links_refuse_runtime_configuration_drift() {
     rm -rf -- "$temp_dir"
     assert_eq 78 "$rc" || return 1
     assert_contains "$RUN_ERROR" 'Runtime Xray configuration differs from node.conf' || return 1
-    assert_not_contains "$RUN_OUTPUT" 'vless://'
+    assert_sensitive_output_not_contains "$RUN_OUTPUT" 'vless://'
 }
 
 test_xray_config_semantic_match_ignores_json_formatting() {
@@ -741,6 +753,7 @@ test_init_writes_valid_files_transactionally() {
     [[ "${node_config[XRAY_TARGET]}" == www.cloudflare.com:443 ]] || return 1
     [[ "${node_config[XRAY_PORT]}" == 443 && "${node_config[HY2_PORT]}" == 8443 ]] || return 1
     [[ "${node_config[HY2_TLS_MODE]}" == selfsigned-pin ]] || return 1
+    [[ "${node_config[HY2_TLS_SERVER_NAME]}" == proxy-vps ]] || return 1
     rm -rf -- "$temp_dir"
     return "$rc"
 }

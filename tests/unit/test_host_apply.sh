@@ -148,7 +148,7 @@ run_host_install_safety_case() (
         PNM_SANDBOX_NODE=(
             [SCHEMA_VERSION]=1 [PNM_CONFIGURED]=no [NODE_REGION]=vps [NODE_ADDRESS]=203.0.113.10
             [TIMEZONE]=UTC [XRAY_PORT]=443 [XRAY_SERVER_NAME]=example.com [XRAY_TARGET]=example.com:443
-            [HY2_PORT]=8443 [HY2_TLS_MODE]=selfsigned-pin
+            [HY2_PORT]=8443 [HY2_TLS_MODE]=selfsigned-pin [HY2_TLS_SERVER_NAME]=proxy-vps
         )
     }
     pnm_sandbox_prepare_secrets() { PNM_SANDBOX_GENERATE_REALITY_SECRET=0; PNM_SANDBOX_GENERATE_HYSTERIA_SECRET=0; }

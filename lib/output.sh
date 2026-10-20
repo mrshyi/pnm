@@ -86,11 +86,12 @@ pnm_print_help() {
                 '  --region NAME --address IPv4-or-hostname --timezone ZONE' \
                 '  --server-name FQDN --target HOST:PORT' \
                 '  --xray-port PORT --hy2-port PORT --tls-mode selfsigned-pin|external-ca' \
+                '  --hy2-server-name DNS-NAME  Hysteria2 TLS SNI covered by its certificate' \
                 '  --xray-version VERSION --xray-sha256 SHA256' \
                 '  --hy2-version VERSION --hy2-sha256 SHA256' \
                 '  --force       Allow init to replace an uncommitted configuration.' '' \
                 "Defaults: region vps; timezone UTC; REALITY ${PNM_NODE_DEFAULT_XRAY_SERVER_NAME}:${PNM_NODE_DEFAULT_XRAY_TARGET_PORT};" \
-                'Xray TCP/443; Hysteria2 UDP/8443; self-signed TLS.' \
+                'Xray TCP/443; Hysteria2 UDP/8443; self-signed TLS defaults to proxy-REGION; external-ca requires --hy2-server-name.' \
                 'Interactive init fetches latest stable versions and official SHA-256 values.' \
                 'If lookup fails, enter both pinned version/hash pairs manually.' \
                 'Non-interactive init requires explicit version/hash flags.'

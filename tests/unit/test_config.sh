@@ -18,7 +18,8 @@ test_valid_config() {
     declare -A config=()
     PNM_CONFIG_DIR="$TEST_ROOT/fixtures/config-valid"
     pnm_load_node_config config
-    assert_eq 443 "${config[XRAY_PORT]}" && assert_eq selfsigned-pin "${config[HY2_TLS_MODE]}"
+    assert_eq 443 "${config[XRAY_PORT]}" && assert_eq selfsigned-pin "${config[HY2_TLS_MODE]}" &&
+        assert_eq example.com "${config[HY2_TLS_SERVER_NAME]}"
 }
 
 test_unsafe_config_rejected() {

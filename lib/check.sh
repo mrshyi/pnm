@@ -245,6 +245,10 @@ pnm_check_hysteria_tls() {
 
     result="$(pnm_tls_certificate_check "${PNM_NODE_CONFIG[HY2_TLS_MODE]}" "${hysteria_secret[HY2_TLS_CERT_PATH]}")" || result='WARN|TLS certificate validity cannot be determined'
     IFS='|' read -r status detail <<<"$result"
+    if [[ "$status" == OK ]] && ! pnm_hysteria_tls_server_name PNM_NODE_CONFIG hysteria_secret >/dev/null 2>&1; then
+        pnm_check_add hysteria_tls FAIL 'HY2 TLS server name does not match its certificate' 'HY2_TLS_SERVER_NAME must match a DNS SAN in the configured certificate'
+        return 0
+    fi
     case "$status" in
         OK) pnm_check_add hysteria_tls OK 'TLS certificate is within its validity period' "$detail" ;;
         FAIL) pnm_check_add hysteria_tls FAIL 'TLS certificate is outside its validity period' "$detail" ;;

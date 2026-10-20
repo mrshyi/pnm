@@ -122,9 +122,10 @@ pnm_deploy_mark_configured() {
     [[ "${node[PNM_CONFIGURED]}" == no ]] || return "$PNM_EXIT_CONFIG"
     temp_dir="$(pnm_make_temp_dir)" || return $?
     staged="$temp_dir/node.conf"
-    if ! printf 'SCHEMA_VERSION=%s\nNODE_REGION=%s\nNODE_ADDRESS=%s\nTIMEZONE=%s\nPNM_CONFIGURED=yes\nXRAY_PORT=%s\nXRAY_SERVER_NAME=%s\nXRAY_TARGET=%s\nHY2_PORT=%s\nHY2_TLS_MODE=%s\n' \
+    if ! printf 'SCHEMA_VERSION=%s\nNODE_REGION=%s\nNODE_ADDRESS=%s\nTIMEZONE=%s\nPNM_CONFIGURED=yes\nXRAY_PORT=%s\nXRAY_SERVER_NAME=%s\nXRAY_TARGET=%s\nHY2_PORT=%s\nHY2_TLS_MODE=%s\nHY2_TLS_SERVER_NAME=%s\n' \
         "${node[SCHEMA_VERSION]}" "${node[NODE_REGION]}" "${node[NODE_ADDRESS]-}" "${node[TIMEZONE]}" "${node[XRAY_PORT]}" \
-        "${node[XRAY_SERVER_NAME]}" "${node[XRAY_TARGET]}" "${node[HY2_PORT]}" "${node[HY2_TLS_MODE]}" >"$staged"; then
+        "${node[XRAY_SERVER_NAME]}" "${node[XRAY_TARGET]}" "${node[HY2_PORT]}" "${node[HY2_TLS_MODE]}" \
+        "${node[HY2_TLS_SERVER_NAME]-}" >"$staged"; then
         return "$PNM_EXIT_CANTCREAT"
     fi
     pnm_tx_begin install-state || return $?

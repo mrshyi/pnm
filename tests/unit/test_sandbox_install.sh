@@ -35,6 +35,10 @@ source "$PNM_LIB_DIR/deploy.sh"
 # shellcheck source=../testlib.sh
 source "$TEST_ROOT/testlib.sh"
 
+# Share links contain client credentials. Keep assertion failures from dumping
+# the captured output into CI logs.
+assert_sensitive_output_contains() { [[ "${1-}" == *"${2-}"* ]]; }
+
 make_xray_archive() {
     local destination="${1:?archive destination required}"
     local behavior="${2:?behavior required}"
@@ -105,7 +109,7 @@ prepare_fresh_sandbox_inputs() {
 }
 
 test_first_install_generates_and_reuses_secrets() {
-    local temp_dir root archive first_reality first_hy2 first_cert_pin second_cert_pin
+    local temp_dir root archive first_reality first_hy2 first_cert_pin second_cert_pin first_cert_hash second_cert_hash
     local -A reality=() hysteria=()
     temp_dir="$(mktemp -d)"
     root="$temp_dir/root"
@@ -129,15 +133,19 @@ test_first_install_generates_and_reuses_secrets() {
     first_reality="${reality[XRAY_UUID]}|${reality[XRAY_REALITY_PRIVATE_KEY]}|${reality[XRAY_REALITY_SHORT_ID]}"
     first_hy2="${hysteria[HY2_AUTH_PASSWORD]}"
     first_cert_pin="${hysteria[HY2_TLS_PIN_SHA256]}"
+    first_cert_hash="$(sha256sum "$root/etc/hysteria/tls/server.crt")"
 
     PNM_TX_ID_OVERRIDE='fresh-secrets-second'
     pnm_sandbox_install "$root" || { rm -rf -- "$temp_dir"; return 1; }
     pnm_load_reality_secret reality && pnm_load_hysteria_secret hysteria || { rm -rf -- "$temp_dir"; return 1; }
     second_cert_pin="$(pnm_tls_spki_pin "$root/etc/hysteria/tls/server.crt")"
-    rm -rf -- "$temp_dir"
+    second_cert_hash="$(sha256sum "$root/etc/hysteria/tls/server.crt")"
+    pnm_tls_certificate_matches_dns_name "$root/etc/hysteria/tls/server.crt" proxy-vps || { rm -rf -- "$temp_dir"; return 1; }
     assert_eq "$first_reality" "${reality[XRAY_UUID]}|${reality[XRAY_REALITY_PRIVATE_KEY]}|${reality[XRAY_REALITY_SHORT_ID]}" || return 1
     assert_eq "$first_hy2" "${hysteria[HY2_AUTH_PASSWORD]}" || return 1
-    assert_eq "$first_cert_pin" "$second_cert_pin"
+    assert_eq "$first_cert_pin" "$second_cert_pin" || { rm -rf -- "$temp_dir"; return 1; }
+    assert_eq "$first_cert_hash" "$second_cert_hash" || return 1
+    rm -rf -- "$temp_dir"
 }
 
 test_corrupt_secret_stops_without_replacing_it() {
@@ -183,7 +191,8 @@ test_failed_first_install_rolls_back_secrets_and_retry_succeeds() {
 }
 
 test_node_links_work_after_fresh_install() {
-    local temp_dir root archive old_xray_bin
+    local temp_dir root archive old_xray_bin old_xray_config old_hy2_config
+    local -A link_node=() link_hysteria=()
     temp_dir="$(mktemp -d)"
     root="$temp_dir/root"
     archive="$temp_dir/xray.zip"
@@ -196,14 +205,29 @@ test_node_links_work_after_fresh_install() {
     PNM_TX_ID_OVERRIDE='fresh-secrets-configured'
     pnm_deploy_mark_configured || { rm -rf -- "$temp_dir"; return 1; }
     old_xray_bin="$PNM_XRAY_BIN"
+    old_xray_config="$PNM_XRAY_CONFIG"
+    old_hy2_config="$PNM_HY2_CONFIG"
     PNM_XRAY_BIN="$root/usr/local/bin/xray"
+    PNM_XRAY_CONFIG="$root/usr/local/etc/xray/config.json"
+    PNM_HY2_CONFIG="$root/etc/hysteria/config.yaml"
+    pnm_load_node_config link_node && pnm_load_hysteria_secret link_hysteria || { rm -rf -- "$temp_dir"; return 1; }
+    link_hysteria[HY2_TLS_CERT_PATH]="$root/etc/hysteria/tls/server.crt"
+    link_hysteria[HY2_TLS_KEY_PATH]="$root/etc/hysteria/tls/server.key"
+    pnm_render_hysteria_secret_config link_hysteria >"$PNM_CONFIG_DIR/secrets/hysteria.env" || { rm -rf -- "$temp_dir"; return 1; }
+    chmod 0600 -- "$PNM_CONFIG_DIR/secrets/hysteria.env" || { rm -rf -- "$temp_dir"; return 1; }
+    pnm_render_hysteria_config link_node link_hysteria >"$PNM_HY2_CONFIG" || { rm -rf -- "$temp_dir"; return 1; }
     pnm_require_root() { return 0; }
     run_capture pnm_node_links --address 203.0.113.10
     PNM_XRAY_BIN="$old_xray_bin"
+    PNM_XRAY_CONFIG="$old_xray_config"
+    PNM_HY2_CONFIG="$old_hy2_config"
     rm -rf -- "$temp_dir"
     assert_eq 0 "$RUN_RC" || return 1
-    assert_contains "$RUN_OUTPUT" 'vless://'
-    assert_contains "$RUN_OUTPUT" 'hysteria2://'
+    assert_sensitive_output_contains "$RUN_OUTPUT" 'vless://' || return 1
+    assert_sensitive_output_contains "$RUN_OUTPUT" '&sni=www.cloudflare.com&fp=chrome' || return 1
+    assert_sensitive_output_contains "$RUN_OUTPUT" 'hysteria2://' || return 1
+    assert_sensitive_output_contains "$RUN_OUTPUT" '?sni=proxy-vps&insecure=1' || return 1
+    assert_sensitive_output_contains "$RUN_OUTPUT" 'pinSHA256='
 }
 
 test_sandbox_install_commits_all_resources() {

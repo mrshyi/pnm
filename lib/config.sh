@@ -87,6 +87,13 @@ pnm_validate_reality_server_name() {
         "$value" =~ ^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$ ]]
 }
 
+pnm_validate_hy2_tls_server_name() {
+    local value="${1-}"
+
+    [[ ${#value} -le 253 && ! "$value" =~ ^[0-9.]+$ &&
+        "$value" =~ ^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*$ ]]
+}
+
 pnm_validate_reality_target() {
     local value="${1-}" hostname port
 
@@ -119,6 +126,9 @@ pnm_validate_node_config() {
     pnm_validate_port "${config[HY2_PORT]-}" || return 1
     pnm_validate_reality_server_name "${config[XRAY_SERVER_NAME]-}" || return 1
     pnm_validate_reality_target "${config[XRAY_TARGET]-}" || return 1
+    if [[ -n "${config[HY2_TLS_SERVER_NAME]-}" ]]; then
+        pnm_validate_hy2_tls_server_name "${config[HY2_TLS_SERVER_NAME]}" || return 1
+    fi
     [[ "${config[HY2_TLS_MODE]-}" == 'selfsigned-pin' || "${config[HY2_TLS_MODE]-}" == 'external-ca' ]]
 }
 
@@ -165,7 +175,7 @@ pnm_load_node_config() {
 
     pnm_config_load "$file" "$target_name" \
         SCHEMA_VERSION NODE_REGION NODE_ADDRESS TIMEZONE PNM_CONFIGURED \
-        XRAY_PORT XRAY_SERVER_NAME XRAY_TARGET HY2_PORT HY2_TLS_MODE
+        XRAY_PORT XRAY_SERVER_NAME XRAY_TARGET HY2_PORT HY2_TLS_MODE HY2_TLS_SERVER_NAME
 }
 
 pnm_load_versions_config() {

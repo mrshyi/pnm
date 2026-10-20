@@ -143,6 +143,10 @@ pnm_core_apply_config() {
             pnm_error 'Hysteria2 TLS certificate and private key could not be validated; the current runtime config was not changed.'
             return "$PNM_EXIT_CONFIG"
         fi
+        if ! pnm_hysteria_tls_server_name "$node_name" "$secret_name" >/dev/null; then
+            pnm_error 'Hysteria2 TLS SNI is missing or does not match the configured certificate SAN; the current runtime config was not changed.'
+            return "$PNM_EXIT_CONFIG"
+        fi
         tls_check="$(pnm_tls_certificate_check "${PNM_CORE_NODE[HY2_TLS_MODE]}" "${PNM_CORE_SECRET[HY2_TLS_CERT_PATH]}")"
         IFS='|' read -r tls_status tls_detail <<<"$tls_check"
         if [[ "$tls_status" != OK ]]; then
@@ -439,7 +443,7 @@ PY
     else
         return "$PNM_EXIT_CONFIG"
     fi
-    pnm_config_load "$staging/etc/pnm/node.conf" PNM_RESTORE_NODE SCHEMA_VERSION NODE_REGION NODE_ADDRESS TIMEZONE PNM_CONFIGURED XRAY_PORT XRAY_SERVER_NAME XRAY_TARGET HY2_PORT HY2_TLS_MODE || return "$PNM_EXIT_CONFIG"
+    pnm_config_load "$staging/etc/pnm/node.conf" PNM_RESTORE_NODE SCHEMA_VERSION NODE_REGION NODE_ADDRESS TIMEZONE PNM_CONFIGURED XRAY_PORT XRAY_SERVER_NAME XRAY_TARGET HY2_PORT HY2_TLS_MODE HY2_TLS_SERVER_NAME || return "$PNM_EXIT_CONFIG"
     pnm_validate_node_config PNM_RESTORE_NODE || return "$PNM_EXIT_CONFIG"
     pnm_config_load "$staging/etc/pnm/versions.conf" PNM_RESTORE_VERSIONS SCHEMA_VERSION XRAY_VERSION XRAY_SHA256 HY2_VERSION HY2_SHA256 APPROVED || return "$PNM_EXIT_CONFIG"
     pnm_validate_versions_config PNM_RESTORE_VERSIONS || return "$PNM_EXIT_CONFIG"
