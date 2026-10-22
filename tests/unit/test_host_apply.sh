@@ -219,6 +219,22 @@ test_staging_cleanup_rejects_other_directories() (
     assert_eq 78 "$rc"
 )
 
+test_host_paths_reject_symlink_ancestors() (
+    local temp_dir rc
+    temp_dir="$(mktemp -d)"
+    trap 'rm -rf -- "$temp_dir"' EXIT
+    mkdir -m 0755 "$temp_dir/outside"
+    ln -s "$temp_dir/outside" "$temp_dir/link"
+    PNM_SANDBOX_ROOT=/ PNM_APPLY_GATE_ACTIVE=1 PNM_HOST_APPLY_CONFIRMED=yes
+    if pnm_sandbox_path "$temp_dir/link/managed" >/dev/null; then rc=0; else rc=$?; fi
+    assert_eq 78 "$rc" 'host branch must reject ancestor symlinks' || return 1
+    if pnm_mkdir_mode 0700 "$temp_dir/link/managed"; then rc=0; else rc=$?; fi
+    assert_eq 78 "$rc" 'mkdir must reject ancestor symlinks before mutation' || return 1
+    [[ ! -e "$temp_dir/outside/managed" ]] || return 1
+    assert_eq 755 "$(stat -c '%a' "$temp_dir/outside")"
+)
+
+run_test 'host managed paths reject symlink ancestors before mutation' test_host_paths_reject_symlink_ancestors
 run_test 'directory helper refuses root and its aliases' test_directory_helper_never_chmods_root
 run_test 'host config failure leaves root permissions untouched' test_host_install_keeps_root_on_config_failure
 run_test 'root aliases cannot bypass the apply gate' test_root_alias_cannot_bypass_host_gate

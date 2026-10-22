@@ -43,18 +43,27 @@ test_mismatched_pair_is_rejected() {
     [[ "$rc" != 0 ]]
 }
 
-test_certificate_check_reports_valid_expired_unreadable_and_skipped_modes() {
-    local temp_dir certificate private_key expired_certificate expired_key status
+test_certificate_check_reports_valid_expired_unreadable_and_skipped_modes() (
+    local temp_dir certificate private_key status test_now_epoch not_after
     temp_dir="$(mktemp -d)"
+    trap 'rm -rf -- "$temp_dir"' EXIT
     certificate="$temp_dir/valid.crt"; private_key="$temp_dir/valid.key"
-    expired_certificate="$temp_dir/expired.crt"; expired_key="$temp_dir/expired.key"
     openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj '/CN=valid.example' \
         -keyout "$private_key" -out "$certificate" >/dev/null 2>&1 || { rm -rf -- "$temp_dir"; return 1; }
-    openssl req -x509 -newkey rsa:2048 -nodes -days 0 -subj '/CN=expired.example' \
-        -keyout "$expired_key" -out "$expired_certificate" >/dev/null 2>&1 || { rm -rf -- "$temp_dir"; return 1; }
     status="$(pnm_tls_certificate_check selfsigned-pin "$certificate")" || { rm -rf -- "$temp_dir"; return 1; }
     assert_contains "$status" 'OK|' || { rm -rf -- "$temp_dir"; return 1; }
-    status="$(pnm_tls_certificate_check external-ca "$expired_certificate")" || { rm -rf -- "$temp_dir"; return 1; }
+    not_after="$(openssl x509 -in "$certificate" -noout -enddate)" || return 1
+    test_now_epoch="$(date -u -d "${not_after#notAfter=}" +%s)" || return 1
+    # Test expiry against a real certificate without relying on unsupported
+    # `openssl req -days 0` or waiting for wall-clock time to advance.
+    date() {
+        if [[ "$*" == '-u +%s' ]]; then
+            printf '%s\n' "$test_now_epoch"
+        else
+            command date "$@"
+        fi
+    }
+    status="$(pnm_tls_certificate_check external-ca "$certificate")" || return 1
     assert_contains "$status" 'FAIL|' || { rm -rf -- "$temp_dir"; return 1; }
     assert_contains "$status" 'expired' || { rm -rf -- "$temp_dir"; return 1; }
     status="$(pnm_tls_certificate_check selfsigned-pin "$temp_dir/missing.crt")" || { rm -rf -- "$temp_dir"; return 1; }
@@ -62,7 +71,7 @@ test_certificate_check_reports_valid_expired_unreadable_and_skipped_modes() {
     status="$(pnm_tls_certificate_check acme-runtime "$temp_dir/missing.crt")" || { rm -rf -- "$temp_dir"; return 1; }
     rm -rf -- "$temp_dir"
     assert_contains "$status" 'SKIP|'
-}
+)
 
 run_test 'self-signed certificate pair is valid and produces Base64 pin' test_selfsigned_pair_is_valid_and_pinned
 run_test 'certificate/private-key mismatch is rejected' test_mismatched_pair_is_rejected

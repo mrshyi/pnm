@@ -7,10 +7,15 @@ PNM_LIB_DIR="$PROJECT_ROOT/lib"
 source "$PNM_LIB_DIR/common.sh"
 source "$PNM_LIB_DIR/output.sh"
 source "$PNM_LIB_DIR/config.sh"
+source "$PNM_LIB_DIR/lock.sh"
+source "$PNM_LIB_DIR/transaction.sh"
 source "$PNM_LIB_DIR/tls.sh"
 source "$PNM_LIB_DIR/render.sh"
 source "$PNM_LIB_DIR/node.sh"
 source "$TEST_ROOT/testlib.sh"
+HY2_SUITE_STATE="$(mktemp -d)"
+export PNM_LOCK_FILE="$HY2_SUITE_STATE/lock" PNM_STATE_DIR="$HY2_SUITE_STATE/state"
+trap 'rm -rf -- "$HY2_SUITE_STATE"' EXIT
 
 make_test_certificate() {
     local directory="${1:?directory required}"
@@ -70,6 +75,7 @@ test_node_links_use_certificate_san_without_changing_reality_sni_or_pin() {
     old_hy2_config="$PNM_HY2_CONFIG"
     old_xray_bin="$PNM_XRAY_BIN"
     PNM_CONFIG_DIR="$temp_dir/config"
+    PNM_STATE_DIR="$temp_dir/state"
     PNM_XRAY_CONFIG="$temp_dir/xray.json"
     PNM_HY2_CONFIG="$temp_dir/hysteria.yaml"
     PNM_XRAY_BIN="$fake_xray"
@@ -83,7 +89,12 @@ test_node_links_use_certificate_san_without_changing_reality_sni_or_pin() {
         rm -rf -- "$temp_dir"
         return 1
     fi
-    pnm_xray_config_matches_node() { return 0; }
+    pnm_render_xray_config node_cfg reality_cfg >"$PNM_XRAY_CONFIG" || return 1
+    pnm_test_record_applied_config xray "$PNM_XRAY_CONFIG" || return 1
+    pnm_test_record_applied_config hysteria2 "$PNM_HY2_CONFIG" || return 1
+    pnm_systemd_active_state() { printf 'active\n'; }
+    pnm_systemd_show_value() { printf '0123456789abcdef0123456789abcdef\n'; }
+    pnm_listener_present() { return 0; }
     pnm_require_root() { return 0; }
     PNM_OUTPUT_MODE=text
     run_capture pnm_node_links --address 203.0.113.10

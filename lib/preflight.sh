@@ -74,9 +74,7 @@ pnm_preflight_runtime() {
     else
         pnm_preflight_add tools FAIL 'Base install tools are unavailable' "missing during preflight/transaction: ${missing[*]}"
     fi
-    for command_name in unzip; do
-        pnm_command_exists "$command_name" || asset_missing+=("$command_name")
-    done
+    pnm_command_exists unzip || asset_missing+=(unzip)
     if ((${#asset_missing[@]} == 0)); then
         pnm_preflight_add xray_assets OK 'Xray asset tools are available' 'Xray ZIP staging requires unzip'
     else
@@ -183,6 +181,11 @@ pnm_recovery_has_failed_deployment_record() {
 }
 
 pnm_recovery_unit_has_committed_pnm_receipt() {
+    [[ -f "$1" && ! -L "$1" && "$(stat -c '%a|%u' -- "$1")" == '644|0' ]] || return 1
+    pnm_recovery_resource_has_committed_pnm_receipt "$@"
+}
+
+pnm_recovery_resource_has_committed_pnm_receipt() {
     local unit_file="${1:?unit file required}" unit_label="${2:?unit label required}"
     local transaction_root="$PNM_STATE_DIR/transactions" transaction_dir transaction_id owner_mode encoded_target
     local state label encoded_path original_state original_mode record_hash expected_hash
@@ -190,8 +193,6 @@ pnm_recovery_unit_has_committed_pnm_receipt() {
     local -a failed_deployments=("${PNM_PREFLIGHT_RECOVERY_DEPLOYMENT_IDS[@]}")
 
     [[ -f "$unit_file" && ! -L "$unit_file" ]] || return 1
-    owner_mode="$(stat -c '%a|%u' -- "$unit_file" 2>/dev/null || printf '000|x')"
-    [[ "$owner_mode" == '644|0' ]] || return 1
     [[ -d "$transaction_root" && ! -L "$transaction_root" ]] || return 1
     owner_mode="$(stat -c '%a|%u' -- "$transaction_root" 2>/dev/null || printf '000|x')"
     [[ "$owner_mode" == "700|$EUID" ]] || return 1

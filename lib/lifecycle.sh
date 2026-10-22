@@ -81,6 +81,21 @@ pnm_core_lifecycle_health_step() {
     pnm_systemd_unit_healthy "$PNM_LIFECYCLE_UNIT" || return "$PNM_EXIT_CONFIG"
 }
 
+pnm_core_lifecycle_steps() {
+    pnm_tx_run daemon_reload pnm_core_lifecycle_reload_step || return $?
+    pnm_tx_run enable pnm_core_lifecycle_enable_step || return $?
+    pnm_tx_run start pnm_core_lifecycle_start_step || return $?
+    pnm_tx_run health pnm_core_lifecycle_health_step
+}
+
+pnm_core_lifecycle_deployment_apply() {
+    local core="${1:?core id required}" PNM_LIFECYCLE_UNIT
+    pnm_deploy_require_transaction "${2:?deployment id required}" || return $?
+    PNM_LIFECYCLE_UNIT="$(pnm_core_lifecycle_unit "$core")" || return $?
+    pnm_tx_prepare_directory "$(pnm_sandbox_path /etc/systemd/system/multi-user.target.wants)" - || return $?
+    pnm_core_lifecycle_steps
+}
+
 pnm_core_lifecycle_apply() {
     local core="${1:?core id required}"
     local rc
@@ -109,10 +124,7 @@ pnm_core_lifecycle_apply() {
         return 0
     fi
 
-    if pnm_tx_run daemon_reload pnm_core_lifecycle_reload_step; then :; else rc=$?; pnm_tx_close; return "$rc"; fi
-    if pnm_tx_run enable pnm_core_lifecycle_enable_step; then :; else rc=$?; pnm_tx_close; return "$rc"; fi
-    if pnm_tx_run start pnm_core_lifecycle_start_step; then :; else rc=$?; pnm_tx_close; return "$rc"; fi
-    if pnm_tx_run health pnm_core_lifecycle_health_step; then :; else rc=$?; pnm_tx_close; return "$rc"; fi
+    if pnm_core_lifecycle_steps; then :; else rc=$?; pnm_tx_close; return "$rc"; fi
     pnm_tx_commit || { rc=$?; pnm_tx_close; return "$rc"; }
     pnm_tx_close
 }

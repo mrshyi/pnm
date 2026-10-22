@@ -24,6 +24,7 @@ pnm_lock_acquire() {
         return "$PNM_EXIT_UNAVAILABLE"
     }
 
+    pnm_validate_managed_path "$PNM_LOCK_FILE" || return $?
     lock_parent="$(dirname -- "$PNM_LOCK_FILE")"
     [[ -d "$lock_parent" ]] || pnm_mkdir_mode 0755 "$lock_parent"
 

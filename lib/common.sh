@@ -10,14 +10,31 @@ readonly PNM_EXIT_CANTCREAT=73
 readonly PNM_EXIT_NOPERM=77
 readonly PNM_EXIT_CONFIG=78
 
+# Validate every existing component before mkdir/chmod or a managed file write.
+# This assumes protected parent directories; it is not an openat-based race lock.
+pnm_validate_managed_path() {
+    local path="${1:?absolute managed path required}" component current=''
+    local -a components=()
+
+    [[ "$path" == /* && "$path" != *$'\n'* && "$path" != *$'\r'* && "$path" != *$'\t'* ]] || return "$PNM_EXIT_CONFIG"
+    IFS='/' read -r -a components <<<"$path"
+    for component in "${components[@]}"; do
+        [[ "$component" != '..' ]] || return "$PNM_EXIT_CONFIG"
+        [[ -n "$component" && "$component" != '.' ]] || continue
+        current+="/$component"
+        [[ ! -L "$current" ]] || return "$PNM_EXIT_CONFIG"
+    done
+}
+
 pnm_mkdir_mode() {
     local mode directory
 
     mode="${1:?directory mode required}"
     directory="${2:?directory required}"
-    mkdir -p -- "$directory" || return "$PNM_EXIT_CANTCREAT"
     # Compare directory identity so aliases such as // and /tmp/.. are covered.
     [[ ! "$directory" -ef / ]] || return "$PNM_EXIT_CONFIG"
+    pnm_validate_managed_path "$directory" || return $?
+    mkdir -p -- "$directory" || return "$PNM_EXIT_CANTCREAT"
     chmod "$mode" -- "$directory"
 }
 
@@ -41,9 +58,43 @@ declare -ag PNM_CLEANUP_PATHS=()
 
 pnm_init_runtime() {
     umask 077
-    trap 'pnm_cleanup' EXIT
+    trap 'pnm_runtime_exit $?' EXIT
     trap 'exit 130' INT
     trap 'exit 143' TERM
+}
+
+pnm_runtime_exit() {
+    local rc="${1:-0}"
+    trap - EXIT
+    if (( ${PNM_APPLY_GATE_ACTIVE:-0} == 1 && ${PNM_TX_ACTIVE:-0} == 1 )) &&
+        [[ "${PNM_TX_OPERATION:-}" == deployment ]] && declare -F pnm_apply_gate_fail >/dev/null 2>&1; then
+        if (( ${PNM_TX_COMMITTED:-0} == 1 )); then
+            PNM_DEPLOY_COMMITTED=1 PNM_APPLY_GATE_COMMITTED=1
+            pnm_tx_close || true
+            pnm_deploy_close || true
+            pnm_apply_gate_close || true
+            pnm_warn 'Deployment was already committed before process cleanup.'
+            rc=0
+        else
+            ((rc != 0)) || rc="$PNM_EXIT_SOFTWARE"
+            if pnm_apply_gate_fail "$rc"; then :; else rc=$?; fi
+        fi
+    fi
+    pnm_cleanup
+    exit "$rc"
+}
+
+pnm_with_deployment_read_lock() {
+    local function_name="${1:?read operation required}" rc=0
+    shift
+    pnm_lock_acquire shared || return $?
+    if pnm_tx_assert_no_pending_deployment; then
+        if "$function_name" "$@"; then :; else rc=$?; fi
+    else
+        rc=$?
+    fi
+    pnm_lock_release || rc="$PNM_EXIT_SOFTWARE"
+    return "$rc"
 }
 
 pnm_cleanup() {

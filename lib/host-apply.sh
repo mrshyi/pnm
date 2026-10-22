@@ -56,5 +56,9 @@ pnm_host_apply_resources_step() {
     pnm_host_apply_require_gate || return $?
     pnm_host_apply_asset_precheck || return $?
     PNM_SANDBOX_ROOT=/
-    pnm_sandbox_install /
+    if [[ -n "${1-}" ]]; then
+        pnm_sandbox_install_deployment / "$1"
+    else
+        pnm_sandbox_install /
+    fi
 }

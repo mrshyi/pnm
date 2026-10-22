@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
+# shellcheck source=deployment-state.sh
+source "${BASH_SOURCE[0]%/*}/deployment-state.sh"
+
 PNM_TX_ID=''
 PNM_TX_PATH=''
 PNM_TX_ACTIVE=0
@@ -19,8 +22,13 @@ declare -ag PNM_TX_ROLLBACKS=()
 declare -ag PNM_TX_WRITTEN_PATHS=()
 declare -ag PNM_TX_WRITTEN_LABELS=()
 declare -ag PNM_TX_WRITTEN_HASHES=()
+declare -ag PNM_TX_WRITTEN_ATTRIBUTES=()
 declare -ag PNM_TX_ACCOUNT_KEYS=()
 declare -ag PNM_TX_ACCOUNT_STATES=()
+declare -ag PNM_TX_DIRECTORY_PATHS=()
+declare -ag PNM_TX_DIRECTORY_ORIGINAL=()
+declare -ag PNM_TX_DIRECTORY_EXPECTED=()
+declare -ag PNM_TX_DIRECTORY_IDENTITIES=()
 
 pnm_tx_new_id() {
     if [[ -n "${PNM_TX_ID_OVERRIDE:-}" ]]; then
@@ -77,7 +85,7 @@ pnm_tx_record_account() {
     local name="${3:?account object name required}" receipt="$PNM_TX_PATH/accounts.tsv" owner_mode
 
     ((PNM_TX_ACTIVE == 1 && PNM_DRY_RUN == 0)) || return "$PNM_EXIT_SOFTWARE"
-    [[ "$PNM_TX_OPERATION" == sandbox-install && "$state" =~ ^(INTENT|APPLIED|RESTORED)$ ]] || return "$PNM_EXIT_CONFIG"
+    [[ ( "$PNM_TX_OPERATION" == sandbox-install || "$PNM_TX_OPERATION" == deployment ) && "$state" =~ ^(INTENT|APPLIED|RESTORED)$ ]] || return "$PNM_EXIT_CONFIG"
     [[ "$kind" == group || "$kind" == user ]] || return "$PNM_EXIT_CONFIG"
     [[ "$name" == xray || "$name" == hysteria ]] || return "$PNM_EXIT_CONFIG"
     if [[ -e "$receipt" || -L "$receipt" ]]; then
@@ -138,7 +146,7 @@ pnm_tx_manifest_append() {
     [[ "$label" =~ ^[A-Za-z0-9._-]+$ ]] || return "$PNM_EXIT_CONFIG"
     [[ "$destination" == /* && "$destination" != *$'\n'* && "$destination" != *$'\t'* ]] || return "$PNM_EXIT_CONFIG"
     [[ "$original_state" =~ ^(PRESENT|MISSING)$ ]] || return "$PNM_EXIT_CONFIG"
-    [[ "$original_mode" == MISSING || "$original_mode" =~ ^[0-7]{3,4}$ ]] || return "$PNM_EXIT_CONFIG"
+    [[ "$original_mode" == MISSING || "$original_mode" =~ ^[0-7]{1,4}$ ]] || return "$PNM_EXIT_CONFIG"
     [[ "$expected_hash" =~ ^[a-f0-9]{64}$ ]] || return "$PNM_EXIT_CONFIG"
     encoded_path="$(printf '%s' "$destination" | base64 -w0)" || return "$PNM_EXIT_SOFTWARE"
     manifest="$PNM_TX_PATH/changes.tsv"
@@ -154,8 +162,8 @@ pnm_tx_load_for_inspect() {
     local current_label='' current_path='' current_state='' current_mode='' current_hash='' current_stage=''
     local -A metadata_values=() core_values=()
     local -a change_labels=() change_states=() change_paths=() change_original_states=() change_modes=() change_hashes=()
-    local index snapshot_root snapshot_owner
-    local -A seen_labels=()
+    local index snapshot_root snapshot_owner directory_changes=0 marker_committed=0 commit_uncertain=0
+    local -A seen_labels=() change_records=() change_indexes=()
 
     PNM_TX_ACCOUNT_KEYS=()
     PNM_TX_ACCOUNT_STATES=()
@@ -171,15 +179,31 @@ pnm_tx_load_for_inspect() {
     metadata="$transaction_dir/metadata.env"
     journal="$transaction_dir/journal.tsv"
     manifest="$transaction_dir/changes.tsv"
-    for decoded_path in "$metadata" "$journal" "$manifest"; do
+    for decoded_path in "$metadata" "$manifest"; do
         [[ -f "$decoded_path" && ! -L "$decoded_path" ]] || return "$PNM_EXIT_CONFIG"
         owner_mode="$(stat -c '%a|%u' -- "$decoded_path" 2>/dev/null || printf '000|x')"
         [[ "$owner_mode" == "600|$EUID" ]] || return "$PNM_EXIT_CONFIG"
     done
     pnm_config_load "$metadata" metadata_values SCHEMA_VERSION TRANSACTION_ID OPERATION DEPLOYMENT_ID || return "$PNM_EXIT_CONFIG"
-    [[ "${metadata_values[SCHEMA_VERSION]-}" == 1 && "${metadata_values[TRANSACTION_ID]-}" == "$transaction_id" ]] || return "$PNM_EXIT_CONFIG"
+    [[ "${metadata_values[SCHEMA_VERSION]-}" =~ ^[12]$ && "${metadata_values[TRANSACTION_ID]-}" == "$transaction_id" ]] || return "$PNM_EXIT_CONFIG"
+    pnm_tx_inspect_directories "$transaction_dir" "${metadata_values[SCHEMA_VERSION]}" directory_changes || return $?
     [[ "${metadata_values[OPERATION]-}" =~ ^[a-z0-9][a-z0-9-]{0,63}$ ]] || return "$PNM_EXIT_CONFIG"
     [[ "${metadata_values[DEPLOYMENT_ID]-}" == none || "${metadata_values[DEPLOYMENT_ID]-}" =~ ^deploy-[A-Za-z0-9._-]{1,80}$ ]] || return "$PNM_EXIT_CONFIG"
+    if [[ "${metadata_values[OPERATION]}" == deployment ]]; then
+        [[ "${metadata_values[SCHEMA_VERSION]}" == 2 ]] || return "$PNM_EXIT_CONFIG"
+        if [[ -e "$transaction_dir/commit.env" || -L "$transaction_dir/commit.env" ]]; then
+            pnm_tx_validate_deployment_record "$transaction_dir/deployment.env" || return $?
+            pnm_tx_deployment_marker verify "$transaction_dir" "$transaction_id" "${metadata_values[DEPLOYMENT_ID]}" || return "$PNM_EXIT_CONFIG"
+            marker_committed=1
+            if [[ -e "$transaction_dir/commit-uncertain.env" || -L "$transaction_dir/commit-uncertain.env" ]]; then
+                local -A uncertain=()
+                [[ ! -L "$transaction_dir/commit-uncertain.env" && "$(stat -c '%a|%u' -- "$transaction_dir/commit-uncertain.env")" == "600|$EUID" ]] || return "$PNM_EXIT_CONFIG"
+                pnm_config_load "$transaction_dir/commit-uncertain.env" uncertain SCHEMA_VERSION ORIGINAL_RC || return "$PNM_EXIT_CONFIG"
+                [[ "${uncertain[SCHEMA_VERSION]-}" == 1 && "${uncertain[ORIGINAL_RC]-}" =~ ^[0-9]+$ ]] || return "$PNM_EXIT_CONFIG"
+                commit_uncertain=1
+            fi
+        fi
+    fi
     PNM_TX_INSPECT_CORE=''
     PNM_TX_INSPECT_UNIT=''
     PNM_TX_INSPECT_PRE_ACTIVE=''
@@ -208,7 +232,7 @@ pnm_tx_load_for_inspect() {
         return "$PNM_EXIT_CONFIG"
     fi
     [[ ! -e "$transaction_dir/ufw-rules.tsv" && ! -L "$transaction_dir/ufw-rules.tsv" ]] || return "$PNM_EXIT_CONFIG"
-    if [[ "${metadata_values[OPERATION]}" == sandbox-install ]]; then
+    if [[ "${metadata_values[OPERATION]}" == sandbox-install || "${metadata_values[OPERATION]}" == deployment ]]; then
         local account_receipt="$transaction_dir/accounts.tsv"
         if [[ -e "$account_receipt" || -L "$account_receipt" ]]; then
             owner_mode="$(stat -c '%a|%u' -- "$account_receipt" 2>/dev/null || printf '000|x')"
@@ -221,6 +245,8 @@ pnm_tx_load_for_inspect() {
     elif [[ -e "$transaction_dir/accounts.tsv" || -L "$transaction_dir/accounts.tsv" ]]; then
         return "$PNM_EXIT_CONFIG"
     fi
+    if ((marker_committed == 0)); then
+    [[ -f "$journal" && ! -L "$journal" && "$(stat -c '%a|%u' -- "$journal")" == "600|$EUID" ]] || return "$PNM_EXIT_CONFIG"
     while IFS=$'\t' read -r timestamp event detail || [[ -n "$timestamp$event$detail" ]]; do
         [[ "$timestamp" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ && "$event" =~ ^[A-Z_]+$ ]] || return "$PNM_EXIT_CONFIG"
         [[ "$terminal" != COMMIT && "$terminal" != ROLLED_BACK ]] || return "$PNM_EXIT_CONFIG"
@@ -266,9 +292,15 @@ pnm_tx_load_for_inspect() {
         ((line_count += 1))
     done <"$journal"
     ((begin_count == 1)) || return "$PNM_EXIT_CONFIG"
+    if [[ "${metadata_values[OPERATION]}" == deployment && "$terminal" == COMMIT ]]; then
+        return "$PNM_EXIT_CONFIG"
+    fi
+    else
+        terminal=COMMIT
+    fi
     while IFS=$'\t' read -r state label encoded_path original_state original_mode expected_hash || [[ -n "$state$label$encoded_path$original_state$original_mode$expected_hash" ]]; do
         [[ "$state" =~ ^(INTENT|APPLIED|RESTORED)$ && "$label" =~ ^[A-Za-z0-9._-]+$ ]] || return "$PNM_EXIT_CONFIG"
-        [[ "$original_state" =~ ^(PRESENT|MISSING)$ && ( "$original_mode" == MISSING || "$original_mode" =~ ^[0-7]{3,4}$ ) ]] || return "$PNM_EXIT_CONFIG"
+        [[ "$original_state" =~ ^(PRESENT|MISSING)$ && ( "$original_mode" == MISSING || "$original_mode" =~ ^[0-7]{1,4}$ ) ]] || return "$PNM_EXIT_CONFIG"
         [[ "$expected_hash" =~ ^[a-f0-9]{64}$ ]] || return "$PNM_EXIT_CONFIG"
         decoded_path="$(printf '%s' "$encoded_path" | base64 -d 2>/dev/null)" || return "$PNM_EXIT_CONFIG"
         [[ "$decoded_path" == /* && "$decoded_path" != *$'\n'* && "$decoded_path" != *$'\t'* ]] || return "$PNM_EXIT_CONFIG"
@@ -277,6 +309,8 @@ pnm_tx_load_for_inspect() {
             INTENT)
                 [[ -z "${seen_labels[$label]-}" ]] || return "$PNM_EXIT_CONFIG"
                 seen_labels[$label]=intent
+                change_records[$label]="$encoded_path|$original_state|$original_mode|$expected_hash"
+                change_indexes[$label]="${#change_labels[@]}"
                 current_label="$label" current_path="$decoded_path" current_state="$original_state" current_mode="$original_mode" current_hash="$expected_hash" current_stage=INTENT
                 change_labels+=("$label") change_states+=(intent) change_paths+=("$decoded_path") change_original_states+=("$original_state") change_modes+=("$original_mode") change_hashes+=("$expected_hash")
                 ;;
@@ -284,21 +318,25 @@ pnm_tx_load_for_inspect() {
                 [[ "${seen_labels[$label]-}" == intent && "$current_label" == "$label" && "$current_path" == "$decoded_path" && "$current_state" == "$original_state" && "$current_mode" == "$original_mode" && "$current_hash" == "$expected_hash" && "$current_stage" == INTENT ]] || return "$PNM_EXIT_CONFIG"
                 seen_labels[$label]=applied
                 current_stage=APPLIED
-                change_states[${#change_states[@]}]=applied
+                change_states[${change_indexes[$label]}]=applied
                 ;;
             RESTORED)
-                [[ "${seen_labels[$label]-}" == applied && "$current_label" == "$label" && "$current_path" == "$decoded_path" && "$current_state" == "$original_state" && "$current_mode" == "$original_mode" && "$current_hash" == "$expected_hash" && "$current_stage" == APPLIED ]] || return "$PNM_EXIT_CONFIG"
+                # Recovery runs in reverse order, independently of the last write.
+                [[ ( "${seen_labels[$label]-}" == applied || "${seen_labels[$label]-}" == intent ) &&
+                    "${change_records[$label]-}" == "$encoded_path|$original_state|$original_mode|$expected_hash" ]] || return "$PNM_EXIT_CONFIG"
                 seen_labels[$label]=restored
                 current_stage=RESTORED
-                change_states[${#change_states[@]}]=restored
+                change_states[${change_indexes[$label]}]=restored
                 ;;
         esac
         if [[ "$original_state" == PRESENT ]]; then
             [[ -f "$transaction_dir/snapshots/$label" && ! -L "$transaction_dir/snapshots/$label" && -f "$transaction_dir/snapshots/$label.state" && ! -L "$transaction_dir/snapshots/$label.state" ]] || return "$PNM_EXIT_CONFIG"
-            [[ "$(<"$transaction_dir/snapshots/$label.state")" == "PRESENT|$original_mode" ]] || return "$PNM_EXIT_CONFIG"
+            local snapshot_info
+            snapshot_info="$(pnm_tx_read_snapshot_metadata "$transaction_dir/snapshots/$label.state" "${metadata_values[SCHEMA_VERSION]}")" || return $?
+            [[ "$snapshot_info" == "PRESENT|$original_mode|"* ]] || return "$PNM_EXIT_CONFIG"
             [[ "$(stat -c '%a' -- "$transaction_dir/snapshots/$label")" == 600 ]] || return "$PNM_EXIT_CONFIG"
         else
-            [[ -f "$transaction_dir/snapshots/$label.state" && ! -L "$transaction_dir/snapshots/$label.state" && "$(<"$transaction_dir/snapshots/$label.state")" == 'MISSING|MISSING' ]] || return "$PNM_EXIT_CONFIG"
+            [[ "$(pnm_tx_read_snapshot_metadata "$transaction_dir/snapshots/$label.state" "${metadata_values[SCHEMA_VERSION]}")" == 'MISSING|MISSING|MISSING|MISSING' ]] || return "$PNM_EXIT_CONFIG"
         fi
     done <"$manifest"
     snapshot_root="$transaction_dir/snapshots"
@@ -323,10 +361,19 @@ pnm_tx_load_for_inspect() {
         ABANDONED) PNM_TX_INSPECT_STATE=ABANDONED ;;
         '') PNM_TX_INSPECT_STATE=INTERRUPTED ;;
     esac
+    ((commit_uncertain == 0)) || PNM_TX_INSPECT_STATE=RECOVERY_REQUIRED
+    if [[ "${metadata_values[OPERATION]}" == deployment ]] && ((marker_committed == 0)); then
+        if pnm_tx_validate_deployment_record "$transaction_dir/deployment.env"; then :; else
+            # Baseline publication may fail before the first managed mutation.
+            # A verified empty terminal rollback needs no recovery baseline.
+            [[ "$PNM_TX_INSPECT_STATE" == ROLLED_BACK && ! -s "$manifest" &&
+                ! -s "$transaction_dir/directories.tsv" && ! -s "$transaction_dir/accounts.tsv" ]] || return "$PNM_EXIT_CONFIG"
+        fi
+    fi
     PNM_TX_INSPECT_ID="$transaction_id"
     PNM_TX_INSPECT_OPERATION="${metadata_values[OPERATION]}"
     PNM_TX_INSPECT_DEPLOYMENT_ID="${metadata_values[DEPLOYMENT_ID]}"
-    PNM_TX_INSPECT_CHANGES=0
+    PNM_TX_INSPECT_CHANGES="$directory_changes"
     for label in "${!seen_labels[@]}"; do [[ "${seen_labels[$label]}" == restored ]] || ((PNM_TX_INSPECT_CHANGES += 1)); done
 }
 
@@ -336,6 +383,9 @@ pnm_tx_begin() {
 
     ((PNM_TX_ACTIVE == 0)) || return "$PNM_EXIT_SOFTWARE"
     pnm_lock_acquire exclusive || return $?
+    if pnm_tx_assert_no_pending_deployment; then :; else
+        rc=$?; pnm_lock_release; return "$rc"
+    fi
     if PNM_TX_ID="$(pnm_tx_new_id)"; then :; else
         rc=$?
         pnm_lock_release
@@ -354,8 +404,13 @@ pnm_tx_begin() {
     PNM_TX_WRITTEN_PATHS=()
     PNM_TX_WRITTEN_LABELS=()
     PNM_TX_WRITTEN_HASHES=()
+    PNM_TX_WRITTEN_ATTRIBUTES=()
     PNM_TX_ACCOUNT_KEYS=()
     PNM_TX_ACCOUNT_STATES=()
+    PNM_TX_DIRECTORY_PATHS=()
+    PNM_TX_DIRECTORY_ORIGINAL=()
+    PNM_TX_DIRECTORY_EXPECTED=()
+    PNM_TX_DIRECTORY_IDENTITIES=()
 
     if ((PNM_DRY_RUN == 1)); then
         PNM_TX_PATH="dry-run:$PNM_TX_ID"
@@ -390,7 +445,7 @@ pnm_tx_begin() {
         PNM_TX_DEPLOYMENT_ID="$PNM_DEPLOY_ID"
     fi
     metadata="$PNM_TX_PATH/metadata.env"
-    if ! printf 'SCHEMA_VERSION=1\nTRANSACTION_ID=%s\nOPERATION=%s\nDEPLOYMENT_ID=%s\n' \
+    if ! printf 'SCHEMA_VERSION=2\nTRANSACTION_ID=%s\nOPERATION=%s\nDEPLOYMENT_ID=%s\n' \
         "$PNM_TX_ID" "$operation" "$PNM_TX_DEPLOYMENT_ID" >"$metadata"; then
         rm -rf -- "$PNM_TX_PATH"
         pnm_lock_release
@@ -401,6 +456,9 @@ pnm_tx_begin() {
     chmod 0600 -- "$PNM_TX_PATH/journal.tsv" || { rm -rf -- "$PNM_TX_PATH"; pnm_lock_release; return "$PNM_EXIT_NOPERM"; }
     PNM_TX_ACTIVE=1
     pnm_tx_manifest_init || { PNM_TX_ACTIVE=0; rm -rf -- "$PNM_TX_PATH"; pnm_lock_release; return "$PNM_EXIT_CANTCREAT"; }
+    (umask 077; : >"$PNM_TX_PATH/directories.tsv") || {
+        PNM_TX_ACTIVE=0; rm -rf -- "$PNM_TX_PATH"; pnm_lock_release; return "$PNM_EXIT_CANTCREAT";
+    }
     if ! pnm_tx_journal BEGIN "operation=$operation deployment_id=$PNM_TX_DEPLOYMENT_ID"; then
         PNM_TX_ACTIVE=0
         rm -rf -- "$PNM_TX_PATH"
@@ -434,13 +492,189 @@ pnm_tx_file_sha256() {
     printf '%s\n' "$digest"
 }
 
+pnm_tx_require_filesystem_schema() {
+    local -A filesystem_metadata=()
+    pnm_validate_managed_path "$PNM_TX_PATH/metadata.env" || return $?
+    [[ "$(stat -c '%a|%u' -- "$PNM_TX_PATH/metadata.env")" == "600|$EUID" ]] || return "$PNM_EXIT_CONFIG"
+    pnm_config_load "$PNM_TX_PATH/metadata.env" filesystem_metadata SCHEMA_VERSION TRANSACTION_ID OPERATION DEPLOYMENT_ID || return "$PNM_EXIT_CONFIG"
+    [[ "${filesystem_metadata[SCHEMA_VERSION]-}" == 2 && "${filesystem_metadata[TRANSACTION_ID]-}" == "$PNM_TX_ID" &&
+        "${filesystem_metadata[OPERATION]-}" == "$PNM_TX_OPERATION" ]] || return "$PNM_EXIT_CONFIG"
+}
+
+# Schema 1 remains inspectable; it has no ownership evidence and is read-only.
+pnm_tx_read_snapshot_metadata() {
+    local metadata="$1" schema="$2" value
+    [[ -f "$metadata" && ! -L "$metadata" && "$(stat -c '%a|%u' -- "$metadata")" == "600|$EUID" ]] || return "$PNM_EXIT_CONFIG"
+    [[ "$(wc -l <"$metadata")" == 1 ]] || return "$PNM_EXIT_CONFIG"
+    value="$(<"$metadata")"
+    case "$schema:$value" in
+        1:MISSING\|MISSING | 2:MISSING\|MISSING\|MISSING\|MISSING)
+            printf 'MISSING|MISSING|MISSING|MISSING\n' ;;
+        *)
+            if [[ "$schema" == 1 && "$value" =~ ^PRESENT\|[0-7]{1,4}$ ]]; then
+                printf '%s|UNKNOWN|UNKNOWN\n' "$value"
+            elif [[ "$schema" == 2 && "$value" =~ ^PRESENT\|[0-7]{1,4}\|[0-9]+\|[0-9]+$ ]]; then
+                printf '%s\n' "$value"
+            else
+                return "$PNM_EXIT_CONFIG"
+            fi ;;
+    esac
+}
+
+pnm_tx_directory_receipt() {
+    local event="$1" path="$2" original="$3" expected="$4" identity="$5" encoded receipt
+    receipt="$PNM_TX_PATH/directories.tsv"
+    [[ -f "$receipt" && ! -L "$receipt" && "$(stat -c '%a|%u' -- "$receipt")" == "600|$EUID" ]] || return "$PNM_EXIT_CONFIG"
+    encoded="$(printf '%s' "$path" | base64 -w0)" || return "$PNM_EXIT_SOFTWARE"
+    printf '%s\t%s\t%s\t%s\t%s\n' "$event" "$encoded" "$original" "$expected" "$identity" >>"$receipt" || return "$PNM_EXIT_CANTCREAT"
+}
+
+# Persist creation intent before mkdir/chmod, including missing intermediate dirs.
+pnm_tx_prepare_directory() {
+    local path="${1:?directory required}" mode="${2:--}" parent original expected identity index rc=0 create_mode
+    ((PNM_TX_ACTIVE == 1)) || return "$PNM_EXIT_SOFTWARE"
+    ((PNM_DRY_RUN == 0)) || return 0
+    pnm_tx_require_filesystem_schema || return $?
+    pnm_validate_managed_path "$path" || return $?
+    [[ "$mode" == - || "$mode" =~ ^[0-7]{3,4}$ ]] || return "$PNM_EXIT_CONFIG"
+    [[ ! "$path" -ef / ]] || return "$PNM_EXIT_CONFIG"
+    while [[ "$path" == */ ]]; do path="${path%/}"; done
+    for index in "${!PNM_TX_DIRECTORY_PATHS[@]}"; do
+        if [[ "${PNM_TX_DIRECTORY_PATHS[index]}" == "$path" ]]; then
+            # Never take a second baseline after this operation has changed a path.
+            [[ "$mode" == - || "${PNM_TX_DIRECTORY_EXPECTED[index]%%|*}" == "${mode#0}" ]] || return "$PNM_EXIT_CONFIG"
+            return 0
+        fi
+    done
+    if [[ -e "$path" ]]; then
+        [[ -d "$path" ]] || return "$PNM_EXIT_CONFIG"
+        [[ "$mode" != - ]] || return 0
+        original="$(stat -c '%a|%u|%g' -- "$path")" || return "$PNM_EXIT_CONFIG"
+        identity="$(stat -c '%d:%i' -- "$path")" || return "$PNM_EXIT_CONFIG"
+    else
+        parent="$(dirname -- "$path")"
+        if [[ ! -d "$parent" ]]; then
+            pnm_tx_prepare_directory "$parent" - || return $?
+        fi
+        original=MISSING identity=MISSING
+    fi
+    pnm_tx_directory_receipt INTENT "$path" "$original" PENDING "$identity" || return $?
+    index="${#PNM_TX_DIRECTORY_PATHS[@]}"
+    PNM_TX_DIRECTORY_PATHS+=("$path")
+    PNM_TX_DIRECTORY_ORIGINAL+=("$original")
+    PNM_TX_DIRECTORY_EXPECTED+=("$original")
+    PNM_TX_DIRECTORY_IDENTITIES+=("$identity")
+    if [[ "$original" == MISSING ]]; then
+        create_mode="$mode"
+        [[ "$create_mode" != - ]] || create_mode=0755
+        (umask 022; mkdir -m "$create_mode" -- "$path") || rc="$PNM_EXIT_CANTCREAT"
+    elif ! chmod "$mode" -- "$path"; then
+        rc="$PNM_EXIT_NOPERM"
+    fi
+    # Capture the actual result even if chmod or a later receipt write fails.
+    if [[ -d "$path" && ! -L "$path" ]]; then
+        expected="$(stat -c '%a|%u|%g' -- "$path")" || return "$PNM_EXIT_CONFIG"
+        identity="$(stat -c '%d:%i' -- "$path")" || return "$PNM_EXIT_CONFIG"
+        PNM_TX_DIRECTORY_EXPECTED[index]="$expected"
+        PNM_TX_DIRECTORY_IDENTITIES[index]="$identity"
+        pnm_tx_directory_receipt APPLIED "$path" "$original" "$expected" "$identity" || return $?
+    fi
+    return "$rc"
+}
+
+pnm_tx_restore_directories() {
+    local index path original expected identity mode uid gid
+    for ((index=${#PNM_TX_DIRECTORY_PATHS[@]} - 1; index >= 0; index -= 1)); do
+        pnm_tx_require_filesystem_schema || return $?
+        path="${PNM_TX_DIRECTORY_PATHS[index]}"
+        original="${PNM_TX_DIRECTORY_ORIGINAL[index]}"
+        expected="${PNM_TX_DIRECTORY_EXPECTED[index]}"
+        identity="${PNM_TX_DIRECTORY_IDENTITIES[index]}"
+        pnm_validate_managed_path "$path" || return $?
+        if [[ "$original" == MISSING && ! -e "$path" ]]; then
+            : # mkdir failed before creating this directory.
+        else
+            [[ -d "$path" && "$(stat -c '%d:%i' -- "$path")" == "$identity" &&
+                "$(stat -c '%a|%u|%g' -- "$path")" == "$expected" ]] || return "$PNM_EXIT_SOFTWARE"
+            if [[ "$original" == MISSING ]]; then
+                # rmdir refuses foreign contents; never recursively remove resources.
+                rmdir -- "$path" || return "$PNM_EXIT_SOFTWARE"
+            else
+                IFS='|' read -r mode uid gid <<<"$original"
+                chown -- "+$uid:+$gid" "$path" || return "$PNM_EXIT_NOPERM"
+                chmod "$mode" -- "$path" || return "$PNM_EXIT_NOPERM"
+                [[ "$(stat -c '%a|%u|%g' -- "$path")" == "$original" ]] || return "$PNM_EXIT_SOFTWARE"
+            fi
+        fi
+        pnm_tx_directory_receipt RESTORED "$path" "$original" "$expected" "$identity" || return $?
+    done
+}
+
+pnm_tx_inspect_directories() {
+    local directory="$1" schema="$2" result_name="$3" receipt="$1/directories.tsv"
+    local event encoded original expected identity extra path key
+    local attributes_pattern='^[0-7]{1,4}\|[0-9]+\|[0-9]+$'
+    local -A stages=() originals=() expectations=() identities=()
+    local -n result="$result_name"
+    result=0
+    if [[ "$schema" == 1 ]]; then
+        [[ ! -e "$receipt" && ! -L "$receipt" ]] || return "$PNM_EXIT_CONFIG"
+        return 0
+    fi
+    [[ -d "$directory" && -f "$receipt" && ! -L "$receipt" &&
+        "$(stat -c '%a|%u' -- "$receipt")" == "600|$EUID" ]] || return "$PNM_EXIT_CONFIG"
+    while IFS=$'\t' read -r event encoded original expected identity extra || [[ -n "$event$encoded$original$expected$identity$extra" ]]; do
+        [[ -z "$extra" && ( "$original" == MISSING || "$original" =~ $attributes_pattern ) ]] || return "$PNM_EXIT_CONFIG"
+        path="$(printf '%s' "$encoded" | base64 -d 2>/dev/null)" || return "$PNM_EXIT_CONFIG"
+        [[ "$path" == /* && "$path" != / && "$path" != *$'\n'* && "$path" != *$'\t'* && "$path" != *$'\r'* &&
+            "$(printf '%s' "$path" | base64 -w0)" == "$encoded" ]] || return "$PNM_EXIT_CONFIG"
+        # Inspect historical paths as data; do not require them to still exist.
+        [[ "/${path#/}/" != *'/../'* ]] || return "$PNM_EXIT_CONFIG"
+        [[ "$identity" =~ ^[0-9]+:[0-9]+$ || ( "$original" == MISSING && "$identity" == MISSING ) ]] || return "$PNM_EXIT_CONFIG"
+        key="$encoded"
+        case "$event" in
+            INTENT)
+                [[ -z "${stages[$key]-}" && "$expected" == PENDING ]] || return "$PNM_EXIT_CONFIG"
+                originals[$key]="$original" identities[$key]="$identity" ;;
+            APPLIED)
+                [[ "${stages[$key]-}" == INTENT && "${originals[$key]}" == "$original" &&
+                    "$expected" =~ $attributes_pattern && "$identity" =~ ^[0-9]+:[0-9]+$ ]] || return "$PNM_EXIT_CONFIG"
+                [[ "${identities[$key]}" == MISSING || "${identities[$key]}" == "$identity" ]] || return "$PNM_EXIT_CONFIG"
+                expectations[$key]="$expected" identities[$key]="$identity" ;;
+            RESTORED)
+                [[ "${originals[$key]-}" == "$original" ]] || return "$PNM_EXIT_CONFIG"
+                if [[ "${stages[$key]-}" == APPLIED ]]; then
+                    [[ "${expectations[$key]}" == "$expected" && "${identities[$key]}" == "$identity" ]] || return "$PNM_EXIT_CONFIG"
+                else
+                    # Mutation may succeed while its APPLIED append fails. The
+                    # verified compensation then legitimately follows INTENT.
+                    [[ "${stages[$key]-}" == INTENT ]] || return "$PNM_EXIT_CONFIG"
+                    if [[ "$expected" == MISSING ]]; then
+                        [[ "$original" == MISSING && "$identity" == MISSING ]] || return "$PNM_EXIT_CONFIG"
+                    else
+                        [[ "$expected" =~ $attributes_pattern && "$identity" =~ ^[0-9]+:[0-9]+$ &&
+                            ( "${identities[$key]}" == MISSING || "${identities[$key]}" == "$identity" ) ]] || return "$PNM_EXIT_CONFIG"
+                    fi
+                fi ;;
+            *) return "$PNM_EXIT_CONFIG" ;;
+        esac
+        stages[$key]="$event"
+    done <"$receipt"
+    for key in "${!stages[@]}"; do
+        [[ "${stages[$key]}" == RESTORED ]] || ((result += 1))
+    done
+    return 0
+}
+
 pnm_tx_snapshot_file() {
     local source="${1:?source file required}"
     local label="${2:?snapshot label required}"
-    local snapshot_root snapshot metadata mode owner_mode
+    local snapshot_root snapshot metadata attributes owner_mode
 
     ((PNM_TX_ACTIVE == 1)) || return "$PNM_EXIT_SOFTWARE"
     ((PNM_DRY_RUN == 0)) || return 0
+    pnm_tx_require_filesystem_schema || return $?
+    pnm_validate_managed_path "$source" || return $?
     [[ "$label" =~ ^[A-Za-z0-9._-]+$ ]] || return "$PNM_EXIT_CONFIG"
     snapshot_root="$PNM_TX_PATH/snapshots"
     pnm_mkdir_mode 0700 "$snapshot_root" || return "$PNM_EXIT_CANTCREAT"
@@ -449,32 +683,35 @@ pnm_tx_snapshot_file() {
     [[ "$owner_mode" == "700|$EUID" ]] || return "$PNM_EXIT_NOPERM"
     snapshot="$snapshot_root/$label"
     metadata="$snapshot_root/$label.state"
+    # A repeated label must never replace the operation's original baseline.
+    [[ ! -e "$metadata" && ! -L "$metadata" && ! -e "$snapshot" && ! -L "$snapshot" ]] || return "$PNM_EXIT_CONFIG"
     if [[ ! -e "$source" && ! -L "$source" ]]; then
-        printf 'MISSING|MISSING\n' >"$metadata" || return "$PNM_EXIT_CANTCREAT"
+        printf 'MISSING|MISSING|MISSING|MISSING\n' >"$metadata" || return "$PNM_EXIT_CANTCREAT"
         chmod 0600 -- "$metadata" || return "$PNM_EXIT_NOPERM"
         pnm_tx_journal SNAPSHOT "label=$label state=MISSING" || return "$PNM_EXIT_CANTCREAT"
         return 0
     fi
     [[ -f "$source" && ! -L "$source" ]] || return "$PNM_EXIT_CONFIG"
-    mode="$(stat -c '%a' -- "$source" 2>/dev/null)" || return "$PNM_EXIT_CONFIG"
+    attributes="$(stat -c '%a|%u|%g' -- "$source" 2>/dev/null)" || return "$PNM_EXIT_CONFIG"
     install -m 0600 -- "$source" "$snapshot" || return "$PNM_EXIT_CANTCREAT"
-    printf 'PRESENT|%s\n' "$mode" >"$metadata" || return "$PNM_EXIT_CANTCREAT"
+    printf 'PRESENT|%s\n' "$attributes" >"$metadata" || return "$PNM_EXIT_CANTCREAT"
     chmod 0600 -- "$metadata" || return "$PNM_EXIT_NOPERM"
     pnm_tx_journal SNAPSHOT "label=$label state=PRESENT" || return "$PNM_EXIT_CANTCREAT"
 }
 
 pnm_tx_snapshot_state() {
-    local label="${1:?snapshot label required}" metadata state mode
+    local label="${1:?snapshot label required}" metadata value state mode uid gid
 
+    [[ "$label" =~ ^[A-Za-z0-9._-]+$ ]] || return "$PNM_EXIT_CONFIG"
     metadata="$PNM_TX_PATH/snapshots/$label.state"
-    [[ -f "$metadata" && ! -L "$metadata" ]] || return "$PNM_EXIT_CONFIG"
-    IFS='|' read -r state mode <"$metadata" || return "$PNM_EXIT_CONFIG"
+    value="$(pnm_tx_read_snapshot_metadata "$metadata" 2)" || return $?
+    IFS='|' read -r state mode uid gid <<<"$value"
     case "$state" in
-        MISSING) [[ "$mode" == MISSING ]] || return "$PNM_EXIT_CONFIG"; printf 'MISSING|MISSING\n' ;;
+        MISSING) printf '%s\n' "$value" ;;
         PRESENT)
-            [[ "$mode" =~ ^[0-7]{3,4}$ ]] || return "$PNM_EXIT_CONFIG"
+            [[ "$mode" =~ ^[0-7]{1,4}$ ]] || return "$PNM_EXIT_CONFIG"
             [[ -f "$PNM_TX_PATH/snapshots/$label" && ! -L "$PNM_TX_PATH/snapshots/$label" && "$(stat -c '%a' -- "$PNM_TX_PATH/snapshots/$label")" == 600 ]] || return "$PNM_EXIT_CONFIG"
-            printf 'PRESENT|%s\n' "$mode"
+            printf '%s\n' "$value"
             ;;
         *) return "$PNM_EXIT_CONFIG" ;;
     esac
@@ -484,17 +721,29 @@ pnm_tx_restore_file() {
     local source="${1:?source file required}"
     local label="${2:?snapshot label required}"
     local expected_sha256="${3:?expected written sha256 required}"
-    local snapshot_root snapshot metadata state mode current original_state original_mode expected_hash
+    local snapshot_root snapshot state current original_state original_mode expected_hash
+    local snapshot_info original_uid original_gid staged restored_hash index
 
     ((PNM_TX_ACTIVE == 1)) || return "$PNM_EXIT_SOFTWARE"
     ((PNM_DRY_RUN == 0)) || return 0
+    pnm_tx_require_filesystem_schema || return $?
+    pnm_validate_managed_path "$source" || return $?
     [[ "$label" =~ ^[A-Za-z0-9._-]+$ ]] || return "$PNM_EXIT_CONFIG"
     snapshot_root="$PNM_TX_PATH/snapshots"
     snapshot="$snapshot_root/$label"
-    metadata="$snapshot_root/$label.state"
-    [[ -r "$metadata" ]] || return "$PNM_EXIT_CONFIG"
-    IFS='|' read -r state original_mode <"$metadata" || return "$PNM_EXIT_CONFIG"
+    snapshot_info="$(pnm_tx_snapshot_state "$label")" || return $?
+    IFS='|' read -r state original_mode original_uid original_gid <<<"$snapshot_info"
     current="$(pnm_tx_file_sha256 "$source")" || return $?
+    if [[ "$PNM_TX_OPERATION" == deployment ]]; then
+        for index in "${!PNM_TX_WRITTEN_PATHS[@]}"; do
+            [[ "${PNM_TX_WRITTEN_PATHS[index]}" == "$source" ]] || continue
+            if [[ "$(stat -c '%a|%u|%g' -- "$source")" != "${PNM_TX_WRITTEN_ATTRIBUTES[index]}" ]]; then
+                PNM_TX_RECOVERY_REQUIRED=1
+                pnm_tx_journal RECOVERY_REQUIRED "label=$label metadata_drift" || true
+                return "$PNM_EXIT_SOFTWARE"
+            fi
+        done
+    fi
     if [[ "$current" != "$expected_sha256" ]]; then
         PNM_TX_RECOVERY_REQUIRED=1
         pnm_tx_journal RECOVERY_REQUIRED "label=$label current_hash_mismatch" || true
@@ -504,7 +753,7 @@ pnm_tx_restore_file() {
     original_state="$state"
     if [[ "$state" == PRESENT ]]; then
         [[ -f "$snapshot" && ! -L "$snapshot" ]] || return "$PNM_EXIT_CONFIG"
-        [[ "$original_mode" =~ ^[0-7]{3,4}$ ]] || return "$PNM_EXIT_CONFIG"
+        [[ "$original_mode" =~ ^[0-7]{1,4}$ ]] || return "$PNM_EXIT_CONFIG"
     else
         [[ "$original_mode" == MISSING ]] || return "$PNM_EXIT_CONFIG"
     fi
@@ -514,7 +763,17 @@ pnm_tx_restore_file() {
             ;;
         PRESENT)
             [[ -f "$snapshot" && ! -L "$snapshot" ]] || return "$PNM_EXIT_CONFIG"
-            install -m "$original_mode" -- "$snapshot" "$source" || return "$PNM_EXIT_CANTCREAT"
+            staged="$(mktemp -- "$(dirname -- "$source")/.pnm-restore.XXXXXXXX")" || return "$PNM_EXIT_CANTCREAT"
+            # Ownership must precede the final mode: chown can clear set-id bits.
+            if ! install -m 0600 -- "$snapshot" "$staged" ||
+                ! chown -- "+$original_uid:+$original_gid" "$staged" ||
+                ! chmod "$original_mode" -- "$staged" || ! mv -f -- "$staged" "$source"; then
+                rm -f -- "$staged"
+                return "$PNM_EXIT_CANTCREAT"
+            fi
+            restored_hash="$(pnm_tx_file_sha256 "$snapshot")" || return $?
+            [[ "$(pnm_tx_file_sha256 "$source")" == "$restored_hash" &&
+                "$(stat -c '%a|%u|%g' -- "$source")" == "$original_mode|$original_uid|$original_gid" ]] || return "$PNM_EXIT_SOFTWARE"
             ;;
         *) return "$PNM_EXIT_CONFIG" ;;
     esac
@@ -522,23 +781,60 @@ pnm_tx_restore_file() {
     pnm_tx_journal RESTORED "label=$label" || return "$PNM_EXIT_CANTCREAT"
 }
 
+pnm_tx_record_written_metadata() {
+    local path="$1" index attributes encoded receipt="$PNM_TX_PATH/file-attributes.tsv"
+    [[ "$PNM_TX_OPERATION" == deployment ]] || return 0
+    pnm_validate_managed_path "$path" || return $?
+    if [[ -e "$receipt" || -L "$receipt" ]]; then
+        [[ -f "$receipt" && ! -L "$receipt" && "$(stat -c '%a|%u' -- "$receipt")" == "600|$EUID" ]] || return "$PNM_EXIT_CONFIG"
+    fi
+    for index in "${!PNM_TX_WRITTEN_PATHS[@]}"; do
+        [[ "${PNM_TX_WRITTEN_PATHS[index]}" == "$path" ]] || continue
+        [[ "$(pnm_tx_file_sha256 "$path")" == "${PNM_TX_WRITTEN_HASHES[index]}" ]] || return "$PNM_EXIT_SOFTWARE"
+        attributes="$(stat -c '%a|%u|%g' -- "$path")" || return "$PNM_EXIT_CONFIG"
+        PNM_TX_WRITTEN_ATTRIBUTES[index]="$attributes"
+        encoded="$(printf '%s' "$path" | base64 -w0)" || return "$PNM_EXIT_SOFTWARE"
+        (umask 077; printf '%s\t%s\t%s\t%s\n' "${PNM_TX_WRITTEN_LABELS[index]}" "$encoded" "$attributes" \
+            "${PNM_TX_WRITTEN_HASHES[index]}" >>"$receipt") || return "$PNM_EXIT_CANTCREAT"
+        return 0
+    done
+    return "$PNM_EXIT_CONFIG"
+}
+
+pnm_tx_verify_written_resources() {
+    local index path
+    for index in "${!PNM_TX_WRITTEN_PATHS[@]}"; do
+        path="${PNM_TX_WRITTEN_PATHS[index]}"
+        pnm_validate_managed_path "$path" || return $?
+        [[ "$(pnm_tx_file_sha256 "$path")" == "${PNM_TX_WRITTEN_HASHES[index]}" &&
+            "$(stat -c '%a|%u|%g' -- "$path")" == "${PNM_TX_WRITTEN_ATTRIBUTES[index]}" ]] || return "$PNM_EXIT_SOFTWARE"
+    done
+    for index in "${!PNM_TX_DIRECTORY_PATHS[@]}"; do
+        path="${PNM_TX_DIRECTORY_PATHS[index]}"
+        pnm_validate_managed_path "$path" || return $?
+        [[ -d "$path" && "$(stat -c '%a|%u|%g' -- "$path")" == "${PNM_TX_DIRECTORY_EXPECTED[index]}" &&
+            "$(stat -c '%d:%i' -- "$path")" == "${PNM_TX_DIRECTORY_IDENTITIES[index]}" ]] || return "$PNM_EXIT_SOFTWARE"
+    done
+}
+
 pnm_tx_write_file() {
     local source="${1:?source file required}"
     local destination="${2:?destination file required}"
     local label="${3:?snapshot label required}"
     local mode="${4:?destination mode required}"
-    local destination_parent digest snapshot_info original_state original_mode
+    local destination_parent digest snapshot_info original_state original_mode original_uid original_gid
     local staged_destination
 
     ((PNM_TX_ACTIVE == 1)) || return "$PNM_EXIT_SOFTWARE"
     ((PNM_DRY_RUN == 0)) || return 0
+    pnm_validate_managed_path "$destination" || return $?
     [[ -f "$source" && ! -L "$source" ]] || return "$PNM_EXIT_CONFIG"
     [[ "$mode" =~ ^[0-7]{3,4}$ ]] || return "$PNM_EXIT_CONFIG"
     destination_parent="$(dirname -- "$destination")"
     [[ -d "$destination_parent" && ! -L "$destination_parent" ]] || return "$PNM_EXIT_CANTCREAT"
     pnm_tx_snapshot_file "$destination" "$label" || return $?
     snapshot_info="$(pnm_tx_snapshot_state "$label")" || return $?
-    IFS='|' read -r original_state original_mode <<<"$snapshot_info"
+    IFS='|' read -r original_state original_mode original_uid original_gid <<<"$snapshot_info"
     staged_destination="$(mktemp -- "$destination_parent/.pnm-write.XXXXXXXX")" || return "$PNM_EXIT_CANTCREAT"
     if ! install -m "$mode" -- "$source" "$staged_destination"; then
         rm -f -- "$staged_destination"
@@ -556,6 +852,8 @@ pnm_tx_write_file() {
     PNM_TX_WRITTEN_PATHS+=("$destination")
     PNM_TX_WRITTEN_LABELS+=("$label")
     PNM_TX_WRITTEN_HASHES+=("$digest")
+    PNM_TX_WRITTEN_ATTRIBUTES+=('')
+    pnm_tx_record_written_metadata "$destination" || return $?
     pnm_tx_manifest_append APPLIED "$label" "$destination" "$original_state" "$original_mode" "$digest" || return "$PNM_EXIT_CANTCREAT"
     pnm_tx_journal WRITE "label=$label" || return "$PNM_EXIT_CANTCREAT"
 }
@@ -602,6 +900,7 @@ pnm_tx_run() {
         PNM_TX_STEP_FAILURE_NAME="$step"
         PNM_TX_STEP_FAILURE_RC="$rc"
         pnm_tx_journal STEP_FAILED "$step rc=$rc" || PNM_TX_RECOVERY_REQUIRED=1
+        [[ "$PNM_TX_OPERATION" != deployment ]] || return "$rc"
         if ! pnm_tx_rollback; then
             ((PNM_TX_ROLLBACK_FAILURE_RC != 0)) || PNM_TX_ROLLBACK_FAILURE_RC="$PNM_EXIT_SOFTWARE"
             return "$rc"
@@ -611,6 +910,7 @@ pnm_tx_run() {
     [[ -z "$rollback_function" ]] || pnm_tx_add_rollback "$rollback_function"
     if ! pnm_tx_journal STEP_DONE "$step"; then
         PNM_TX_RECOVERY_REQUIRED=1
+        [[ "$PNM_TX_OPERATION" != deployment ]] || return "$PNM_EXIT_CANTCREAT"
         pnm_tx_rollback || return "$PNM_EXIT_SOFTWARE"
         return "$PNM_EXIT_CANTCREAT"
     fi
@@ -620,6 +920,8 @@ pnm_tx_rollback() {
     local index rollback_function rc=0
 
     ((PNM_TX_ACTIVE == 1)) || return 0
+    ((PNM_TX_COMMITTED == 0)) || return "$PNM_EXIT_SOFTWARE"
+    ((PNM_TX_ROLLED_BACK == 0)) || return 0
     pnm_tx_journal ROLLBACK_BEGIN '' || PNM_TX_RECOVERY_REQUIRED=1
     for ((index=${#PNM_TX_ROLLBACKS[@]} - 1; index >= 0; index -= 1)); do
         rollback_function="${PNM_TX_ROLLBACKS[$index]}"
@@ -645,7 +947,23 @@ pnm_tx_rollback() {
 }
 
 pnm_tx_commit() {
+    local rc
     ((PNM_TX_ACTIVE == 1)) || return "$PNM_EXIT_SOFTWARE"
+    if [[ "$PNM_TX_OPERATION" == deployment ]]; then
+        pnm_tx_journal COMMIT_INTENT '' || return "$PNM_EXIT_CANTCREAT"
+        if pnm_tx_publish_deployment_commit; then :; else
+            rc=$?
+            if [[ -e "$PNM_TX_PATH/commit.env" || -L "$PNM_TX_PATH/commit.env" ]]; then
+                PNM_TX_RECOVERY_REQUIRED=1
+                pnm_tx_journal RECOVERY_REQUIRED 'commit publication durability uncertain' || true
+                return "$PNM_EXIT_SOFTWARE"
+            fi
+            return "$rc"
+        fi
+        PNM_TX_COMMITTED=1
+        pnm_tx_journal COMMIT '' || pnm_warn 'Deployment committed; transaction progress journal could not be completed.'
+        return 0
+    fi
     if ! pnm_tx_journal COMMIT ''; then
         PNM_TX_RECOVERY_REQUIRED=1
         return "$PNM_EXIT_CANTCREAT"
@@ -673,6 +991,11 @@ pnm_tx_close() {
     PNM_TX_WRITTEN_PATHS=()
     PNM_TX_WRITTEN_LABELS=()
     PNM_TX_WRITTEN_HASHES=()
+    PNM_TX_WRITTEN_ATTRIBUTES=()
+    PNM_TX_DIRECTORY_PATHS=()
+    PNM_TX_DIRECTORY_ORIGINAL=()
+    PNM_TX_DIRECTORY_EXPECTED=()
+    PNM_TX_DIRECTORY_IDENTITIES=()
     PNM_TX_DEPLOYMENT_ID='none'
     PNM_TX_OPERATION=''
     pnm_lock_release || lock_rc=$?

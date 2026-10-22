@@ -21,6 +21,10 @@ source "$PROJECT_ROOT/lib/node.sh"
 source "$PROJECT_ROOT/lib/render.sh"
 source "$PROJECT_ROOT/lib/tls.sh"
 source "$PROJECT_ROOT/adapters/network.sh"
+PNM_CONFIG_DIR="$TEST_ROOT/fixtures/config-secrets"
+NODE_SUITE_STATE="$(mktemp -d)"
+export PNM_LOCK_FILE="$NODE_SUITE_STATE/lock" PNM_STATE_DIR="$NODE_SUITE_STATE/state"
+trap 'rm -rf -- "$NODE_SUITE_STATE"' EXIT
 
 # Link tests isolate URI selection; certificate SAN validation is covered by
 # test_hy2_sni.sh and sandbox install tests use real generated certificates.
@@ -34,15 +38,7 @@ assert_sensitive_output_contains() { [[ "${1-}" == *"${2-}"* ]]; }
 assert_sensitive_output_not_contains() { [[ "${1-}" != *"${2-}"* ]]; }
 pnm_listener_present() { return 0; }
 pnm_systemd_show_value() { printf '0123456789abcdef0123456789abcdef\n'; }
-
-pnm_test_record_applied_config() {
-    local core="${1:?Core ID required}" config="${2:?config required}" directory
-    directory="$PNM_STATE_DIR/cores/$core"
-    mkdir -p -- "$directory"
-    printf 'SCHEMA_VERSION=1\nCORE=%s\nCONFIG_SHA256=%s\nSERVICE_INVOCATION_ID=0123456789abcdef0123456789abcdef\n' \
-        "$core" "$(sha256sum -- "$config" | awk '{print $1}')" >"$directory/applied.env"
-    chmod 0600 -- "$directory/applied.env"
-}
+pnm_systemd_active_state() { printf 'active\n'; }
 
 test_validate_existing_node() {
     run_capture env PNM_CONFIG_DIR="$TEST_ROOT/fixtures/config-valid" "$PROJECT_ROOT/bin/pnm" node validate
@@ -54,7 +50,7 @@ test_validate_existing_node() {
 test_show_hides_secrets_and_exposes_node() {
     local temp_dir
     temp_dir="$(mktemp -d)"
-    declare -gA NODE=() REALITY=()
+    declare -gA NODE=() REALITY=() HYSTERIA=()
     PNM_CONFIG_DIR="$TEST_ROOT/fixtures/config-secrets"
     PNM_STATE_DIR="$temp_dir/state"
     PNM_XRAY_CONFIG="$temp_dir/runtime.json"
@@ -336,6 +332,9 @@ test_node_links_keep_partial_success_and_report_hy2_drift() {
     declare -gA REALITY=()
     pnm_load_reality_secret REALITY || return 1
     pnm_render_xray_config HY2_TEST_NODE REALITY >"$PNM_XRAY_CONFIG" || return 1
+    PNM_STATE_DIR="$temp_dir/state"
+    pnm_test_record_applied_config xray "$PNM_XRAY_CONFIG" || return 1
+    pnm_test_record_applied_config hysteria2 "$PNM_HY2_CONFIG" || return 1
     sed -i "s@^  password: .*@  password: 'RUNTIME-SECRET-MUST-NOT-LEAK'@" "$PNM_HY2_CONFIG"
     pnm_xray_config_matches_node() { return 0; }
     pnm_require_root() { return 0; }
@@ -357,7 +356,7 @@ test_node_links_keep_partial_success_and_report_hy2_drift() {
     rm -rf -- "$temp_dir"
     assert_eq 0 "$RUN_RC" || return 1
     assert_sensitive_output_contains "$RUN_OUTPUT" '"hysteria2":null' || return 1
-    assert_sensitive_output_contains "$RUN_OUTPUT" '"hysteria2_status":"omitted"' || return 1
+    assert_sensitive_output_contains "$RUN_OUTPUT" '"hysteria2_status":"drift"' || return 1
     assert_sensitive_output_contains "$RUN_ERROR" 'auth.password' || return 1
     assert_sensitive_output_not_contains "$RUN_OUTPUT$RUN_ERROR" 'RUNTIME-SECRET-MUST-NOT-LEAK' || return 1
     assert_sensitive_output_not_contains "$RUN_OUTPUT$RUN_ERROR" 'abcdefghijklmnopqrstuvwxyz012345'
@@ -470,10 +469,10 @@ test_node_show_reports_runtime_drift_without_secrets() {
     pnm_systemd_active_state() { printf 'active\n'; }
     run_capture pnm_node_show
     rc=$RUN_RC
-    rm -rf -- "$temp_dir"
     assert_eq 78 "$rc" || return 1
     assert_contains "$RUN_OUTPUT" 'xray: 443 -> example.com (example.com:443)' || return 1
-    assert_contains "$RUN_OUTPUT" 'service=active config=drift port=443 sni=www.cloudflare.com target=www.cloudflare.com:443' || return 1
+    assert_contains "$RUN_OUTPUT" 'service=active config=drift applied=unknown link=drift' || return 1
+    assert_contains "$RUN_OUTPUT" 'port=443 sni=www.cloudflare.com target=www.cloudflare.com:443' || return 1
     assert_contains "$RUN_ERROR" 'differs from the runtime Xray configuration' || return 1
     assert_sensitive_output_not_contains "$RUN_OUTPUT$RUN_ERROR" '11111111-2222-4333-8444-555555555555'
 
@@ -481,6 +480,7 @@ test_node_show_reports_runtime_drift_without_secrets() {
     PNM_OUTPUT_MODE=json
     run_capture pnm_node_show
     PNM_OUTPUT_MODE="$old_output_mode"
+    rm -rf -- "$temp_dir"
     assert_eq 78 "$RUN_RC" || return 1
     assert_contains "$RUN_OUTPUT" '{"schema":"pnm.node.v1"' || return 1
     assert_contains "$RUN_OUTPUT" '"configuration_consistency":"drift"' || return 1
@@ -521,7 +521,7 @@ test_node_links_refuse_runtime_configuration_drift() {
     PNM_XRAY_CONFIG="$old_xray_config"
     rm -rf -- "$temp_dir"
     assert_eq 78 "$rc" || return 1
-    assert_contains "$RUN_ERROR" 'Xray link omitted: runtime configuration differs from node.conf' || return 1
+    assert_sensitive_output_contains "$RUN_OUTPUT$RUN_ERROR" 'Xray link omitted: runtime configuration differs from node.conf' || return 1
     assert_sensitive_output_not_contains "$RUN_OUTPUT" 'vless://'
 }
 

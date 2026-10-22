@@ -48,12 +48,6 @@ prepare_deploy() {
     pnm_systemd_active_state() { printf 'inactive\n'; }
     pnm_systemd_enabled_state() { printf 'disabled\n'; }
     pnm_systemctl() { return 0; }
-    stat() {
-        case "$*" in
-            *"$PNM_STATE_DIR"*) printf '700|%s\n' "$EUID" ;;
-            *) command stat "$@" ;;
-        esac
-    }
     pnm_deploy_restore_service_state() { ((DEPLOY_RESTORE_CALLS += 1)); }
 }
 
@@ -153,11 +147,9 @@ test_failed_deploy_restores_prior_active_and_enabled_state() {
 }
 
 test_post_health_journal_failure_still_restores_prior_services() {
-    local rc
-    PNM_DEPLOY_ACTIVE=0
-    PNM_DEPLOY_JOURNAL_ERROR=0
-    DEPLOY_RESTORE_CALLS=0
-    pnm_deploy_begin() { PNM_DEPLOY_ACTIVE=1; return 0; }
+    local rc temp_dir
+    temp_dir="$(mktemp -d)"
+    prepare_deploy "$temp_dir"
     pnm_deploy_run_phase() {
         if [[ "$1" == post-health ]]; then
             PNM_DEPLOY_JOURNAL_ERROR=1
@@ -165,10 +157,10 @@ test_post_health_journal_failure_still_restores_prior_services() {
         fi
         return 0
     }
-    pnm_deploy_close() { PNM_DEPLOY_ACTIVE=0; return 0; }
     if pnm_deploy_execute >/dev/null 2>&1; then rc=0; else rc=$?; fi
     assert_eq "$PNM_EXIT_CANTCREAT" "$rc" || return 1
     assert_eq 1 "$DEPLOY_RESTORE_CALLS"
+    rm -rf -- "$temp_dir"
 }
 
 run_test 'one-click deploy runs Core stages without SSH or UFW' test_core_deploy_runs_four_stages

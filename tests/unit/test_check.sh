@@ -31,6 +31,7 @@ done
 source "$TEST_ROOT/testlib.sh"
 # shellcheck source=../../lib/common.sh
 source "$PROJECT_ROOT/lib/common.sh"
+source "$PROJECT_ROOT/lib/output.sh"
 source "$PROJECT_ROOT/lib/config.sh"
 source "$PROJECT_ROOT/lib/render.sh"
 source "$PROJECT_ROOT/lib/tls.sh"
@@ -65,6 +66,7 @@ run_fake_pnm() {
         PNM_FAKE_PROFILE="${PNM_FAKE_PROFILE:-pass}" \
         PNM_CONFIG_DIR="$CHECK_CONFIG_DIR" \
         PNM_STATE_DIR="$CHECK_STATE_DIR" \
+        PNM_LOCK_FILE="$CHECK_STATE_DIR/pnm.lock" \
         PNM_XRAY_BIN="$FAKE_DIR/xray" \
         PNM_HY2_BIN="${PNM_HY2_BIN:-$FAKE_DIR/hysteria}" \
         PNM_OS_RELEASE_FILE="${PNM_OS_RELEASE_FILE:-$TEST_ROOT/fixtures/os-release-debian-13}" \

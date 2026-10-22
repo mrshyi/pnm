@@ -81,6 +81,19 @@ test_symlink_config_rejected() {
     assert_eq 78 "$rc"
 }
 
+test_config_rejects_non_associative_targets() (
+    local scalar=unchanged rc
+    local -a indexed=(unchanged)
+    PNM_CONFIG_DIR="$TEST_ROOT/fixtures/config-valid"
+    if pnm_load_node_config scalar >/dev/null 2>&1; then rc=0; else rc=$?; fi
+    assert_eq 78 "$rc" || return 1
+    assert_eq unchanged "$scalar" || return 1
+    if pnm_load_node_config indexed >/dev/null 2>&1; then rc=0; else rc=$?; fi
+    assert_eq 78 "$rc" || return 1
+    assert_eq unchanged "${indexed[0]}"
+)
+
+run_test 'configuration loading rejects scalar or indexed targets without mutation' test_config_rejects_non_associative_targets
 run_test 'valid node configuration parses as data' test_valid_config
 run_test 'command substitution is rejected and not executed' test_unsafe_config_rejected
 run_test 'duplicate configuration keys are rejected' test_duplicate_config_rejected

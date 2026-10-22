@@ -353,6 +353,236 @@ test_inspect_preserves_service_account_creation_intent() {
     rm -rf -- "$temp_dir"
 }
 
+test_snapshot_restores_numeric_ownership() (
+    local temp_dir target staged expected
+    [[ "$EUID" == 0 ]] || { printf '# SKIP numeric ownership requires root\n'; return 0; }
+    temp_dir="$(mktemp -d)"
+    trap 'rm -rf -- "$temp_dir"' EXIT
+    PNM_STATE_DIR="$temp_dir/state" PNM_LOCK_FILE="$temp_dir/lock"
+    PNM_TX_ID_OVERRIDE=unit-owner PNM_DRY_RUN=0
+    target="$temp_dir/target" staged="$temp_dir/staged"
+    printf 'old\n' >"$target"
+    chown 65534:65534 "$target"
+    chmod 2640 "$target"
+    printf 'new\n' >"$staged"
+    pnm_tx_begin install || return 1
+    pnm_tx_write_file "$staged" "$target" owned 0600 || return 1
+    expected="$(pnm_tx_file_sha256 "$target")"
+    pnm_tx_restore_file "$target" owned "$expected" || return 1
+    assert_eq 'old' "$(<"$target")" || return 1
+    assert_eq '2640|65534|65534' "$(stat -c '%a|%u|%g' "$target")" || return 1
+    pnm_tx_close
+)
+
+test_directory_compensation() (
+    local temp_dir baseline
+    temp_dir="$(mktemp -d)"
+    trap 'rm -rf -- "$temp_dir"' EXIT
+    PNM_STATE_DIR="$temp_dir/state" PNM_LOCK_FILE="$temp_dir/lock"
+    PNM_TX_ID_OVERRIDE=unit-directories PNM_DRY_RUN=0
+    mkdir -m 0750 "$temp_dir/existing"
+    if [[ "$EUID" == 0 ]]; then
+        chown 65534:65534 "$temp_dir/existing"
+        chmod 2750 "$temp_dir/existing"
+    fi
+    baseline="$(stat -c '%a|%u|%g' "$temp_dir/existing")"
+    pnm_tx_begin sandbox-install || return 1
+    pnm_tx_add_rollback pnm_tx_restore_directories || return 1
+    pnm_tx_prepare_directory "$temp_dir/existing" 0700 || return 1
+    pnm_tx_prepare_directory "$temp_dir/new/child" 0700 || return 1
+    pnm_tx_rollback || return 1
+    assert_eq "$baseline" "$(stat -c '%a|%u|%g' "$temp_dir/existing")" || return 1
+    [[ ! -e "$temp_dir/new" ]] || return 1
+    pnm_tx_close || return 1
+    pnm_tx_load_for_inspect unit-directories || return 1
+    assert_eq ROLLED_BACK "$PNM_TX_INSPECT_STATE"
+)
+
+test_snapshot_metadata_rejects_extra_fields() (
+    local temp_dir target expected rc
+    temp_dir="$(mktemp -d)"
+    trap 'rm -rf -- "$temp_dir"' EXIT
+    PNM_STATE_DIR="$temp_dir/state" PNM_LOCK_FILE="$temp_dir/lock"
+    PNM_TX_ID_OVERRIDE=unit-bad-metadata PNM_DRY_RUN=0
+    target="$temp_dir/target"
+    printf 'original\n' >"$target"
+    pnm_tx_begin install || return 1
+    pnm_tx_snapshot_file "$target" owned || return 1
+    printf 'new\n' >"$target"
+    pnm_tx_manifest_append INTENT owned "$target" PRESENT 644 "$(pnm_tx_file_sha256 "$target")" || return 1
+    expected="$(pnm_tx_file_sha256 "$target")"
+    printf 'PRESENT|640|0|0|unexpected\n' >"$PNM_TX_PATH/snapshots/owned.state"
+    if pnm_tx_restore_file "$target" owned "$expected"; then rc=0; else rc=$?; fi
+    assert_eq 78 "$rc" || return 1
+    assert_eq new "$(<"$target")" || return 1
+    pnm_tx_close
+)
+
+test_directory_rollback_preserves_foreign_contents() (
+    local temp_dir rc journal
+    temp_dir="$(mktemp -d)"
+    trap 'rm -rf -- "$temp_dir"' EXIT
+    PNM_STATE_DIR="$temp_dir/state" PNM_LOCK_FILE="$temp_dir/lock"
+    PNM_TX_ID_OVERRIDE=unit-foreign-directory PNM_DRY_RUN=0
+    pnm_tx_begin sandbox-install || return 1
+    pnm_tx_add_rollback pnm_tx_restore_directories || return 1
+    pnm_tx_prepare_directory "$temp_dir/new" 0700 || return 1
+    printf 'foreign data\n' >"$temp_dir/new/foreign"
+    journal="$PNM_TX_PATH/journal.tsv"
+    if pnm_tx_rollback 2>/dev/null; then rc=0; else rc=$?; fi
+    assert_eq 70 "$rc" || return 1
+    assert_eq 1 "$PNM_TX_RECOVERY_REQUIRED" || return 1
+    assert_eq 'foreign data' "$(<"$temp_dir/new/foreign")" || return 1
+    assert_not_contains "$(<"$journal")" ROLLBACK_COMPLETE || return 1
+    pnm_tx_close
+)
+
+test_legacy_schema_inspection_is_read_only() (
+    local temp_dir target rc schema
+    temp_dir="$(mktemp -d)"
+    trap 'rm -rf -- "$temp_dir"' EXIT
+    PNM_STATE_DIR="$temp_dir/state" PNM_LOCK_FILE="$temp_dir/lock"
+    PNM_TX_ID_OVERRIDE=unit-legacy PNM_DRY_RUN=0
+    target="$temp_dir/target"
+    printf 'old\n' >"$target"
+    pnm_tx_begin install || return 1
+    pnm_tx_snapshot_file "$target" owned || return 1
+    printf 'new\n' >"$target"
+    pnm_tx_manifest_append INTENT owned "$target" PRESENT 644 "$(pnm_tx_file_sha256 "$target")" || return 1
+    for schema in 1 99; do
+        sed -i "s/^SCHEMA_VERSION=.*/SCHEMA_VERSION=$schema/" "$PNM_TX_PATH/metadata.env"
+        if pnm_tx_restore_file "$target" owned "$(pnm_tx_file_sha256 "$target")"; then rc=0; else rc=$?; fi
+        assert_eq 78 "$rc" || return 1
+        assert_eq new "$(<"$target")" || return 1
+    done
+    sed -i 's/^SCHEMA_VERSION=.*/SCHEMA_VERSION=1/' "$PNM_TX_PATH/metadata.env"
+    printf 'PRESENT|644\n' >"$PNM_TX_PATH/snapshots/owned.state"
+    rm -- "$PNM_TX_PATH/directories.tsv"
+    pnm_tx_close || return 1
+    pnm_tx_load_for_inspect unit-legacy || return 1
+    assert_eq ABANDONED "$PNM_TX_INSPECT_STATE" || return 1
+    assert_eq 1 "$PNM_TX_INSPECT_CHANGES"
+)
+
+test_transaction_rejects_symlink_ancestor_writes() (
+    local temp_dir rc
+    temp_dir="$(mktemp -d)"
+    trap 'rm -rf -- "$temp_dir"' EXIT
+    PNM_STATE_DIR="$temp_dir/state" PNM_LOCK_FILE="$temp_dir/lock"
+    PNM_TX_ID_OVERRIDE=unit-ancestor PNM_DRY_RUN=0
+    mkdir "$temp_dir/outside"
+    ln -s "$temp_dir/outside" "$temp_dir/link"
+    printf 'new\n' >"$temp_dir/staged"
+    pnm_tx_begin install || return 1
+    if pnm_tx_write_file "$temp_dir/staged" "$temp_dir/link/target" unsafe 0600; then rc=0; else rc=$?; fi
+    assert_eq 78 "$rc" || return 1
+    [[ ! -e "$temp_dir/outside/target" ]] || return 1
+    pnm_tx_close
+)
+
+test_directory_recovery_rejects_replacement() (
+    local temp_dir rc
+    temp_dir="$(mktemp -d)"
+    trap 'rm -rf -- "$temp_dir"' EXIT
+    PNM_STATE_DIR="$temp_dir/state" PNM_LOCK_FILE="$temp_dir/lock"
+    PNM_TX_ID_OVERRIDE=unit-replaced-directory PNM_DRY_RUN=0
+    pnm_tx_begin sandbox-install || return 1
+    pnm_tx_add_rollback pnm_tx_restore_directories || return 1
+    pnm_tx_prepare_directory "$temp_dir/new" 0700 || return 1
+    mv "$temp_dir/new" "$temp_dir/original"
+    mkdir -m 0700 "$temp_dir/new"
+    if pnm_tx_rollback; then rc=0; else rc=$?; fi
+    assert_eq 70 "$rc" || return 1
+    [[ -d "$temp_dir/new" && -d "$temp_dir/original" ]] || return 1
+    assert_eq 1 "$PNM_TX_RECOVERY_REQUIRED" || return 1
+    pnm_tx_close
+)
+
+test_inspect_handles_missing_applied_receipts() (
+    local temp_dir rc
+    temp_dir="$(mktemp -d)"
+    trap 'rm -rf -- "$temp_dir"' EXIT
+    PNM_STATE_DIR="$temp_dir/state" PNM_LOCK_FILE="$temp_dir/lock"
+    PNM_TX_ID_OVERRIDE=unit-receipt-failure PNM_DRY_RUN=0
+    # Simulate storage rejecting APPLIED, while INTENT and recovery still work.
+    pnm_tx_directory_receipt() {
+        [[ "$1" != APPLIED ]] || return 73
+        printf '%s\t%s\t%s\t%s\t%s\n' "$1" "$(printf '%s' "$2" | base64 -w0)" "$3" "$4" "$5" >>"$PNM_TX_PATH/directories.tsv"
+    }
+    pnm_tx_manifest_append() {
+        [[ "$1" != APPLIED ]] || return 73
+        printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$1" "$2" "$(printf '%s' "$3" | base64 -w0)" "$4" "$5" "$6" >>"$PNM_TX_PATH/changes.tsv"
+    }
+    printf 'new\n' >"$temp_dir/staged"
+    pnm_tx_begin install || return 1
+    pnm_tx_add_rollback pnm_tx_restore_directories || return 1
+    pnm_tx_add_rollback pnm_tx_restore_written_files || return 1
+    if pnm_tx_prepare_directory "$temp_dir/new" 0700; then rc=0; else rc=$?; fi
+    assert_eq 73 "$rc" || return 1
+    if pnm_tx_write_file "$temp_dir/staged" "$temp_dir/new/target" owned 0600; then rc=0; else rc=$?; fi
+    assert_eq 73 "$rc" || return 1
+    pnm_tx_rollback || return 1
+    [[ ! -e "$temp_dir/new" ]] || return 1
+    pnm_tx_close || return 1
+    pnm_tx_load_for_inspect unit-receipt-failure || return 1
+    assert_eq ROLLED_BACK "$PNM_TX_INSPECT_STATE" || return 1
+    assert_eq 0 "$PNM_TX_INSPECT_CHANGES"
+)
+
+test_low_mode_metadata_survives_recovery() (
+    local temp_dir
+    [[ "$EUID" == 0 ]] || { printf '# SKIP low-mode recovery requires root\n'; return 0; }
+    temp_dir="$(mktemp -d)"
+    trap 'rm -rf -- "$temp_dir"' EXIT
+    PNM_STATE_DIR="$temp_dir/state" PNM_LOCK_FILE="$temp_dir/lock"
+    PNM_TX_ID_OVERRIDE=unit-low-mode PNM_DRY_RUN=0
+    mkdir -m 0000 "$temp_dir/existing"
+    printf 'old\n' >"$temp_dir/target"
+    printf 'new\n' >"$temp_dir/staged"
+    chmod 0040 "$temp_dir/target"
+    pnm_tx_begin install || return 1
+    pnm_tx_add_rollback pnm_tx_restore_directories || return 1
+    pnm_tx_add_rollback pnm_tx_restore_written_files || return 1
+    pnm_tx_prepare_directory "$temp_dir/existing" 0700 || return 1
+    pnm_tx_write_file "$temp_dir/staged" "$temp_dir/target" low 0600 || return 1
+    pnm_tx_rollback || return 1
+    assert_eq 0 "$(stat -c '%a' "$temp_dir/existing")" || return 1
+    assert_eq 40 "$(stat -c '%a' "$temp_dir/target")" || return 1
+    pnm_tx_close || return 1
+    pnm_tx_load_for_inspect unit-low-mode || return 1
+    assert_eq ROLLED_BACK "$PNM_TX_INSPECT_STATE"
+)
+
+test_inspect_handles_multiple_file_restores() (
+    local temp_dir path
+    temp_dir="$(mktemp -d)"
+    trap 'rm -rf -- "$temp_dir"' EXIT
+    PNM_STATE_DIR="$temp_dir/state" PNM_LOCK_FILE="$temp_dir/lock"
+    PNM_TX_ID_OVERRIDE=unit-many-restores PNM_DRY_RUN=0
+    printf 'new\n' >"$temp_dir/staged"
+    pnm_tx_begin install || return 1
+    pnm_tx_add_rollback pnm_tx_restore_written_files || return 1
+    for path in first second; do
+        printf 'old\n' >"$temp_dir/$path"
+        pnm_tx_write_file "$temp_dir/staged" "$temp_dir/$path" "$path" 0600 || return 1
+    done
+    pnm_tx_rollback || return 1
+    pnm_tx_close || return 1
+    pnm_tx_load_for_inspect unit-many-restores || return 1
+    assert_eq ROLLED_BACK "$PNM_TX_INSPECT_STATE" || return 1
+    assert_eq 0 "$PNM_TX_INSPECT_CHANGES"
+)
+
+run_test 'recovery remains inspectable when APPLIED receipt writes fail' test_inspect_handles_missing_applied_receipts
+run_test 'low permission modes survive recovery and inspection' test_low_mode_metadata_survives_recovery
+run_test 'transaction writes reject symlink ancestors' test_transaction_rejects_symlink_ancestor_writes
+run_test 'directory recovery refuses a replacement with identical modes' test_directory_recovery_rejects_replacement
+run_test 'directory rollback retains foreign contents and recovery evidence' test_directory_rollback_preserves_foreign_contents
+run_test 'legacy transactions stay inspectable and legacy or unknown recovery writes fail' test_legacy_schema_inspection_is_read_only
+run_test 'transaction inspection accepts reverse recovery of multiple files' test_inspect_handles_multiple_file_restores
+run_test 'snapshot restores numeric UID GID and mode' test_snapshot_restores_numeric_ownership
+run_test 'directory rollback restores modes and removes only new empty paths' test_directory_compensation
+run_test 'snapshot metadata rejects unexpected fields before restoration' test_snapshot_metadata_rejects_extra_fields
 run_test 'transaction writes an auditable lifecycle journal' test_transaction_journal_lifecycle
 run_test 'dry-run transaction creates no state directory' test_dry_run_transaction_creates_no_state
 run_test 'snapshot restore is guarded by expected written hash' test_snapshot_restore_uses_expected_written_hash

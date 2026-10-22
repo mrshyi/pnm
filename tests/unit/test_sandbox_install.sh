@@ -32,6 +32,9 @@ source "$PNM_LIB_DIR/sandbox-install.sh"
 source "$PNM_LIB_DIR/node.sh"
 # shellcheck source=../../lib/deploy.sh
 source "$PNM_LIB_DIR/deploy.sh"
+source "$PNM_LIB_DIR/core-ops.sh"
+source "$PNM_LIB_DIR/lifecycle.sh"
+source "$PNM_LIB_DIR/apply-gate.sh"
 # shellcheck source=../testlib.sh
 source "$TEST_ROOT/testlib.sh"
 
@@ -77,7 +80,7 @@ prepare_external_tls_inputs() {
     local config_dir="$temp_dir/config"
 
     mkdir -p -- "$config_dir/secrets"
-    sed 's/^HY2_TLS_MODE=.*/HY2_TLS_MODE=external-ca/' \
+    sed 's/^HY2_TLS_MODE=.*/HY2_TLS_MODE=external-ca/;s/^HY2_TLS_SERVER_NAME=.*/HY2_TLS_SERVER_NAME=example.com/' \
         "$TEST_ROOT/fixtures/config-secrets/node.conf" >"$config_dir/node.conf"
     cp -- "$TEST_ROOT/fixtures/config-secrets/versions.conf" "$config_dir/versions.conf"
     cp -- "$TEST_ROOT/fixtures/config-secrets/secrets/reality.env" "$config_dir/secrets/reality.env"
@@ -202,8 +205,6 @@ test_node_links_work_after_fresh_install() {
     PNM_SANDBOX_XRAY_ARCHIVE="$archive"
     PNM_TX_ID_OVERRIDE='fresh-secrets-links'
     pnm_sandbox_install "$root" || { rm -rf -- "$temp_dir"; return 1; }
-    PNM_TX_ID_OVERRIDE='fresh-secrets-configured'
-    pnm_deploy_mark_configured || { rm -rf -- "$temp_dir"; return 1; }
     old_xray_bin="$PNM_XRAY_BIN"
     old_xray_config="$PNM_XRAY_CONFIG"
     old_hy2_config="$PNM_HY2_CONFIG"
@@ -216,6 +217,11 @@ test_node_links_work_after_fresh_install() {
     pnm_render_hysteria_secret_config link_hysteria >"$PNM_CONFIG_DIR/secrets/hysteria.env" || { rm -rf -- "$temp_dir"; return 1; }
     chmod 0600 -- "$PNM_CONFIG_DIR/secrets/hysteria.env" || { rm -rf -- "$temp_dir"; return 1; }
     pnm_render_hysteria_config link_node link_hysteria >"$PNM_HY2_CONFIG" || { rm -rf -- "$temp_dir"; return 1; }
+    pnm_systemd_active_state() { printf 'active\n'; }
+    pnm_systemd_show_value() { printf '0123456789abcdef0123456789abcdef\n'; }
+    pnm_listener_present() { return 0; }
+    PNM_TX_ID_OVERRIDE='fresh-secrets-configured'
+    pnm_deploy_mark_configured || { rm -rf -- "$temp_dir"; return 1; }
     pnm_require_root() { return 0; }
     run_capture pnm_node_links --address 203.0.113.10
     PNM_XRAY_BIN="$old_xray_bin"
@@ -346,6 +352,131 @@ test_sandbox_install_imports_external_tls_and_rewrites_pin() {
     rm -rf -- "$temp_dir"
 }
 
+test_failed_install_restores_directory_baseline() (
+    local temp_dir root archive rc
+    temp_dir="$(mktemp -d)"
+    trap 'rm -rf -- "$temp_dir"' EXIT
+    root="$temp_dir/root" archive="$temp_dir/xray.zip"
+    prepare_sandbox_inputs "$temp_dir"
+    make_xray_archive "$archive" fail
+    PNM_SANDBOX_XRAY_ARCHIVE="$archive"
+    if pnm_sandbox_install "$root"; then rc=0; else rc=$?; fi
+    assert_eq 78 "$rc" || return 1
+    [[ ! -e "$root" ]] || return 1
+    pnm_tx_load_for_inspect sandbox-test || return 1
+    assert_eq ROLLED_BACK "$PNM_TX_INSPECT_STATE" || return 1
+    assert_eq 0 "$PNM_TX_INSPECT_CHANGES" || return 1
+    mkdir -p "$root/etc/hysteria"
+    chmod 0750 "$root" "$root/etc/hysteria"
+    PNM_TX_ID_OVERRIDE=sandbox-existing-dirs
+    if pnm_sandbox_install "$root"; then rc=0; else rc=$?; fi
+    assert_eq 78 "$rc" || return 1
+    assert_eq 750 "$(stat -c '%a' "$root")" || return 1
+    assert_eq 750 "$(stat -c '%a' "$root/etc/hysteria")" || return 1
+    [[ ! -e "$root/etc/hysteria/tls" && ! -e "$root/usr" ]]
+)
+
+test_shared_deployment_restores_real_sandbox_resources() (
+    local temp_dir root archive rc original_node
+    temp_dir="$(mktemp -d)"
+    trap 'rm -rf -- "$temp_dir"' EXIT
+    root="$temp_dir/root" archive="$temp_dir/xray.zip"
+    prepare_fresh_sandbox_inputs "$temp_dir" "$root" || return 1
+    make_xray_archive "$archive" pass || return 1
+    PNM_SANDBOX_XRAY_ARCHIVE="$archive"
+    PNM_DEPLOY_SANDBOX_ROOT="$root"
+    PNM_XRAY_BIN="$root/usr/local/bin/xray"
+    PNM_XRAY_CONFIG="$root/usr/local/etc/xray/config.json"
+    PNM_HY2_CONFIG="$root/etc/hysteria/config.yaml"
+    PNM_ASSUME_YES=1
+    PNM_TX_ID_OVERRIDE=shared-deployment
+    PNM_DEPLOY_ID_OVERRIDE=deploy-shared
+    PNM_APPLY_GATE_ID_OVERRIDE=apply-shared
+    original_node="$(<"$PNM_CONFIG_DIR/node.conf")"
+    declare -A fixture_active=([xray.service]=inactive [hysteria-server.service]=inactive)
+    declare -A fixture_enabled=([xray.service]=disabled [hysteria-server.service]=disabled)
+    pnm_preflight_collect() { return 0; }
+    pnm_preflight_exit_code() { return 0; }
+    pnm_systemd_load_state() {
+        [[ -f "$root/etc/systemd/system/$1" ]] && printf 'loaded\n' || printf 'not-found\n'
+    }
+    pnm_systemd_active_state() { printf '%s\n' "${fixture_active[$1]}"; }
+    pnm_systemd_enabled_state() { printf '%s\n' "${fixture_enabled[$1]}"; }
+    pnm_systemd_show_value() { printf '0123456789abcdef0123456789abcdef\n'; }
+    pnm_systemd_daemon_reload() { return 0; }
+    pnm_systemctl() {
+        case "$1" in
+            start|restart) fixture_active[$2]=active ;;
+            stop) fixture_active[$2]=inactive ;;
+            enable) fixture_enabled[$2]=enabled ;;
+            disable) fixture_enabled[$2]=disabled ;;
+            *) return 70 ;;
+        esac
+    }
+    pnm_systemd_enable() { pnm_systemctl enable "$1"; }
+    pnm_systemd_start() { pnm_systemctl start "$1"; }
+    pnm_systemd_unit_healthy() { [[ "${fixture_active[$1]}" == active ]]; }
+    pnm_check_deploy_core_health() { return 0; }
+    fail_outer_health() { return 78; }
+    PNM_APPLY_GATE_STEP_HEALTH=fail_outer_health
+    if pnm_apply_gate_execute; then rc=0; else rc=$?; fi
+    assert_eq 78 "$rc" || return 1
+    assert_eq "$original_node" "$(<"$PNM_CONFIG_DIR/node.conf")" || return 1
+    [[ ! -e "$root/usr" && ! -e "$root/etc/hysteria" && ! -e "$root/etc/systemd" ]] || return 1
+    [[ ! -e "$PNM_CONFIG_DIR/secrets" && ! -e "$PNM_STATE_DIR/cores" ]] || return 1
+    pnm_tx_load_for_inspect shared-deployment || return 1
+    assert_eq ROLLED_BACK "$PNM_TX_INSPECT_STATE" || return 1
+    assert_eq 0 "$PNM_TX_INSPECT_CHANGES" || return 1
+    assert_eq 0 "$PNM_LOCK_DEPTH"
+)
+
+test_reused_host_tls_has_transaction_ownership_baseline() (
+    local temp_dir root archive cert key cert_hash key_hash cert_metadata key_metadata
+    temp_dir="$(mktemp -d)"
+    trap 'rm -rf -- "$temp_dir"' EXIT
+    root="$temp_dir/root" archive="$temp_dir/xray.zip"
+    prepare_fresh_sandbox_inputs "$temp_dir" "$root" || return 1
+    make_xray_archive "$archive" pass || return 1
+    PNM_SANDBOX_XRAY_ARCHIVE="$archive"
+    PNM_TX_ID_OVERRIDE=existing-tls-install
+    pnm_sandbox_install "$root" || return 1
+    cert="$root/etc/hysteria/tls/server.crt" key="$root/etc/hysteria/tls/server.key"
+    cert_hash="$(pnm_tx_file_sha256 "$cert")" key_hash="$(pnm_tx_file_sha256 "$key")"
+    cert_metadata="$(stat -c '%a|%u|%g' -- "$cert")" key_metadata="$(stat -c '%a|%u|%g' -- "$key")"
+
+    # Exercise the host-only reuse branch while mapping every path into this
+    # disposable root. No host service or account operation is performed.
+    pnm_sandbox_path() { printf '%s%s\n' "$root" "$1"; }
+    PNM_SANDBOX_ROOT=/ PNM_TX_ID_OVERRIDE=reused-host-tls
+    pnm_tx_begin deployment || return 1
+    pnm_tx_add_rollback pnm_tx_restore_written_files || return 1
+    PNM_DEPLOY_XRAY_LOAD=not-found PNM_DEPLOY_HY2_LOAD=not-found
+    PNM_DEPLOY_XRAY_ACTIVE=inactive PNM_DEPLOY_HY2_ACTIVE=inactive
+    PNM_DEPLOY_XRAY_ENABLED=disabled PNM_DEPLOY_HY2_ENABLED=disabled
+    pnm_deploy_record_baseline || return 1
+    PNM_SANDBOX_STAGING="$PNM_TX_PATH/staging"
+    mkdir -m 0700 "$PNM_SANDBOX_STAGING" || return 1
+    pnm_sandbox_step_tls || return 1
+    pnm_tx_record_written_metadata "$key" || return 1
+    pnm_tx_record_written_metadata "$cert" || return 1
+    if ((EUID == 0)); then
+        chown +65534:+65534 -- "$key" "$cert" || return 1
+        pnm_tx_record_written_metadata "$key" || return 1
+        pnm_tx_record_written_metadata "$cert" || return 1
+    fi
+    pnm_tx_verify_written_resources || return 1
+    pnm_tx_rollback && pnm_tx_close || return 1
+    assert_eq "$cert_hash" "$(pnm_tx_file_sha256 "$cert")" || return 1
+    assert_eq "$key_hash" "$(pnm_tx_file_sha256 "$key")" || return 1
+    assert_eq "$cert_metadata" "$(stat -c '%a|%u|%g' -- "$cert")" || return 1
+    assert_eq "$key_metadata" "$(stat -c '%a|%u|%g' -- "$key")" || return 1
+    pnm_tx_load_for_inspect reused-host-tls || return 1
+    assert_eq ROLLED_BACK "$PNM_TX_INSPECT_STATE"
+)
+
+run_test 'reused host TLS keeps its bytes and restores ownership after rollback' test_reused_host_tls_has_transaction_ownership_baseline
+run_test 'shared deployment restores actual staged sandbox resources after outer failure' test_shared_deployment_restores_real_sandbox_resources
+run_test 'failed install restores original directories and removes new empty ancestors' test_failed_install_restores_directory_baseline
 run_test 'sandbox install commits Core, TLS, config, and units' test_sandbox_install_commits_all_resources
 run_test 'sandbox validation failure compensates all written files' test_sandbox_install_rolls_back_after_validation_failure
 run_test 'asset staging failure rolls back the installation transaction' test_asset_staging_failure_rolls_back_transaction

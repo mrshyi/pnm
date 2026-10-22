@@ -121,8 +121,13 @@ pnm_core_record_applied_config() {
     esac
     invocation="$(pnm_systemd_show_value "$unit" InvocationID 2>/dev/null)" || return "$PNM_EXIT_UNAVAILABLE"
     [[ "$invocation" =~ ^[a-fA-F0-9]{32}$ ]] || return "$PNM_EXIT_UNAVAILABLE"
-    pnm_mkdir_mode 0700 "$PNM_STATE_DIR/cores" || return "$PNM_EXIT_CANTCREAT"
-    pnm_mkdir_mode 0700 "$record_dir" || return "$PNM_EXIT_CANTCREAT"
+    if [[ "${PNM_TX_OPERATION:-}" == deployment ]]; then
+        pnm_tx_prepare_directory "$PNM_STATE_DIR/cores" 0700 || return $?
+        pnm_tx_prepare_directory "$record_dir" 0700 || return $?
+    else
+        pnm_mkdir_mode 0700 "$PNM_STATE_DIR/cores" || return "$PNM_EXIT_CANTCREAT"
+        pnm_mkdir_mode 0700 "$record_dir" || return "$PNM_EXIT_CANTCREAT"
+    fi
     printf 'SCHEMA_VERSION=1\nCORE=%s\nCONFIG_SHA256=%s\nSERVICE_INVOCATION_ID=%s\n' \
         "$core" "$digest" "${invocation,,}" >"$staged" || return "$PNM_EXIT_CANTCREAT"
     chmod 0600 -- "$staged" || { rm -f -- "$staged"; return "$PNM_EXIT_NOPERM"; }

@@ -10,8 +10,7 @@ declare -Ag PNM_SANDBOX_HYSTERIA=()
 
 pnm_sandbox_path() {
     local relative="${1:?absolute install-relative path required}"
-    local path component component_path
-    local -a path_components=()
+    local path
 
     [[ "$relative" == /* && "$relative" != *'..'* && "$relative" != *$'\n'* ]] || return "$PNM_EXIT_CONFIG"
     if [[ "$PNM_SANDBOX_ROOT" == '/' ]]; then
@@ -19,17 +18,10 @@ pnm_sandbox_path() {
         [[ "${PNM_HOST_APPLY_CONFIRMED:-no}" == yes ]] || return "$PNM_EXIT_NOPERM"
     else
         [[ -n "$PNM_SANDBOX_ROOT" && "$PNM_SANDBOX_ROOT" == /* ]] || return "$PNM_EXIT_CONFIG"
-        # A pre-existing symlink below the sandbox root could redirect writes outside it.
-        path="${PNM_SANDBOX_ROOT%/}${relative}"
-        IFS='/' read -r -a path_components <<< "$path"
-        component_path=''
-        for component in "${path_components[@]}"; do
-            [[ -n "$component" && "$component" != '.' ]] || continue
-            component_path+="/$component"
-            [[ ! -L "$component_path" ]] || return "$PNM_EXIT_CONFIG"
-        done
     fi
-    printf '%s%s\n' "${PNM_SANDBOX_ROOT%/}" "$relative"
+    path="${PNM_SANDBOX_ROOT%/}${relative}"
+    pnm_validate_managed_path "$path" || return $?
+    printf '%s\n' "$path"
 }
 
 pnm_sandbox_prepare_dirs() {
@@ -38,7 +30,7 @@ pnm_sandbox_prepare_dirs() {
     # Shared host directories may already have administrator-selected modes.
     for relative in /usr/local/bin /etc/systemd/system; do
         destination="$(pnm_sandbox_path "$relative")" || return $?
-        (umask 022; mkdir -p -- "$destination") || return "$PNM_EXIT_CANTCREAT"
+        pnm_tx_prepare_directory "$destination" - || return $?
     done
 
     for relative in \
@@ -46,11 +38,11 @@ pnm_sandbox_prepare_dirs() {
         /etc/hysteria \
         /etc/hysteria/tls; do
         destination="$(pnm_sandbox_path "$relative")" || return $?
-        pnm_mkdir_mode 0755 "$destination" || return "$PNM_EXIT_CANTCREAT"
+        pnm_tx_prepare_directory "$destination" 0755 || return $?
     done
     for relative in /etc/pnm /etc/pnm/secrets; do
         destination="$(pnm_sandbox_path "$relative")" || return $?
-        pnm_mkdir_mode 0700 "$destination" || return "$PNM_EXIT_CANTCREAT"
+        pnm_tx_prepare_directory "$destination" 0700 || return $?
     done
 }
 
@@ -153,6 +145,12 @@ pnm_sandbox_step_tls() {
                     pnm_error 'Existing Hysteria2 TLS files have unsafe permissions; refusing to replace them.'
                     return "$PNM_EXIT_CONFIG"
                 }
+                if [[ "$PNM_SANDBOX_ROOT" == / ]]; then
+                    # Host ownership normalization also mutates reused TLS.
+                    # Enroll the same bytes before chown to retain its baseline.
+                    pnm_tx_write_file "$cert_target" "$cert_target" hysteria_cert 0644 || return $?
+                    pnm_tx_write_file "$key_target" "$key_target" hysteria_key 0600 || return $?
+                fi
             else
                 pnm_tls_generate_selfsigned "$cert_staged" "$key_staged" "${PNM_SANDBOX_NODE[HY2_TLS_SERVER_NAME]}" || return $?
                 pnm_tx_write_file "$cert_staged" "$cert_target" hysteria_cert 0644 || return $?
@@ -217,9 +215,13 @@ pnm_sandbox_step_configs() {
     pnm_tx_write_file "$hy2_staged" "$hy2_target" hysteria_config 0600 || return $?
     if [[ "$PNM_SANDBOX_ROOT" == '/' ]]; then
         chown root:xray -- "$xray_target" || return "$PNM_EXIT_NOPERM"
+        pnm_tx_record_written_metadata "$xray_target" || return $?
         chown hysteria:hysteria -- "$hy2_target" || return "$PNM_EXIT_NOPERM"
+        pnm_tx_record_written_metadata "$hy2_target" || return $?
         chown hysteria:hysteria -- /etc/hysteria/tls/server.key || return "$PNM_EXIT_NOPERM"
+        pnm_tx_record_written_metadata /etc/hysteria/tls/server.key || return $?
         chown root:hysteria -- /etc/hysteria/tls/server.crt || return "$PNM_EXIT_NOPERM"
+        pnm_tx_record_written_metadata /etc/hysteria/tls/server.crt || return $?
     fi
 }
 
@@ -283,7 +285,7 @@ pnm_sandbox_abort() {
     return "$rc"
 }
 
-pnm_sandbox_install() {
+pnm_sandbox_initialize() {
     local root="${1:?isolated root required}"
     local rc component component_path
     local -a root_components=()
@@ -309,20 +311,43 @@ pnm_sandbox_install() {
     pnm_load_node_config PNM_SANDBOX_NODE || { pnm_error 'Node configuration is missing or invalid; installation stopped.'; return "$PNM_EXIT_CONFIG"; }
     pnm_validate_node_config PNM_SANDBOX_NODE || { pnm_error 'Node configuration is invalid; installation stopped.'; return "$PNM_EXIT_CONFIG"; }
     pnm_sandbox_prepare_secrets || return $?
-    # Validate inputs before creating any directory. Never change the host root.
-    if [[ "$root" != '/' ]]; then
-        pnm_mkdir_mode 0700 "$root" || return "$PNM_EXIT_CANTCREAT"
+}
+
+pnm_sandbox_install_steps() {
+    local root="$PNM_SANDBOX_ROOT"
+    PNM_DRY_RUN=0
+    PNM_SANDBOX_STAGING="$PNM_TX_PATH/staging"
+    mkdir -m 0700 -- "$PNM_SANDBOX_STAGING" || return "$PNM_EXIT_CANTCREAT"
+    pnm_sandbox_generate_missing_secrets || return $?
+    if [[ "$root" == / ]]; then
+        pnm_tx_run ensure_service_accounts pnm_service_accounts_step || return $?
     fi
+    if [[ "$root" != / ]]; then
+        pnm_tx_run prepare_root pnm_tx_prepare_directory "$root" 0700 || return $?
+    fi
+    pnm_tx_run prepare_dirs pnm_sandbox_prepare_dirs || return $?
+    pnm_tx_run stage_assets pnm_sandbox_step_assets || return $?
+    pnm_tx_run stage_tls pnm_sandbox_step_tls || return $?
+    pnm_tx_run write_secrets pnm_sandbox_step_secrets || return $?
+    pnm_tx_run render_configs pnm_sandbox_step_configs || return $?
+    pnm_tx_run install_units pnm_sandbox_step_units || return $?
+    pnm_tx_run validate pnm_sandbox_step_validate
+}
+
+# Explicit participant: only the named deployment owns commit and compensation.
+pnm_sandbox_install_deployment() {
+    pnm_deploy_require_transaction "${2:?deployment id required}" || return $?
+    pnm_sandbox_initialize "${1:?install root required}" || return $?
+    pnm_sandbox_install_steps
+}
+
+pnm_sandbox_install() {
+    local rc
+    pnm_sandbox_initialize "${1:?install root required}" || return $?
     PNM_DRY_RUN=0
     pnm_tx_begin sandbox-install || return $?
-    PNM_SANDBOX_STAGING="$PNM_TX_PATH/staging"
-    mkdir -m 0700 -- "$PNM_SANDBOX_STAGING" || {
-        rc="$PNM_EXIT_CANTCREAT"; pnm_sandbox_abort "$rc"; return $?;
-    }
-    pnm_sandbox_generate_missing_secrets || {
-        rc=$?; pnm_sandbox_abort "$rc"; return $?
-    }
-    pnm_tx_add_rollback pnm_tx_restore_written_files || {
+    # Callbacks run in reverse: restore files before accounts, then directories.
+    pnm_tx_add_rollback pnm_tx_restore_directories || {
         pnm_sandbox_abort "$PNM_EXIT_SOFTWARE"
         return $?
     }
@@ -331,16 +356,12 @@ pnm_sandbox_install() {
             pnm_sandbox_abort "$PNM_EXIT_SOFTWARE"
             return $?
         }
-        if pnm_tx_run ensure_service_accounts pnm_service_accounts_step; then :; else rc=$?; pnm_sandbox_abort "$rc"; return $?; fi
     fi
-
-    if pnm_tx_run prepare_dirs pnm_sandbox_prepare_dirs; then :; else rc=$?; pnm_sandbox_abort "$rc"; return $?; fi
-    if pnm_tx_run stage_assets pnm_sandbox_step_assets; then :; else rc=$?; pnm_sandbox_abort "$rc"; return $?; fi
-    if pnm_tx_run stage_tls pnm_sandbox_step_tls; then :; else rc=$?; pnm_sandbox_abort "$rc"; return $?; fi
-    if pnm_tx_run write_secrets pnm_sandbox_step_secrets; then :; else rc=$?; pnm_sandbox_abort "$rc"; return $?; fi
-    if pnm_tx_run render_configs pnm_sandbox_step_configs; then :; else rc=$?; pnm_sandbox_abort "$rc"; return $?; fi
-    if pnm_tx_run install_units pnm_sandbox_step_units; then :; else rc=$?; pnm_sandbox_abort "$rc"; return $?; fi
-    if pnm_tx_run validate pnm_sandbox_step_validate; then :; else rc=$?; pnm_sandbox_abort "$rc"; return $?; fi
+    pnm_tx_add_rollback pnm_tx_restore_written_files || {
+        pnm_sandbox_abort "$PNM_EXIT_SOFTWARE"
+        return $?
+    }
+    if pnm_sandbox_install_steps; then :; else rc=$?; pnm_sandbox_abort "$rc"; return $?; fi
     if pnm_tx_commit; then :; else
         rc=$?
         pnm_sandbox_abort "$rc" 1

@@ -29,6 +29,18 @@ pnm_check_add() {
     local summary="${3:?check summary required}"
     local detail="${4-}"
 
+    if ((EUID != 0)); then
+        case "$id" in
+            configuration | xray | hysteria2 | *_runtime_config)
+                if [[ "$status" == OK || "$status" == SKIP ]]; then
+                    status=UNKNOWN
+                    summary='Deployment consistency requires root privileges'
+                    detail='protected deployment records are not visible'
+                fi
+                ;;
+        esac
+    fi
+
     case "$status" in
         OK) ;;
         SKIP) ;;
@@ -50,6 +62,11 @@ pnm_check_add() {
 
 pnm_check_configuration() {
     local rc
+
+    if ((EUID != 0)) && [[ ! -r "$PNM_CONFIG_DIR/node.conf" ]]; then
+        pnm_check_add configuration UNKNOWN 'PNM configuration cannot be inspected' 'root privileges are required'
+        return 0
+    fi
 
     if [[ ! -e "$PNM_CONFIG_DIR/node.conf" ]]; then
         pnm_check_add configuration WARN 'PNM is not configured' "$PNM_CONFIG_DIR/node.conf is absent"
@@ -440,6 +457,9 @@ pnm_check_reboot_required() {
 
 pnm_check_collect() {
     pnm_check_reset
+    if ((EUID != 0)); then
+        pnm_check_add deployment_state UNKNOWN 'Deployment transaction state cannot be inspected' 'run sudo pnm check for committed-state verification'
+    fi
     pnm_check_configuration
     pnm_check_platform
     pnm_check_systemd_runtime
@@ -521,6 +541,14 @@ pnm_check_render_json() {
 }
 
 pnm_check() {
+    if ((EUID != 0)); then
+        pnm_check_unlocked "$@"
+        return $?
+    fi
+    pnm_with_deployment_read_lock pnm_check_unlocked "$@"
+}
+
+pnm_check_unlocked() {
     local rc
 
     pnm_init_colors

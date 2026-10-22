@@ -457,6 +457,11 @@ pnm_node_init() {
 }
 
 pnm_node_show() {
+    pnm_require_root || return $?
+    pnm_with_deployment_read_lock pnm_node_show_unlocked
+}
+
+pnm_node_show_unlocked() {
     local reality_server_name reality_sni_valid=1 runtime_consistency=not-applied
     local runtime_port='' runtime_target='' runtime_server_names='' runtime_network=''
     local xray_service_state=unknown hy2_service_state=unknown runtime_summary='' consistency_rc
@@ -583,6 +588,18 @@ pnm_node_show() {
 }
 
 pnm_node_links() {
+    local argument
+    for argument in "$@"; do
+        if [[ "$argument" == -h || "$argument" == --help ]]; then
+            pnm_node_links_unlocked "$@"
+            return $?
+        fi
+    done
+    pnm_require_root || return $?
+    pnm_with_deployment_read_lock pnm_node_links_unlocked "$@"
+}
+
+pnm_node_links_unlocked() {
     local address='' argument xray_public_key xray_link='' hy2_link='' xray_label hy2_label rc
     local xray_status xray_service xray_config_state xray_applied xray_reason
     local hy2_status hy2_service hy2_config_state hy2_applied hy2_reason hy2_server_name=''

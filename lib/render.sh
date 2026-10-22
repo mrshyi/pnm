@@ -427,7 +427,7 @@ pnm_core_applied_config_status() {
     }
     case "$core" in
         xray) unit=xray.service ;;
-        hysteria2) unit=hysteria-server.service ;;
+        hysteria2) unit='hysteria-server.service' ;;
     esac
     invocation="$(pnm_systemd_show_value "$unit" InvocationID 2>/dev/null)" || {
         printf 'unknown\n'
@@ -453,7 +453,7 @@ pnm_node_core_link_status() {
 
     case "$core" in
         xray) unit=xray.service; config="$PNM_XRAY_CONFIG"; protocol=tcp; port="${node_ref[XRAY_PORT]}" ;;
-        hysteria2) unit=hysteria-server.service; config="$PNM_HY2_CONFIG"; protocol=udp; port="${node_ref[HY2_PORT]}" ;;
+        hysteria2) unit='hysteria-server.service'; config="$PNM_HY2_CONFIG"; protocol=udp; port="${node_ref[HY2_PORT]}" ;;
         *) printf 'unknown|unknown|unknown|unknown|unsupported Core\n'; return 0 ;;
     esac
     if ! active="$(pnm_systemd_active_state "$unit" 2>/dev/null)"; then

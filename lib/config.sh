@@ -22,9 +22,18 @@ pnm_config_load() {
     local target_name="${2:?target associative array required}"
     shift 2
     local -a allowed_keys=("$@")
-    local line key value line_number=0
+    local line key value line_number=0 target_declaration target_attributes
     local -n target="$target_name"
 
+    # Indexed arrays interpret configuration keys as arithmetic expressions.
+    # Reject a caller type error before clearing data or evaluating any subscript.
+    target_declaration="$(declare -p "$target_name" 2>/dev/null)" || target_declaration=''
+    target_attributes="${target_declaration#declare -}"
+    target_attributes="${target_attributes%% *}"
+    [[ "$target_attributes" == *A* && "$target_attributes" != *r* ]] || {
+        pnm_error 'Configuration output must be a writable associative array.'
+        return "$PNM_EXIT_CONFIG"
+    }
     target=()
 
     [[ -e "$file" ]] || return 1

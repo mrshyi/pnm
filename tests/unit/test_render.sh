@@ -57,6 +57,7 @@ test_runtime_xray_config_exposes_only_public_reality_values() {
 
 test_reality_short_id_requires_even_hex_length() {
     local -A reality=()
+    PNM_CONFIG_DIR="$TEST_ROOT/fixtures/config-secrets"
     pnm_load_reality_secret reality || return 1
     reality[XRAY_REALITY_SHORT_ID]=123
     ! pnm_validate_reality_secret_config reality

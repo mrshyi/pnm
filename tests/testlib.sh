@@ -64,11 +64,22 @@ run_capture() {
     rm -f -- "$stdout_file" "$stderr_file"
 }
 
+pnm_test_record_applied_config() {
+    local core="${1:?Core ID required}" config="${2:?config required}" directory
+    directory="$PNM_STATE_DIR/cores/$core"
+    mkdir -p -- "$directory" || return 1
+    printf 'SCHEMA_VERSION=1\nCORE=%s\nCONFIG_SHA256=%s\nSERVICE_INVOCATION_ID=0123456789abcdef0123456789abcdef\n' \
+        "$core" "$(sha256sum -- "$config" | awk '{print $1}')" >"$directory/applied.env" || return 1
+    chmod 0600 -- "$directory/applied.env"
+}
+
 run_test() {
     local name="${1:?test name required}"
     local function_name="${2:?test function required}"
 
-    if "$function_name"; then
+    # A case may replace commands or global flags; keep those changes local.
+    # Parent EXIT traps own shared fixtures and must not run in each case.
+    if (trap - EXIT; "$function_name"); then
         test_pass "$name"
     else
         test_fail "$name"
