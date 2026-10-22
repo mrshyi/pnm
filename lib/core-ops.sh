@@ -418,7 +418,7 @@ pnm_core_update() {
     pnm_tx_begin "core-update-$PNM_CORE_ID" || return $?
     pnm_core_capture_applied || { rc=$?; pnm_tx_close; return "$rc"; }
     pnm_tx_add_rollback pnm_core_update_rollback || { pnm_tx_close; return "$PNM_EXIT_SOFTWARE"; }
-    pnm_tx_write_file "$staged" "$PNM_CORE_BINARY" core_binary 0755 || {
+    pnm_tx_write_file "$staged" "$PNM_CORE_BINARY" core_binary 0755 required || {
         rc=$?; pnm_core_update_abort update 'binary publication' "$rc"; return "$rc";
     }
     if [[ "$(pnm_binary_version_number "$PNM_CORE_BINARY" "$style")" != "${version#v}" ]]; then
@@ -449,6 +449,7 @@ pnm_core_update() {
         pnm_core_update_abort update 'previous binary and metadata consistency check' "$PNM_EXIT_CONFIG"; return "$PNM_EXIT_CONFIG";
     }
     pnm_core_refresh_applied || { rc=$?; pnm_core_update_abort update 'applied evidence publication' "$rc"; return "$rc"; }
+    pnm_tx_verify_written_resources || { rc=$?; pnm_core_update_abort update 'published resource verification' "$rc"; return "$rc"; }
     pnm_tx_commit || { rc=$?; pnm_core_update_abort update 'transaction commit' "$rc"; return "$rc"; }
     pnm_tx_close
     pnm_success "$PNM_CORE_ID updated to $version; use 'pnm rollback $PNM_CORE_ID' to revert."
@@ -468,9 +469,9 @@ pnm_core_publish_previous_state() {
     local metadata_target="${4:?previous metadata target required}"
 
     PNM_CORE_UPDATE_FAILURE_STAGE='previous binary publication'
-    pnm_tx_write_file "$binary_source" "$binary_target" previous_binary 0755 || return $?
+    pnm_tx_write_file "$binary_source" "$binary_target" previous_binary 0755 required || return $?
     PNM_CORE_UPDATE_FAILURE_STAGE='previous version metadata publication'
-    pnm_tx_write_file "$metadata_source" "$metadata_target" previous_metadata 0600 || return $?
+    pnm_tx_write_file "$metadata_source" "$metadata_target" previous_metadata 0600 required || return $?
     PNM_CORE_UPDATE_FAILURE_STAGE=''
 }
 
@@ -512,7 +513,7 @@ pnm_core_rollback() {
     pnm_tx_begin "core-rollback-$core" || return $?
     pnm_core_capture_applied || { rc=$?; pnm_tx_close; return "$rc"; }
     pnm_tx_add_rollback pnm_core_update_rollback || { pnm_tx_close; return "$PNM_EXIT_SOFTWARE"; }
-    pnm_tx_write_file "$previous_file" "$PNM_CORE_BINARY" core_binary 0755 || {
+    pnm_tx_write_file "$previous_file" "$PNM_CORE_BINARY" core_binary 0755 required || {
         rc=$?; pnm_core_update_abort rollback 'binary publication' "$rc"; return "$rc";
     }
     pnm_systemctl restart "$PNM_CORE_UNIT" || { rc=$?; pnm_core_update_abort rollback 'service restart' "$rc"; return "$rc"; }
@@ -535,6 +536,7 @@ pnm_core_rollback() {
         pnm_core_update_abort rollback 'previous binary and metadata consistency check' "$PNM_EXIT_CONFIG"; return "$PNM_EXIT_CONFIG";
     }
     pnm_core_refresh_applied || { rc=$?; pnm_core_update_abort rollback 'applied evidence publication' "$rc"; return "$rc"; }
+    pnm_tx_verify_written_resources || { rc=$?; pnm_core_update_abort rollback 'published resource verification' "$rc"; return "$rc"; }
     pnm_tx_commit || { rc=$?; pnm_core_update_abort rollback 'transaction commit' "$rc"; return "$rc"; }
     pnm_tx_close
     pnm_success "$core rolled back to $version."
@@ -643,27 +645,33 @@ root = pathlib.Path(sys.argv[2])
 try:
     with tarfile.open(sys.argv[1], "r:gz") as source:
         members, seen, manifest_item = {}, set(), None
-        archive_members = source.getmembers()
-        if len(archive_members) > 64:
-            raise ValueError("too many backup members")
         total_size = 0
-        for item in archive_members:
-            name = item.name.removeprefix("./").lstrip("/")
-            if name in ("", "."): continue
+        # Stop at the limit while enumerating, rather than first retaining an
+        # unbounded complete member list. Never normalize absolute paths.
+        for member_count, item in enumerate(source, start=1):
+            if member_count > 64:
+                raise ValueError("too many backup members")
+            name = item.name.removeprefix("./")
+            if pathlib.PurePosixPath(name).is_absolute() or ".." in pathlib.PurePosixPath(name).parts:
+                raise ValueError("unsafe backup path")
+            if name in ("", "."):
+                if not item.isdir() or item.size != 0:
+                    raise ValueError("invalid backup root directory")
+                continue
             if name == "MANIFEST.txt":
                 if not item.isfile() or manifest_item is not None: raise ValueError("invalid or duplicate manifest")
+                if not 0 <= item.size <= 65536: raise ValueError("backup manifest exceeds size limit")
+                total_size += item.size
                 manifest_item = item
             elif name in allowed:
                 if not item.isfile() or name in seen: raise ValueError("unsafe or duplicate backup member")
-                if item.size > 268435456: raise ValueError("backup member exceeds size limit")
+                if not 0 <= item.size <= 268435456: raise ValueError("backup member exceeds size limit")
                 total_size += item.size
-                if total_size > 536870912: raise ValueError("backup exceeds total size limit")
                 seen.add(name); members[name] = item
-            elif not item.isdir() or ".." in pathlib.PurePosixPath(name).parts:
+            elif not item.isdir() or item.size != 0:
                 raise ValueError("unexpected backup member")
-        if not {"etc/pnm/node.conf", "etc/pnm/versions.conf", "usr/local/etc/xray/config.json",
-                "etc/hysteria/config.yaml", "usr/local/bin/xray", "usr/local/bin/hysteria",
-                "etc/systemd/system/xray.service", "etc/systemd/system/hysteria-server.service"} <= seen:
+            if total_size > 536870912: raise ValueError("backup exceeds total size limit")
+        if not allowed <= seen:
             raise ValueError("backup lacks required Core state")
         manifest = None if manifest_item is None else source.extractfile(manifest_item)
         if manifest is None or b"CONTAINS SECRETS" not in manifest.read(256):

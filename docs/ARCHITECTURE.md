@@ -1,8 +1,8 @@
 # PNM Architecture
 
-This document describes the source baseline plus the safety/G-02 changes and the 2026-10-23 persisted-port and lifecycle-evidence continuation. It is not a production deployment attestation. Verify behavior against source and tests when changing it.
+This document describes the source baseline plus safety/G-02, persisted-port, lifecycle-evidence and update/restore-input changes through 2026-10-23. It is not a production deployment attestation. Verify behavior against source and tests when changing it.
 
-**Increment baseline:** branch `dev`, HEAD `686328f134f5f19af8dd86b9779f0b661c476019`, `VERSION` `0.16.0-rc.1` (checked 2026-10-23).
+**Increment baseline:** branch `dev`, HEAD `c48cd4f533fa2f3e65f3a530d9afd40deed2882f`, `VERSION` `0.16.0-rc.1` (checked 2026-10-23).
 
 ## System boundary
 
@@ -62,6 +62,10 @@ Loaded units and existing Core resources require established PNM ownership recei
 `pnm status` reports service state and detected Core versions. Root `pnm check`, `node show` and links take a shared lock and reject unresolved deployment state. Non-root `check` retains diagnostics with UNKNOWN deployment/configuration-readiness results; `node show` and links require root (link help remains public). Local listening is not a proof of public reachability or successful client handshakes. There is no implemented Profile model; installation targets both cores.
 
 The Core operations include per-Core restart/log/apply/update/rollback and backup/restore/uninstall routes (`lib/core-ops.sh`). Updates use pinned versions and checksums. Restore stages and validates archive contents before applying. Feature presence in source is not by itself proof that every rollback/failure path is verified; consult `docs/TASKS.md` for current acceptance status.
+
+Update/rollback explicitly enroll metadata for the current binary, previous binary and `previous.env`, and verify all published transaction resources before commit. Compensation preserves an intervening content or metadata edit and reports recovery required. Mutable reads before the transaction lock still require a separate concurrency audit; this resource verification does not establish whole-operation serializability.
+
+Restore parsing enumerates at most 64 visible members, rejects absolute/traversing names and payload-bearing directory entries, bounds the manifest to 64 KiB and declared resource totals to 512 MiB, and requires the complete 12-resource set before candidate validation. These are member-level checks; internal tar PAX/GNU extension parsing and complete hostile-archive resource exhaustion are not accepted. Candidate validation executes the staged Core binaries, so file ownership/mode checks do not establish archive provenance or make untrusted executables safe.
 
 Restart/update/rollback carry forward only previously confirmed applied evidence. Under the transaction lock they capture the record, configuration digest and metadata; after health checks they publish the new invocation against that fixed digest through the existing transaction. Missing, changed or damaged evidence is retained without promotion. Compensation restores resource bytes and the service baseline before refreshing a previously confirmed active invocation; an inactive baseline keeps its original record. These applied writes explicitly enroll metadata before post-publication receipts, so external content/metadata drift retains recovery evidence rather than being silently overwritten. This does not implement automatic reboot reconciliation or race-free coordination with arbitrary privileged writers.
 

@@ -18,6 +18,7 @@ source "$TEST_ROOT/testlib.sh"
 source <(declare -f pnm_core_record_applied_config | sed '1s/pnm_core_record_applied_config/pnm_test_real_record_applied_config/')
 source <(declare -f pnm_core_applied_config_status | sed '1s/pnm_core_applied_config_status/pnm_test_real_applied_status/')
 source <(declare -f pnm_tx_manifest_append | sed '1s/pnm_tx_manifest_append/pnm_test_real_manifest_append/')
+source <(declare -f pnm_tx_write_file | sed '1s/pnm_tx_write_file/pnm_test_real_write_file/')
 
 suite_root="$(mktemp -d)"
 trap 'rm -rf -- "$suite_root"' EXIT
@@ -80,6 +81,7 @@ pnm_systemctl() {
         fixture_edit_config=0
     fi
 }
+source <(declare -f pnm_systemctl | sed '1s/pnm_systemctl/pnm_test_real_systemctl/')
 pnm_systemd_unit_healthy() {
     [[ "${fixture_active[$1]}" == active ]] || return 1
     if ((fixture_health_failures > 0)); then
@@ -287,6 +289,127 @@ test_metadata_is_enrolled_before_post_write_receipts() {
     done
 }
 
+capture_binary_slots() {
+    local path
+    declare -gA fixture_slot_hashes=() fixture_slot_attributes=()
+    for path in "$PNM_XRAY_BIN" "$PNM_HY2_BIN" "$PNM_STATE_DIR"/cores/{xray,hysteria2}/{previous,previous.env}; do
+        fixture_slot_hashes[$path]="$(pnm_tx_file_sha256 "$path")"
+        fixture_slot_attributes[$path]="$(stat -c '%a:%u:%g' "$path")"
+    done
+}
+
+assert_binary_slots_restored() {
+    local path
+    for path in "${!fixture_slot_hashes[@]}"; do
+        assert_eq "${fixture_slot_hashes[$path]}" "$(pnm_tx_file_sha256 "$path")" || return 1
+        assert_eq "${fixture_slot_attributes[$path]}" "$(stat -c '%a:%u:%g' "$path")" || return 1
+    done
+    assert_eq confirmed "$(pnm_core_applied_config_status "$PNM_CORE_ID" "$PNM_CORE_CONFIG")" || return 1
+    assert_peer_untouched "$PNM_CORE_ID" || return 1
+    assert_eq 0 "$PNM_LOCK_DEPTH"
+}
+
+test_update_slot_publication_failures_restore_pairs() {
+    local core operation label point rc faulted=0
+    pnm_tx_write_file() {
+        if [[ "$3" == "$label" && "$point" == before && "$faulted" == 0 ]]; then faulted=1; return 73; fi
+        pnm_test_real_write_file "$@" || return $?
+        if [[ "$3" == "$label" && "$point" == after && "$faulted" == 0 ]]; then faulted=1; return 73; fi
+    }
+    for core in xray hysteria2; do
+        for operation in update rollback; do
+            for label in core_binary previous_binary previous_metadata; do
+                for point in before after; do
+                    prepare_evidence_fixture
+                    if ((EUID == 0)); then
+                        chown +65534:+65534 "$PNM_STATE_DIR/cores/$core/previous" "$PNM_STATE_DIR/cores/$core/previous.env" || return 1
+                    fi
+                    capture_binary_slots
+                    faulted=0
+                    if "pnm_core_$operation" "$core"; then rc=0; else rc=$?; fi
+                    assert_eq 1 "$faulted" || return 1
+                    assert_eq 73 "$rc" || return 1
+                    assert_binary_slots_restored || return 1
+                done
+            done
+        done
+    done
+}
+
+test_update_slot_metadata_edits_are_retained() {
+    local core operation slot rc drift_path
+    pnm_tx_commit() { chmod 0640 "$drift_path"; return 73; }
+    for core in xray hysteria2; do
+        for operation in update rollback; do
+            for slot in binary previous previous.env; do
+                prepare_evidence_fixture
+                if [[ "$slot" == binary ]]; then
+                    pnm_core_resolve "$core"
+                    drift_path="$PNM_CORE_BINARY"
+                else
+                    drift_path="$PNM_STATE_DIR/cores/$core/$slot"
+                fi
+                if "pnm_core_$operation" "$core"; then rc=0; else rc=$?; fi
+                assert_eq 73 "$rc" || return 1
+                assert_eq 640 "$(stat -c '%a' "$drift_path")" || return 1
+                assert_eq 1 "$PNM_TX_RECOVERY_REQUIRED" || return 1
+                assert_peer_untouched "$core" || return 1
+                assert_eq 0 "$PNM_LOCK_DEPTH" || return 1
+            done
+        done
+    done
+}
+
+test_update_candidate_version_mismatch_is_nonmutating() {
+    local core rc
+    pnm_asset_download_verified() { make_version_binary "$4" 9.9.9; }
+    for core in xray hysteria2; do
+        prepare_evidence_fixture
+        capture_binary_slots
+        if pnm_core_update "$core"; then rc=0; else rc=$?; fi
+        assert_eq 78 "$rc" || return 1
+        assert_binary_slots_restored || return 1
+        assert_eq 0 "${fixture_restarts[$PNM_CORE_UNIT]}" || return 1
+    done
+}
+
+test_update_restart_and_recovery_failures_are_reported() {
+    local core operation failure rc fixture_restart_attempts=0 fixture_failed_attempt=0
+    pnm_systemctl() {
+        ((fixture_restart_attempts += 1))
+        ((fixture_restart_attempts != fixture_failed_attempt)) || return 69
+        pnm_test_real_systemctl "$@"
+    }
+    for core in xray hysteria2; do
+        for operation in update rollback; do
+            for failure in restart recovery; do
+                prepare_evidence_fixture
+                capture_binary_slots
+                fixture_restart_attempts=0
+                fixture_failed_attempt=1
+                if [[ "$failure" == recovery ]]; then fixture_failed_attempt=2; fixture_health_failures=1; fi
+                run_capture "pnm_core_$operation" "$core"
+                rc="$RUN_RC"
+                if [[ "$failure" == restart ]]; then
+                    assert_eq 69 "$rc" || return 1
+                    assert_binary_slots_restored || return 1
+                    assert_contains "$RUN_ERROR" 'previous Core state was restored' || return 1
+                else
+                    assert_eq 78 "$rc" || return 1
+                    assert_eq 1 "$PNM_TX_RECOVERY_REQUIRED" || return 1
+                    assert_contains "$RUN_ERROR" 'rollback failed' || return 1
+                    assert_contains "$RUN_ERROR" 'recovery files were retained' || return 1
+                    assert_eq changed "$(pnm_core_applied_config_status "$core" "$PNM_CORE_CONFIG")" || return 1
+                    local -a snapshots=("$PNM_STATE_DIR"/transactions/*/snapshots/core_binary)
+                    [[ -f "${snapshots[0]}" ]] || return 1
+                    assert_peer_untouched "$core" || return 1
+                    assert_eq 0 "$PNM_LOCK_DEPTH" || return 1
+                fi
+            done
+        done
+    done
+}
+
 test_config_edit_during_capture_is_rejected_before_restart() {
     local rc
     prepare_evidence_fixture
@@ -331,4 +454,8 @@ run_test 'post-publication metadata edits are retained for recovery' test_post_p
 run_test 'config edits at applied publication are not certified' test_config_edit_at_publication_is_not_certified
 run_test 'config edits during baseline capture stop before restart' test_config_edit_during_capture_is_rejected_before_restart
 run_test 'metadata enrollment precedes post-write receipt failure' test_metadata_is_enrolled_before_post_write_receipts
+run_test 'update and rollback publication failures restore all binary metadata pairs' test_update_slot_publication_failures_restore_pairs
+run_test 'update and rollback retain binary slot metadata edits' test_update_slot_metadata_edits_are_retained
+run_test 'unapproved candidate version does not mutate either Core' test_update_candidate_version_mismatch_is_nonmutating
+run_test 'update restart errors recover or explicitly retain recovery failures' test_update_restart_and_recovery_failures_are_reported
 finish_tests
