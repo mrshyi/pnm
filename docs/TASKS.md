@@ -1,8 +1,8 @@
 # PNM Current Tasks
 
-**Last reconciled:** 2026-10-23 (G-04 staging cleanup continuation; Debian WSL `make check` passes 273 tests; systemd/production acceptance remains open)
+**Last reconciled:** 2026-10-23 (G-04 backup consistency continuation; Debian WSL `make check` passes 282 tests; systemd/production acceptance remains open)
 
-**Current increment baseline:** branch `dev`, HEAD `888ee3c8f69f74eb93db8fcacbf73e8c58915ed6`, VERSION `0.16.0-rc.1`.
+**Current increment baseline:** branch `dev`, HEAD `ec7f057b1f86233699cec8660a4bbb186c033cc9`, VERSION `0.16.0-rc.1`.
 
 This page is a status snapshot, not a test report. Status must be refreshed from current source, test output, or host evidence before it is changed. Historical Phase 2 analysis is preserved in [PHASE2_GAP_ANALYSIS.md](PHASE2_GAP_ANALYSIS.md).
 
@@ -477,6 +477,41 @@ exit 0**. Logs: `/var/tmp/pnm-cleanup-final.check.log`,
 These checks cover private staging and mocked service/Core paths, not real
 systemd interruption/reboot or external client connectivity.
 
+## G-04 backup snapshot consistency — 2026-10-23
+
+Root cause: backup copied live resources before any PNM lock, used fixed default
+ports and queried live executables for the manifest. Uninstall captured the whole
+backup function in a child shell, losing its staging cleanup registration.
+
+Backup now reuses the exclusive Core-operation lock across preparation, snapshot
+and publication. It checks pending deployment recovery before staging and validates
+source/destination ancestors. Manifest ports and version probes use the staged
+snapshot. Uninstall calls it directly, retains the result in `PNM_CORE_BACKUP_PATH`
+and propagates errors. CLI stdout is unchanged. A same-filesystem private 0600
+archive is hard-linked into place without replacing a late-created target;
+ordinary creation failures remove the private partial output.
+
+After extracting only the fixed source-path boundary for private fixtures, the
+old behavior passed 2/8 cases. Root and actual nobody runs now pass 9/9, including
+real independent `flock` exclusion during copying, pending recovery, staged
+manifest, symlink ancestor refusal, late destination preservation, tar failure,
+same-shell uninstall dispatch and relative destination/stdout compatibility.
+The relative-path regression was reproduced at 8 passed / 1 failed and repaired.
+Independent review accepted the bounded delta after this compatibility fix.
+
+Logs: `/var/tmp/pnm-backup-next.mapped-red.log`,
+`/var/tmp/pnm-backup-next.relative-red.log`,
+`/var/tmp/pnm-backup-next.relative-green.log`, `/var/tmp/pnm-backup-next.nobody.log`.
+Final frozen copy `/var/tmp/pnm-backup-final`: `make check` **exit 0, 28 suites /
+282 passed / 0 failed**, including syntax/security scan; `make shellcheck`
+**exit 0**. Logs: `/var/tmp/pnm-backup-final.check.log` and
+`/var/tmp/pnm-backup-final.lint.log`. Services/NSS are mocked and
+only synthetic fixture binaries run. Protected parents and cooperating writers
+remain assumptions; this does not authenticate archives or prove crash durability.
+An uncatchable exit may leave a private hidden publication file. Restore input
+identity and standalone catchable interruption remain source follow-ups, followed
+by real systemd/reboot/client acceptance.
+
 ## Verification already reported (historical host evidence)
 
 A prior user-provided `proxy-tokyo` read-only report stated that PNM 0.16.0-rc.1, both Core services/listeners, `pnm check`, and selected permissions were healthy, and that public client connections had succeeded. This report is historical and was not independently refreshed in this documentation task. It does not close the local failure-injection gaps above or prove the current installed source matches this HEAD.
@@ -486,7 +521,7 @@ A prior user-provided `proxy-tokyo` read-only report stated that PNM 0.16.0-rc.1
 1. Confirm deployed PNM source identity for G-01 using read-only checks.
 2. Accept the repaired A-03/A-04 paths in a disposable systemd VM, including explicit commands versus reboot/external restart; do not treat local results as completed Phase 3 acceptance.
 3. Use a disposable Debian 13 systemd VM for real lifecycle/recovery acceptance. The local WSL environment already provides Bash, make, ShellCheck, Python, ripgrep, zip/unzip, flock and OpenSSL for source and mock tests.
-4. Finish backup snapshot consistency and temporary staging cleanup; accept real service-account/TLS loading and restore/update/rollback recovery/concurrency in systemd. Extend local results and record exact commands/exits/environment.
+4. Verify restore input identity and standalone interruption handling, then accept real service-account/TLS loading and restore/update/rollback recovery/concurrency in systemd. Extend local results and record exact commands/exits/environment.
 5. Reassess Phase 3 completion. Do not start Phase 4 automatically.
 
 ## Boundaries

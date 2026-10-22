@@ -2,9 +2,9 @@
 
 This document describes the source baseline plus safety/G-02, persisted-port, lifecycle-evidence and update/restore-input changes through 2026-10-23. It is not a production deployment attestation. Verify behavior against source and tests when changing it.
 
-**Increment baseline:** branch `dev`, HEAD `888ee3c8f69f74eb93db8fcacbf73e8c58915ed6`, `VERSION` `0.16.0-rc.1` (checked 2026-10-23).
+**Increment baseline:** branch `dev`, HEAD `ec7f057b1f86233699cec8660a4bbb186c033cc9`, `VERSION` `0.16.0-rc.1` (checked 2026-10-23).
 
-Internal staging callers receive paths through `pnm_make_temp_dir variable`, retaining cleanup registration in the calling shell. The zero-argument stdout interface remains available. Creation refuses unsafe/unregistered roots and removes the empty new directory on permission, registration or output failure. EXIT cleanup tolerates missing paths and reports removal failures on stderr without replacing the original command status. Whole-operation command substitutions still need separate review; this does not establish signal/crash transaction recovery.
+Internal staging callers receive paths through `pnm_make_temp_dir variable`, retaining cleanup registration in the calling shell. The zero-argument stdout interface remains available. Creation refuses unsafe/unregistered roots and removes the empty new directory on permission, registration or output failure. EXIT cleanup tolerates missing paths and reports removal failures on stderr without replacing the original command status. Uninstall calls backup directly and reads its fixed internal result field, retaining nested staging registration. This does not establish signal/crash transaction recovery.
 
 ## System boundary
 
@@ -80,6 +80,8 @@ Restore enrolls file metadata and directory preparation in the existing transact
 Restart/update/rollback carry forward only previously confirmed applied evidence. Under the transaction lock they capture the record, configuration digest and metadata; after health checks they publish the new invocation against that fixed digest through the existing transaction. Missing, changed or damaged evidence is retained without promotion. Compensation restores resource bytes and the service baseline before refreshing a previously confirmed active invocation; an inactive baseline keeps its original record. These applied writes explicitly enroll metadata before post-publication receipts, so external content/metadata drift retains recovery evidence rather than being silently overwritten. This does not implement automatic reboot reconciliation or race-free coordination with arbitrary privileged writers.
 
 ## Security boundaries
+
+Backup holds the existing exclusive reentrant PNM lock before destination preparation and all twelve resource reads. It refuses pending deployment recovery and unsafe source/destination path components. Manifest ports come from the staged node configuration; Core versions are queried from staged executable copies, with `unknown` retained when probing fails. A private mode-0600 temporary archive on the destination filesystem is linked into place without replacing an existing target. CLI stdout and ordinary relative destinations remain compatible. Cooperating PNM writers are excluded; arbitrary privileged writers and runtime state changes outside PNM remain outside this guarantee. An uncatchable exit can leave the private hidden publication file; this is not an authenticated or crash-durable backup protocol.
 
 - PNM does not configure SSH, Tailscale, UFW, OCI security groups, or cloud firewalls as part of normal installation.
 - Managed service identities are validated and reused where policy permits. Rollback must not remove pre-existing accounts.

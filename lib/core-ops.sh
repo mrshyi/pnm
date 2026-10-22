@@ -4,6 +4,7 @@ PNM_CORE_ID=''
 PNM_CORE_UNIT=''
 PNM_CORE_BINARY=''
 PNM_CORE_CONFIG=''
+PNM_CORE_BACKUP_PATH=''
 PNM_CORE_RESTORE_XRAY_ACTIVE=''
 PNM_CORE_RESTORE_XRAY_ENABLED=''
 PNM_CORE_RESTORE_HY2_ACTIVE=''
@@ -318,12 +319,29 @@ pnm_core_apply_config() {
     pnm_success "$core configuration applied."
 }
 
+pnm_core_backup_source() {
+    printf '/%s\n' "$1"
+}
+
 pnm_core_backup() {
-    local destination=$1 directory staging file manifest
+    PNM_CORE_BACKUP_PATH=''
+    pnm_require_root || return $?
+    pnm_core_with_write_lock pnm_core_backup_locked "$1"
+}
+
+pnm_core_backup_locked() {
+    local destination=$1 directory staging file manifest source publication
+    local xray_version hy2_version
+    local -A backup_node=()
     local -a files=(etc/pnm/node.conf etc/pnm/versions.conf etc/pnm/secrets/reality.env etc/pnm/secrets/hysteria.env
         usr/local/etc/xray/config.json etc/hysteria/config.yaml etc/hysteria/tls/server.crt etc/hysteria/tls/server.key
         usr/local/bin/xray usr/local/bin/hysteria etc/systemd/system/xray.service etc/systemd/system/hysteria-server.service)
-    pnm_require_root || return $?
+    if [[ -n "$destination" ]]; then
+        case "$destination" in
+            /*) pnm_validate_managed_path "$destination" || return $? ;;
+            *) pnm_validate_managed_path "$PWD/$destination" || return $? ;;
+        esac
+    fi
     if [[ -z "$destination" ]]; then
         directory=/var/backups/pnm
         pnm_mkdir_mode 0700 "$directory" || return "$PNM_EXIT_CANTCREAT"
@@ -334,34 +352,49 @@ pnm_core_backup() {
     fi
     [[ ! -e "$destination" && ! -L "$destination" ]] || return "$PNM_EXIT_CANTCREAT"
     for file in "${files[@]}"; do
-        if [[ ! -f "/$file" || -L "/$file" ]]; then
+        source="$(pnm_core_backup_source "$file")" || return $?
+        if ! pnm_validate_managed_path "$source" || [[ ! -f "$source" || -L "$source" ]]; then
             pnm_error "Cannot create a complete Core backup; required file is missing or unsafe: /$file"
             return "$PNM_EXIT_CONFIG"
         fi
     done
     pnm_make_temp_dir staging || return $?
     for file in "${files[@]}"; do
-        [[ -f "/$file" && ! -L "/$file" ]] || continue
+        source="$(pnm_core_backup_source "$file")" || return $?
+        pnm_validate_managed_path "$source" || return $?
+        [[ -f "$source" && ! -L "$source" ]] || return "$PNM_EXIT_CONFIG"
         mkdir -p -- "$staging/$(dirname -- "$file")" || return "$PNM_EXIT_CANTCREAT"
-        install -m 0600 -- "/$file" "$staging/$file" || return "$PNM_EXIT_CANTCREAT"
+        install -m 0600 -- "$source" "$staging/$file" || return "$PNM_EXIT_CANTCREAT"
     done
+    # Read metadata from the bytes being archived, not mutable live paths.
+    local PNM_CONFIG_DIR="$staging/etc/pnm"
+    pnm_load_node_config backup_node && pnm_validate_node_config backup_node || return "$PNM_EXIT_CONFIG"
+    chmod 0700 -- "$staging/usr/local/bin/xray" "$staging/usr/local/bin/hysteria" || return "$PNM_EXIT_NOPERM"
+    xray_version="$(pnm_binary_version "$staging/usr/local/bin/xray" xray 2>/dev/null || printf unknown)"
+    hy2_version="$(pnm_binary_version "$staging/usr/local/bin/hysteria" hysteria 2>/dev/null || printf unknown)"
+    chmod 0600 -- "$staging/usr/local/bin/xray" "$staging/usr/local/bin/hysteria" || return "$PNM_EXIT_NOPERM"
     manifest="$staging/MANIFEST.txt"
     {
         printf 'CONTAINS SECRETS\nPNM_VERSION=%s\nHOSTNAME=%s\nKERNEL=%s\n' "$(pnm_read_version)" "$(hostname)" "$(uname -r)"
-        printf 'XRAY_VERSION=%s\nHY2_VERSION=%s\nTCP_PORT=443\nUDP_PORT=8443\n' \
-            "$(pnm_binary_version "$PNM_XRAY_BIN" xray 2>/dev/null || printf unknown)" \
-            "$(pnm_binary_version "$PNM_HY2_BIN" hysteria 2>/dev/null || printf unknown)"
+        printf 'XRAY_VERSION=%s\nHY2_VERSION=%s\nTCP_PORT=%s\nUDP_PORT=%s\n' \
+            "$xray_version" "$hy2_version" "${backup_node[XRAY_PORT]}" "${backup_node[HY2_PORT]}"
         printf 'XRAY_ACTIVE=%s\nXRAY_ENABLED=%s\nHY2_ACTIVE=%s\nHY2_ENABLED=%s\n' \
             "$(pnm_systemd_active_state xray.service 2>/dev/null || printf unknown)" \
             "$(pnm_systemd_enabled_state xray.service 2>/dev/null || printf unknown)" \
             "$(pnm_systemd_active_state hysteria-server.service 2>/dev/null || printf unknown)" \
             "$(pnm_systemd_enabled_state hysteria-server.service 2>/dev/null || printf unknown)"
     } >"$manifest" || return "$PNM_EXIT_CANTCREAT"
-    chmod 0600 -- "$manifest"
-    tar --create --gzip --file "$destination" --directory "$staging" . || {
-        rm -f -- "$destination"; return "$PNM_EXIT_CANTCREAT";
+    chmod 0600 -- "$manifest" || return "$PNM_EXIT_NOPERM"
+    # Build privately on the destination filesystem, then publish without
+    # replacing a file created after the precheck. Protected parents are assumed.
+    publication="$(mktemp -- "$directory/.pnm-backup.XXXXXXXX")" || return "$PNM_EXIT_CANTCREAT"
+    chmod 0600 -- "$publication" || { rm -f -- "$publication"; return "$PNM_EXIT_NOPERM"; }
+    tar --create --gzip --file "$publication" --directory "$staging" . || {
+        rm -f -- "$publication"; return "$PNM_EXIT_CANTCREAT";
     }
-    chmod 0600 -- "$destination" || { rm -f -- "$destination"; return "$PNM_EXIT_NOPERM"; }
+    ln -T -- "$publication" "$destination" || { rm -f -- "$publication"; return "$PNM_EXIT_CANTCREAT"; }
+    rm -f -- "$publication" || return "$PNM_EXIT_SOFTWARE"
+    PNM_CORE_BACKUP_PATH="$destination"
     printf '%s\n' "$destination"
 }
 
@@ -921,7 +954,8 @@ pnm_core_uninstall() {
     core=$PNM_CORE_ID unit=$PNM_CORE_UNIT binary=$PNM_CORE_BINARY config=$PNM_CORE_CONFIG
     pnm_require_root || return $?
     ((PNM_ASSUME_YES == 1)) || { pnm_error 'Uninstall requires --yes.'; return "$PNM_EXIT_USAGE"; }
-    backup="$(pnm_core_backup '')" || return "$PNM_EXIT_CANTCREAT"
+    pnm_core_backup '' >/dev/null || return $?
+    backup="$PNM_CORE_BACKUP_PATH"
     if [[ "$core" == xray ]]; then
         secret="$PNM_CONFIG_DIR/secrets/reality.env"
         paths=("$binary" "$config" "$secret" /etc/systemd/system/xray.service)
