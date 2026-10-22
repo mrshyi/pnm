@@ -1,14 +1,14 @@
 # PNM Current Tasks
 
-**Last reconciled:** 2026-10-23 (G-03 resource / G-04 archive continuation; Debian 13 WSL `make check` passes 225 tests; systemd/production acceptance remains open)
+**Last reconciled:** 2026-10-23 (G-03 preparation lock continuation; Debian 13 WSL `make check` passes 230 tests; systemd/production acceptance remains open)
 
-**Current increment baseline:** branch `dev`, HEAD `c48cd4f533fa2f3e65f3a530d9afd40deed2882f`, VERSION `0.16.0-rc.1`.
+**Current increment baseline:** branch `dev`, HEAD `91ff1b6d420799cd47cae1d236139657b7f7145f`, VERSION `0.16.0-rc.1`.
 
 This page is a status snapshot, not a test report. Status must be refreshed from current source, test output, or host evidence before it is changed. Historical Phase 2 analysis is preserved in [PHASE2_GAP_ANALYSIS.md](PHASE2_GAP_ANALYSIS.md).
 
 ## Active phase
 
-**Phase 3 — existing defect fixes and acceptance.** Phase 4 has not started. G-02 and A-03/A-04 have local filesystem/mock evidence in committed increments. The current continuation strengthens G-03 resource verification and G-04 archive rejection; real systemd, reboot and client acceptance remain open.
+**Phase 3 — existing defect fixes and acceptance.** Phase 4 has not started. G-02, A-03/A-04 and G-03 resource/G-04 archive rejection have local evidence in committed increments. The current continuation protects update/rollback preparation with the existing write lock; real systemd, reboot and client acceptance remain open.
 
 Current review artifacts (2026-10-22):
 
@@ -92,7 +92,7 @@ not close G-02 or prove systemd recovery, reboot or public client connectivity.
 |---|---|---|---|
 | G-01 — runtime/config/link state | BLOCKED for production acceptance | Current `lib/node.sh` source prints an HY2 runtime row. Prior production output reportedly omitted it despite the same VERSION; deployed executable/source identity has not been verified in this session. | On an authorized host, perform read-only path/version/source-hash comparison; do not apply or upgrade as diagnosis. |
 | G-02 — complete deployment rollback | IMPLEMENTED / local filesystem and mock checks PASS; systemd acceptance open | One deployment transaction now spans resources, lifecycle, applied/node state and final outer checks; durable marker and unresolved-deployment guards are tested. | Run the disposable-systemd/interrupt/reboot matrix in [the acceptance plan](ACCEPTANCE_PLAN.md); do not infer production readiness. |
-| G-03 — Core update transaction | PARTIAL L1 PASS / Linux acceptance open | Local update/rollback publication faults restore current/previous/version-metadata pairs, including numeric metadata; external metadata edits are retained; restart/recovery failures are visible. | Revalidate mutable baselines under the write lock and test concurrency, then run the real systemd binary/metadata/service matrix. |
+| G-03 — Core update transaction | PARTIAL L1 PASS / Linux acceptance open | Local publication faults restore current/previous/version-metadata pairs; external edits and recovery failures are visible. Kernel flock tests now cover preparation, contention, unresolved deployments, reentrancy and cleanup errors. | Run the real systemd binary/metadata/service/concurrent-command/interruption matrix in a disposable VM. |
 | G-04 — backup/restore safety | PARTIAL archive L1 PASS / full restore recovery open | Parser rejects malformed member paths/types, oversized manifest and incomplete resource sets before candidate execution; tests do not execute staged binaries. | Complete hostile PAX/GNU resource-limit review and trusted-candidate policy; test restore writes, directories, permissions, services and applied recovery before acceptance. |
 | G-05 — dependency preflight | MOCK TESTS PASS / systemd acceptance open | Debian 13 WSL preflight suite passes 14/14, including configured ports, invalid-node refusal, repeat-install refusal and missing-tool checks. Mock results do not prove real systemd install ordering. | Verify missing tools before managed-resource mutation in a disposable systemd VM. |
 | G-06 — HY2 TLS permissions | NOT TESTED for exception paths | Check and TLS permission code exists; wrong owner/mode and service-account readability cases have not been verified in Debian/systemd. | Exercise certificate/key ownership and access cases in a disposable VM. |
@@ -228,11 +228,54 @@ Final validation: Debian 13.5 WSL, UID/GID 0, isolated Linux copy
 The full log is `/var/tmp/pnm-recovery-final.check.log`. These are local
 filesystem/mock results with the boundaries above, not real service acceptance.
 
-This increment does not close G-03/G-04: mutable baseline reads before transaction
-locking still need concurrency work; tar-internal PAX/GNU extension resource limits
+At completion, that increment did not close G-03/G-04: mutable baseline reads before
+transaction locking still needed concurrency work (addressed in the continuation
+below); tar-internal PAX/GNU extension resource limits
 are not accepted; staged binaries still require trusted provenance; full restore
 write/directory/service/applied recovery and real systemd/reboot/client tests remain
 open. The visible-member limits do not make arbitrary hostile archives safe.
+
+## G-03 preparation lock continuation — 2026-10-23
+
+Root cause: update/rollback cached mutable versions, current binary bytes and
+service state before acquiring the transaction lock. Another cooperating writer
+could complete between preparation and publication. A deterministic subprocess
+writer reproduced rollback returning success with installed version 1.2.4 when
+its cached target was 1.2.2, while replacing the previous slot with an older cached
+current binary. Lock contention and unresolved deployments also occurred only
+after preparation had already run.
+
+Public entry points retain their argument/root checks, then use the existing
+reentrant exclusive lock around preparation and the nested transaction. The
+pending-deployment guard runs before preparation under that lock. Each wrapper
+releases its own level on success or failure, preserving a caller's existing lock.
+Downloads intentionally remain inside the global lock rather than adding an
+optimistic preparation/revalidation mechanism. Transaction-close failures now
+propagate instead of continuing to a success message; committed state may already
+exist when this cleanup error is reported.
+
+The Core suite passes 22/22 cases. Five added cases cover both Cores and both
+commands: a real flock-protected subprocess writer at the transaction boundary,
+another lock owner's refusal before staging, unresolved-deployment refusal before
+staging, caller-owned reentrancy, and close-error propagation. Tests check binary/
+previous/version pairing, peer-Core isolation, lock depth and actual reacquisition
+with flock, not only mocked lock calls. Service state, assets and Core validation
+remain simulated. The original three lock/baseline cases failed before repair;
+the close-error case separately reproduced exit 0 instead of 70 before correction.
+
+Focused logs: `/var/tmp/pnm-core-lock.red.log`,
+`/var/tmp/pnm-core-lock.close-red.log`, and
+`/var/tmp/pnm-core-lock-final.core.log`. Read-only source review found no further
+concrete issue in this delta. Final checks in the isolated Debian 13 WSL copy
+`/var/tmp/pnm-core-lock-final`: focused Core suite **exit 0, 22 passed**;
+`make check` **exit 0, 24 suites / 230 passed / 0 failed**, including syntax and
+security scan; `make shellcheck` **exit 0**. Full-check and lint log:
+`/var/tmp/pnm-core-lock-final.check.log`.
+
+This is local cooperating-writer evidence; full
+parallel CLI/systemd/reboot/client acceptance and noncooperating privileged-writer
+races are not established. G-04 restore-write recovery and archive-extension
+resource limits remain open.
 
 ## Verification already reported (historical host evidence)
 
@@ -243,7 +286,7 @@ A prior user-provided `proxy-tokyo` read-only report stated that PNM 0.16.0-rc.1
 1. Confirm deployed PNM source identity for G-01 using read-only checks.
 2. Accept the repaired A-03/A-04 paths in a disposable systemd VM, including explicit commands versus reboot/external restart; do not treat local results as completed Phase 3 acceptance.
 3. Use a disposable Debian 13 systemd VM for real lifecycle/recovery acceptance. The local WSL environment already provides Bash, make, ShellCheck, Python, ripgrep, zip/unzip, flock and OpenSSL for source and mock tests.
-4. Revalidate mutable update/rollback baselines under the write lock and cover concurrency; finish G-04 restore-write recovery and G-06 access cases. Extend local results to real systemd and record exact commands/exits/environment.
+4. Finish G-04 restore-write recovery and G-06 access cases, and accept concurrent update/rollback commands in real systemd. Extend local results and record exact commands/exits/environment.
 5. Reassess Phase 3 completion. Do not start Phase 4 automatically.
 
 ## Boundaries

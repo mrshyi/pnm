@@ -2,7 +2,7 @@
 
 This document describes the source baseline plus safety/G-02, persisted-port, lifecycle-evidence and update/restore-input changes through 2026-10-23. It is not a production deployment attestation. Verify behavior against source and tests when changing it.
 
-**Increment baseline:** branch `dev`, HEAD `c48cd4f533fa2f3e65f3a530d9afd40deed2882f`, `VERSION` `0.16.0-rc.1` (checked 2026-10-23).
+**Increment baseline:** branch `dev`, HEAD `91ff1b6d420799cd47cae1d236139657b7f7145f`, `VERSION` `0.16.0-rc.1` (checked 2026-10-23).
 
 ## System boundary
 
@@ -63,7 +63,9 @@ Loaded units and existing Core resources require established PNM ownership recei
 
 The Core operations include per-Core restart/log/apply/update/rollback and backup/restore/uninstall routes (`lib/core-ops.sh`). Updates use pinned versions and checksums. Restore stages and validates archive contents before applying. Feature presence in source is not by itself proof that every rollback/failure path is verified; consult `docs/TASKS.md` for current acceptance status.
 
-Update/rollback explicitly enroll metadata for the current binary, previous binary and `previous.env`, and verify all published transaction resources before commit. Compensation preserves an intervening content or metadata edit and reports recovery required. Mutable reads before the transaction lock still require a separate concurrency audit; this resource verification does not establish whole-operation serializability.
+Update/rollback retain the existing exclusive PNM lock from preparation through transaction completion and compensation. Argument validation/root checks precede this boundary; pending deployments are checked under the lock before preparation. Version pins, service state, current/previous binaries and configuration baselines are then read while cooperating PNM writers are excluded. The existing transaction lock is reentrant, and each wrapper releases only its own lock level, including early failures. Asset download remains inside this global boundary, so other writers and consistency-sensitive readers may report contention during preparation. This does not coordinate arbitrary privileged writers that ignore the PNM lock.
+
+Update/rollback explicitly enroll metadata for the current binary, previous binary and `previous.env`, and verify all published transaction resources before commit. Compensation preserves an intervening content or metadata edit and reports recovery required. Transaction-close errors propagate without a success message, even if the commit already completed; outer lock cleanup still runs.
 
 Restore parsing enumerates at most 64 visible members, rejects absolute/traversing names and payload-bearing directory entries, bounds the manifest to 64 KiB and declared resource totals to 512 MiB, and requires the complete 12-resource set before candidate validation. These are member-level checks; internal tar PAX/GNU extension parsing and complete hostile-archive resource exhaustion are not accepted. Candidate validation executes the staged Core binaries, so file ownership/mode checks do not establish archive provenance or make untrusted executables safe.
 

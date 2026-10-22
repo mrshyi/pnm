@@ -358,12 +358,25 @@ pnm_core_backup() {
     printf '%s\n' "$destination"
 }
 
+pnm_core_with_write_lock() {
+    local function_name="${1:?Core operation required}" rc=0
+    shift
+    # Preparation reads mutable baselines too. Keep the existing reentrant
+    # lock until the nested transaction and its compensation have finished.
+    pnm_lock_acquire exclusive || return $?
+    if pnm_tx_assert_no_pending_deployment; then
+        if "$function_name" "$@"; then :; else rc=$?; fi
+    else
+        rc=$?
+    fi
+    pnm_lock_release || rc="$PNM_EXIT_SOFTWARE"
+    return "$rc"
+}
+
 pnm_core_update() {
-    local requested='' version hash arg asset staged rc previous_dir previous_file previous_meta old_version style metadata_stage snapshot_stage
-    local staged_version staged_validation
-    local PNM_CORE_PRIOR_CONFIG_HASH='' PNM_CORE_PRIOR_APPLIED_HASH='' PNM_CORE_PRIOR_APPLIED_ATTRIBUTES=''
-    local -A PNM_UPDATE_NODE=() PNM_UPDATE_SECRET=()
+    local requested='' arg core
     pnm_core_resolve "$1" || return $?
+    core="$PNM_CORE_ID"
     shift
     while (($#)); do
         arg=$1; shift
@@ -373,6 +386,15 @@ pnm_core_update() {
         esac
     done
     pnm_require_root || return $?
+    pnm_core_with_write_lock pnm_core_update_locked "$core" "$requested"
+}
+
+pnm_core_update_locked() {
+    local requested="$2" version hash asset staged rc previous_dir previous_file previous_meta old_version style metadata_stage snapshot_stage
+    local staged_version staged_validation
+    local PNM_CORE_PRIOR_CONFIG_HASH='' PNM_CORE_PRIOR_APPLIED_HASH='' PNM_CORE_PRIOR_APPLIED_ATTRIBUTES=''
+    local -A PNM_UPDATE_NODE=() PNM_UPDATE_SECRET=()
+    pnm_core_resolve "$1" || return $?
     pnm_assets_load || return "$PNM_EXIT_CONFIG"
     if [[ "$PNM_CORE_ID" == xray ]]; then
         version=${PNM_ASSET_VERSIONS[XRAY_VERSION]} hash=${PNM_ASSET_VERSIONS[XRAY_SHA256]}
@@ -451,7 +473,7 @@ pnm_core_update() {
     pnm_core_refresh_applied || { rc=$?; pnm_core_update_abort update 'applied evidence publication' "$rc"; return "$rc"; }
     pnm_tx_verify_written_resources || { rc=$?; pnm_core_update_abort update 'published resource verification' "$rc"; return "$rc"; }
     pnm_tx_commit || { rc=$?; pnm_core_update_abort update 'transaction commit' "$rc"; return "$rc"; }
-    pnm_tx_close
+    pnm_tx_close || return $?
     pnm_success "$PNM_CORE_ID updated to $version; use 'pnm rollback $PNM_CORE_ID' to revert."
 }
 
@@ -488,10 +510,15 @@ pnm_core_update_abort() {
 }
 
 pnm_core_rollback() {
+    pnm_core_resolve "$1" || return $?
+    pnm_require_root || return $?
+    pnm_core_with_write_lock pnm_core_rollback_locked "$PNM_CORE_ID"
+}
+
+pnm_core_rollback_locked() {
     local core version current_version previous_dir previous_file previous_meta rc style metadata_stage
     local PNM_CORE_PRIOR_CONFIG_HASH='' PNM_CORE_PRIOR_APPLIED_HASH='' PNM_CORE_PRIOR_APPLIED_ATTRIBUTES=''
     pnm_core_resolve "$1" || return $?
-    pnm_require_root || return $?
     core=$PNM_CORE_ID
     style=xray
     [[ "$core" == hysteria2 ]] && style=hysteria
@@ -538,7 +565,7 @@ pnm_core_rollback() {
     pnm_core_refresh_applied || { rc=$?; pnm_core_update_abort rollback 'applied evidence publication' "$rc"; return "$rc"; }
     pnm_tx_verify_written_resources || { rc=$?; pnm_core_update_abort rollback 'published resource verification' "$rc"; return "$rc"; }
     pnm_tx_commit || { rc=$?; pnm_core_update_abort rollback 'transaction commit' "$rc"; return "$rc"; }
-    pnm_tx_close
+    pnm_tx_close || return $?
     pnm_success "$core rolled back to $version."
 }
 
