@@ -161,7 +161,7 @@ pnm_core_print_help() {
         update) printf '%s\n' 'Usage: pnm update <xray|hy2> [--version V]' 'Version must match the approved entry in /etc/pnm/versions.conf.' ;;
         rollback) printf '%s\n' 'Usage: pnm rollback <xray|hy2>' ;;
         backup) printf '%s\n' 'Usage: pnm backup [archive-path]' 'Backups contain Secrets and use mode 0600.' ;;
-        restore) printf '%s\n' 'Usage: pnm restore <backup.tar.gz>' ;;
+        restore) printf '%s\n' 'Usage: pnm restore <backup.tar.gz>' 'Restore only a trusted PNM backup; validation executes its Core binaries as root.' ;;
         uninstall) printf '%s\n' 'Usage: pnm uninstall <xray|hy2> --yes' 'A secret-bearing backup is created before removal.' ;;
     esac
 }

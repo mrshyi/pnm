@@ -2,7 +2,7 @@
 
 This document describes the source baseline plus safety/G-02, persisted-port, lifecycle-evidence and update/restore-input changes through 2026-10-23. It is not a production deployment attestation. Verify behavior against source and tests when changing it.
 
-**Increment baseline:** branch `dev`, HEAD `ab92c9ea8555c4972edaaa4990f033f2b8cc1f8d`, `VERSION` `0.16.0-rc.1` (checked 2026-10-23).
+**Increment baseline:** branch `dev`, HEAD `bc734e61e309e821a7b5d4b89dabd7eb09344a06`, `VERSION` `0.16.0-rc.1` (checked 2026-10-23).
 
 ## System boundary
 
@@ -69,7 +69,7 @@ Update/rollback retain the existing exclusive PNM lock from preparation through 
 
 Update/rollback explicitly enroll metadata for the current binary, previous binary and `previous.env`, and verify all published transaction resources before commit. Compensation preserves an intervening content or metadata edit and reports recovery required. Transaction-close errors propagate without a success message, even if the commit already completed; outer lock cleanup still runs.
 
-Restore parsing enumerates at most 64 visible members, rejects absolute/traversing names and payload-bearing directory entries, bounds the manifest to 64 KiB and declared resource totals to 512 MiB, and requires the complete 12-resource set before candidate validation. These are member-level checks; internal tar PAX/GNU extension parsing and complete hostile-archive resource exhaustion are not accepted. Candidate validation executes the staged Core binaries, so file ownership/mode checks do not establish archive provenance or make untrusted executables safe.
+Restore parsing enumerates at most 64 visible members, rejects absolute/traversing names and payload-bearing directory entries, bounds the manifest to 64 KiB and declared resource totals to 512 MiB, and requires the complete 12-resource set before candidate validation. Before opening tar data, the parser lowers its own address-space budget to 128 MiB and CPU budget to 30 seconds, retaining stricter inherited soft/hard limits. This includes hidden PAX/GNU processing that occurs before a visible member is yielded. Memory/overflow/recursion exhaustion returns a parsing failure without candidate execution. CPU time is not a wall-clock deadline, and the budgets apply only to parsing. Candidate validation executes staged Core binaries as root; the operator must establish trusted PNM backup provenance using a separately retained trusted checksum. Root/mode/embedded approval data do not authenticate it. See D-009 in `docs/DECISIONS.md`.
 
 Restore retains the same reentrant exclusive lock across archive staging, service/applied baselines and its transaction. Unknown load/active/enable states, including a missing unit with a live process, are refused before mutation. Both old processes must be observed stopped before runtime files are published. Protected `restore.env` stores the service baseline for manual recovery; it is never sourced or automatically replayed.
 

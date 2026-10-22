@@ -756,13 +756,20 @@ pnm_core_restore_locked() {
     pnm_platform_supported || return "$PNM_EXIT_CONFIG"
     staging="$(pnm_make_temp_dir)" || return $?
     if python3 - "$archive" "$staging" <<'PY'
-import pathlib, shutil, sys, tarfile
+import pathlib, resource, shutil, sys, tarfile
 allowed = {"etc/pnm/node.conf", "etc/pnm/versions.conf", "etc/pnm/secrets/reality.env",
  "etc/pnm/secrets/hysteria.env", "usr/local/etc/xray/config.json", "etc/hysteria/config.yaml",
  "etc/hysteria/tls/server.crt", "etc/hysteria/tls/server.key", "usr/local/bin/xray",
  "usr/local/bin/hysteria", "etc/systemd/system/xray.service", "etc/systemd/system/hysteria-server.service"}
 root = pathlib.Path(sys.argv[2])
 try:
+    # tarfile consumes PAX/GNU extension records before yielding a visible
+    # member. Bound the whole parser process, including those hidden records.
+    # Normal resource files are copied in 1 MiB chunks below.
+    for kind, budget in ((resource.RLIMIT_AS, 128 * 1024 * 1024), (resource.RLIMIT_CPU, 30)):
+        inherited = resource.getrlimit(kind)
+        limit = min([budget] + [value for value in inherited if value != resource.RLIM_INFINITY])
+        resource.setrlimit(kind, (limit, limit))
     with tarfile.open(sys.argv[1], "r:gz") as source:
         members, seen, manifest_item = {}, set(), None
         total_size = 0
@@ -803,12 +810,13 @@ try:
             data = source.extractfile(item)
             if data is None: raise ValueError("backup member unreadable")
             with data, target.open("xb") as out: shutil.copyfileobj(data, out, 1048576)
-except (OSError, tarfile.TarError, ValueError) as error:
+except (OSError, tarfile.TarError, ValueError, MemoryError, OverflowError, RecursionError) as error:
     print(f"invalid backup: {error}", file=sys.stderr); sys.exit(1)
 PY
     then
         :
     else
+        pnm_error 'Restore archive parsing failed; no managed resource was changed.'
         return "$PNM_EXIT_CONFIG"
     fi
     if pnm_core_restore_validate_staged "$staging"; then :; else

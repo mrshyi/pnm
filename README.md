@@ -30,6 +30,14 @@ Supported platforms: Debian 12/13 and Ubuntu 22.04/24.04, amd64, with systemd.
 
 Each update changes one core per command. Failed configuration changes and updates restore that core's prior files or binary and check service health.
 
+Restore accepts operator-verified trusted PNM backups. Candidate validation executes the packaged Core binaries as root. Record the backup's SHA-256 when it is created, retain that digest in a separate trusted record, and compare it again before restoration:
+
+```bash
+sudo sha256sum -- /root/pnm-backup.tar.gz
+```
+
+Keep backups root-owned with mode 0600 because they contain credentials. Ownership, permissions and a checksum stored only inside the same archive do not authenticate its origin. The parser limits itself to 128 MiB of address space and 30 seconds of CPU time (or stricter inherited limits); these protect parsing resources and do not sandbox candidate execution or verify provenance.
+
 ## Run from source
 
 ```bash

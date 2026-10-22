@@ -67,3 +67,11 @@ This file records durable decisions supported by current project rules and imple
 **Reason:** Earlier component commits prevented full compensation after a late outer health/deadline failure. A single existing transaction avoids a second recovery engine and conflicting success criteria.
 
 **Evidence:** `lib/apply-gate.sh`, `lib/deploy.sh`, `lib/sandbox-install.sh`, `lib/lifecycle.sh`, `lib/transaction.sh` and its `deployment-state.sh` helpers; local fault tests in `test_deployment_transaction.sh` and sandbox integration. Only deployment operations use the durable marker plus publication-uncertainty receipt; standalone schema-2 transactions retain journal authority. Incomplete recovery blocks further writes and protected reads; automatic cross-process recovery remains out of scope. Current results and boundaries are in `docs/TASKS.md`.
+
+## D-009 — Restore requires independently verified trusted backup provenance
+
+**Decision:** Preserve the existing trusted-PNM-backup input contract described in `IMPLEMENTATION_ASSESSMENT.md`: the operator verifies origin and a separately retained trusted archive checksum before restore. Candidate validation runs the archive's Core executables as root. Root ownership, mode 0600, an embedded manifest or self-declared approved versions do not authenticate executable provenance. CLI commands and backup formats remain unchanged; signature/key-management infrastructure is outside this increment.
+
+**Reason:** Tar member checks and parser budgets constrain parsing; they do not isolate or establish trust in programs executed after extraction. Automatically treating an archive's own approval/hash data as an independent trust anchor would give a false guarantee.
+
+**Evidence/status:** `lib/core-ops.sh` applies 128 MiB address-space and 30-second CPU limits before tar parsing, preserves stricter inherited limits and handles resource-exhaustion exceptions. `lib/output.sh` and README state the trusted-input boundary. Local archive tests exercise resource limits and hidden PAX/GNU processing without executing candidates. Real Core/systemd/reboot/client acceptance remains separately recorded in `TASKS.md`.
