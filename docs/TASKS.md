@@ -1,14 +1,14 @@
 # PNM Current Tasks
 
-**Last reconciled:** 2026-10-23 (G-04 restore dispatch/recovery continuation; Debian 13 WSL `make check` passes 254 tests; systemd/production acceptance remains open)
+**Last reconciled:** 2026-10-23 (G-06 service identity/TLS access continuation; Debian 13 WSL `make check` passes 263 tests; systemd/production acceptance remains open)
 
-**Current increment baseline:** branch `dev`, HEAD `e1de1f534ba2d32c89ee5db77068b6db8f5653b6`, VERSION `0.16.0-rc.1`.
+**Current increment baseline:** branch `dev`, HEAD `ab92c9ea8555c4972edaaa4990f033f2b8cc1f8d`, VERSION `0.16.0-rc.1`.
 
 This page is a status snapshot, not a test report. Status must be refreshed from current source, test output, or host evidence before it is changed. Historical Phase 2 analysis is preserved in [PHASE2_GAP_ANALYSIS.md](PHASE2_GAP_ANALYSIS.md).
 
 ## Active phase
 
-**Phase 3 — existing defect fixes and acceptance.** Phase 4 has not started. G-02, A-03/A-04, G-03 and G-04 filesystem compensation have local evidence in committed increments. The current continuation repairs complete restore dispatch, locking and service/applied compensation; real systemd, reboot and client acceptance remain open. The user has authorized consecutive local stages and commits, and confirmed Debian WSL is the only available test environment.
+**Phase 3 — existing defect fixes and acceptance.** Phase 4 has not started. G-02, A-03/A-04, G-03 and G-04 restore dispatch/recovery have local evidence in committed increments. The current continuation validates G-06 effective TLS access and repairs service identity validation; real systemd, reboot and client acceptance remain open. The user has authorized consecutive local stages and commits, and confirmed Debian WSL is the only available test environment.
 
 Current review artifacts (2026-10-22):
 
@@ -95,7 +95,7 @@ not close G-02 or prove systemd recovery, reboot or public client connectivity.
 | G-03 — Core update transaction | PARTIAL L1 PASS / Linux acceptance open | Local publication faults restore current/previous/version-metadata pairs; external edits and recovery failures are visible. Kernel flock tests now cover preparation, contention, unresolved deployments, reentrancy and cleanup errors. | Run the real systemd binary/metadata/service/concurrent-command/interruption matrix in a disposable VM. |
 | G-04 — backup/restore safety | PARTIAL L1 PASS / Linux acceptance open | Archive rejection, file/directory metadata and full restore dispatch with mocked service/applied recovery have local evidence. | Complete hostile PAX/GNU resource limits and trusted-candidate policy; accept real systemd, interruption and concurrent commands before closure. |
 | G-05 — dependency preflight | MOCK TESTS PASS / systemd acceptance open | Debian 13 WSL preflight suite passes 14/14, including configured ports, invalid-node refusal, repeat-install refusal and missing-tool checks. Mock results do not prove real systemd install ordering. | Verify missing tools before managed-resource mutation in a disposable systemd VM. |
-| G-06 — HY2 TLS permissions | NOT TESTED for exception paths | Check and TLS permission code exists; wrong owner/mode and service-account readability cases have not been verified in Debian/systemd. | Exercise certificate/key ownership and access cases in a disposable VM. |
+| G-06 — HY2 TLS permissions | PARTIAL local DAC PASS / service integration open | Real root/nobody permission probes cover ownership/mode, ancestor denial and tool/metadata exceptions; account names/NSS are mapped. Privileged service identities are refused. | Verify the actual hysteria account, real TLS loading and systemd sandbox access in a disposable VM. |
 
 ## G-02 deployment transaction — working-tree implementation
 
@@ -370,6 +370,46 @@ adaptation was checked separately in `/var/tmp/pnm-restore-flow-portable`:
 logs end in `.root.log` and `.nobody.log`. Production source was unchanged by this
 test adaptation; root exercises actual UID/GID while non-root simulates root policy.
 
+## G-06 service identity and TLS access continuation — 2026-10-23
+
+Root cause: the existing service identity validator checked name, home, shell and
+matching group IDs but accepted UID 0 (and a zero primary GID). That could allow
+account provisioning/reuse to accept a privileged service identity. A regression
+first reproduced `xray UID=0` returning 0 instead of 78 (6 passed / 1 failed).
+The shared validator now requires nonzero numeric UID/GID and the fixed group name,
+as well as the existing home/shell/GID checks. All 7 account tests pass, including
+both Cores, invalid IDs/group names and no useradd/groupadd calls on refusal.
+
+Eight new access cases run with WSL root and the existing nobody identity. No
+host account/group is created or changed. NSS/name mapping presents that identity
+as hysteria to the policy checker; actual file UID/GID/mode, ancestor access and
+`runuser -u nobody -- test -r` are Linux permission checks. Cases cover successful
+readability probes; a root0700 ancestor despite correct leaf metadata; wrong
+certificate/key owner/group/mode, symlink or missing file; privileged NSS identity;
+missing runuser; unavailable metadata; unconfigured/nonstatic TLS; and invalid
+Secret metadata. Diagnostics leave TLS bytes/metadata unchanged and do not expose
+the synthetic key/password. These are eight tests with table-driven scenarios.
+
+The test suite explicitly skips with 0 executed cases when root/runuser/nobody
+are unavailable. It does not claim real hysteria account provisioning, certificate
+parsing/loading, SELinux/AppArmor/systemd sandbox access, daemon startup or client
+handshake success. Those require the unavailable disposable systemd environment.
+Static review found no concrete issue in this delta.
+
+Focused logs: `/var/tmp/pnm-access-next.accounts-red.log`,
+`/var/tmp/pnm-access-next.accounts-green.log`, and
+`/var/tmp/pnm-access-next.tls.log`.
+
+Final validation: isolated Debian WSL copy `/var/tmp/pnm-access-final`,
+`make check` **exit 0, 27 suites / 263 passed / 0 failed**, no root-run skipped
+cases; syntax/security scan and `make shellcheck` **exit 0**. Log:
+`/var/tmp/pnm-access-final.check.log`. Account suite as actual nobody **7/7,
+exit 0**; the root-only TLS access suite explicitly skips **0 executed / exit 0**
+under nobody. Logs: `/var/tmp/pnm-access-final.accounts-nobody.log` and
+`/var/tmp/pnm-access-final.tls-nobody.log`. A final test-name/comment clarification
+to "readability probes" was rerun **8/8, exit 0** without a production-source
+change (`/var/tmp/pnm-access-next.tls-label-final.log`).
+
 ## Verification already reported (historical host evidence)
 
 A prior user-provided `proxy-tokyo` read-only report stated that PNM 0.16.0-rc.1, both Core services/listeners, `pnm check`, and selected permissions were healthy, and that public client connections had succeeded. This report is historical and was not independently refreshed in this documentation task. It does not close the local failure-injection gaps above or prove the current installed source matches this HEAD.
@@ -379,7 +419,7 @@ A prior user-provided `proxy-tokyo` read-only report stated that PNM 0.16.0-rc.1
 1. Confirm deployed PNM source identity for G-01 using read-only checks.
 2. Accept the repaired A-03/A-04 paths in a disposable systemd VM, including explicit commands versus reboot/external restart; do not treat local results as completed Phase 3 acceptance.
 3. Use a disposable Debian 13 systemd VM for real lifecycle/recovery acceptance. The local WSL environment already provides Bash, make, ShellCheck, Python, ripgrep, zip/unzip, flock and OpenSSL for source and mock tests.
-4. Finish G-04 archive trust/resource limits and G-06 access cases, and accept restore/update/rollback recovery and concurrent commands in real systemd. Extend local results and record exact commands/exits/environment.
+4. Finish G-04 archive trust/resource limits; accept real service-account/TLS loading and restore/update/rollback recovery/concurrency in systemd. Extend local results and record exact commands/exits/environment.
 5. Reassess Phase 3 completion. Do not start Phase 4 automatically.
 
 ## Boundaries

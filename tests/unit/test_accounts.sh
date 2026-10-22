@@ -23,12 +23,16 @@ source "$TEST_ROOT/testlib.sh"
 ACCOUNT_USERDEL_FAIL=0
 ACCOUNT_GROUPDEL_CALLS=0
 ACCOUNT_USERDEL_CALLS=0
+ACCOUNT_XRAY_UID=999
 ACCOUNT_XRAY_PASSWD_GID=999
 ACCOUNT_XRAY_GROUP_GID=999
+ACCOUNT_XRAY_GROUP_NAME=xray
 ACCOUNT_XRAY_HOME=/nonexistent
 ACCOUNT_XRAY_SHELL=/usr/sbin/nologin
+ACCOUNT_HYSTERIA_UID=998
 ACCOUNT_HYSTERIA_PASSWD_GID=998
 ACCOUNT_HYSTERIA_GROUP_GID=998
+ACCOUNT_HYSTERIA_GROUP_NAME=hysteria
 ACCOUNT_HYSTERIA_HOME=/nonexistent
 ACCOUNT_HYSTERIA_SHELL=/usr/sbin/nologin
 
@@ -38,16 +42,16 @@ getent() {
     case "${1-}" in
         passwd)
             case "${2-}" in
-                xray) printf 'xray:x:999:%s:Xray service:%s:%s\n' "$ACCOUNT_XRAY_PASSWD_GID" "$ACCOUNT_XRAY_HOME" "$ACCOUNT_XRAY_SHELL" ;;
-                hysteria) printf 'hysteria:x:998:%s:Hysteria service:%s:%s\n' "$ACCOUNT_HYSTERIA_PASSWD_GID" "$ACCOUNT_HYSTERIA_HOME" "$ACCOUNT_HYSTERIA_SHELL" ;;
+                xray) printf 'xray:x:%s:%s:Xray service:%s:%s\n' "$ACCOUNT_XRAY_UID" "$ACCOUNT_XRAY_PASSWD_GID" "$ACCOUNT_XRAY_HOME" "$ACCOUNT_XRAY_SHELL" ;;
+                hysteria) printf 'hysteria:x:%s:%s:Hysteria service:%s:%s\n' "$ACCOUNT_HYSTERIA_UID" "$ACCOUNT_HYSTERIA_PASSWD_GID" "$ACCOUNT_HYSTERIA_HOME" "$ACCOUNT_HYSTERIA_SHELL" ;;
                 '') printf 'other:x:1000:999:Other account:/home/other:/bin/bash\n' ;;
                 *) return 2 ;;
             esac
             ;;
         group)
             case "${2-}" in
-                xray) printf 'xray:x:%s:\n' "$ACCOUNT_XRAY_GROUP_GID" ;;
-                hysteria) printf 'hysteria:x:%s:\n' "$ACCOUNT_HYSTERIA_GROUP_GID" ;;
+                xray) printf '%s:x:%s:\n' "$ACCOUNT_XRAY_GROUP_NAME" "$ACCOUNT_XRAY_GROUP_GID" ;;
+                hysteria) printf '%s:x:%s:\n' "$ACCOUNT_HYSTERIA_GROUP_NAME" "$ACCOUNT_HYSTERIA_GROUP_GID" ;;
                 *) return 2 ;;
             esac
             ;;
@@ -102,6 +106,38 @@ test_existing_accounts_reject_home_shell_and_gid_mismatches() {
             if pnm_service_account_existing_valid "$account"; then rc=0; else rc=$?; fi
             [[ "$rc" -ne 0 ]] || { printf 'expected %s mismatch to be rejected\n' "$field" >&2; return 1; }
             printf -v "$variable" '%s' "$expected"
+        done
+    done
+}
+
+test_service_accounts_reject_privileged_and_invalid_identities() {
+    local account prefix valid_id value field rc mutations=0
+    useradd() { ((mutations += 1)); }
+    groupadd() { ((mutations += 1)); }
+    for account in xray hysteria; do
+        prefix="ACCOUNT_${account^^}"
+        valid_id=999
+        [[ "$account" == xray ]] || valid_id=998
+        for field in UID GID GROUP_NAME; do
+            for value in 0 -1 invalid; do
+                case "$field" in
+                    UID) printf -v "${prefix}_UID" '%s' "$value" ;;
+                    GID)
+                        printf -v "${prefix}_PASSWD_GID" '%s' "$value"
+                        printf -v "${prefix}_GROUP_GID" '%s' "$value"
+                        ;;
+                    GROUP_NAME) printf -v "${prefix}_GROUP_NAME" '%s' "$value" ;;
+                esac
+                if pnm_service_account_existing_valid "$account"; then rc=0; else rc=$?; fi
+                assert_eq 78 "$rc" "$account $field=$value must be refused" || return 1
+                if pnm_ensure_service_account "$account"; then rc=0; else rc=$?; fi
+                assert_eq 78 "$rc" || return 1
+                assert_eq 0 "$mutations" || return 1
+                printf -v "${prefix}_UID" '%s' "$valid_id"
+                printf -v "${prefix}_PASSWD_GID" '%s' "$valid_id"
+                printf -v "${prefix}_GROUP_GID" '%s' "$valid_id"
+                printf -v "${prefix}_GROUP_NAME" '%s' "$account"
+            done
         done
     done
 }
@@ -167,6 +203,7 @@ run_test 'service account policy is fixed for both Cores' test_service_account_p
 run_test 'unknown service account is rejected' test_unknown_service_account_is_rejected
 run_test 'valid existing service accounts are reused' test_valid_existing_accounts_are_reused
 run_test 'existing accounts reject Home, Shell, and primary GID mismatches' test_existing_accounts_reject_home_shell_and_gid_mismatches
+run_test 'service accounts reject root and malformed identities without mutation' test_service_accounts_reject_privileged_and_invalid_identities
 run_test 'failed user deletion preserves its group and rollback tracking' test_failed_user_delete_preserves_group_and_tracking
 run_test 'group with another primary user is preserved' test_group_with_primary_user_is_preserved
 finish_tests

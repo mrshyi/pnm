@@ -5,16 +5,18 @@ declare -ag PNM_ACCOUNTS_CREATED_GROUPS=()
 
 pnm_service_account_existing_valid() {
     local account="${1:?service account required}"
-    local policy group expected_home expected_shell record username passwd_field uid gid gecos home shell group_record group_gid
+    local policy group expected_home expected_shell record username passwd_field uid gid gecos home shell group_record group_name group_gid
 
     policy="$(pnm_service_account_policy "$account")" || return "$PNM_EXIT_CONFIG"
     IFS='|' read -r group expected_home expected_shell <<<"$policy"
     record="$(getent passwd "$account" 2>/dev/null)" || return "$PNM_EXIT_CONFIG"
     IFS=: read -r username passwd_field uid gid gecos home shell <<<"$record"
     [[ "$username" == "$account" && "$home" == "$expected_home" && "$shell" == "$expected_shell" ]] || return "$PNM_EXIT_CONFIG"
+    # A service name and nologin shell do not imply an unprivileged identity.
+    [[ "$uid" =~ ^[1-9][0-9]*$ && "$gid" =~ ^[1-9][0-9]*$ ]] || return "$PNM_EXIT_CONFIG"
     group_record="$(getent group "$group" 2>/dev/null)" || return "$PNM_EXIT_CONFIG"
-    IFS=: read -r _ _ group_gid _ <<<"$group_record"
-    [[ "$gid" == "$group_gid" ]]
+    IFS=: read -r group_name _ group_gid _ <<<"$group_record"
+    [[ "$group_name" == "$group" && "$gid" == "$group_gid" ]] || return "$PNM_EXIT_CONFIG"
 }
 
 pnm_service_account_policy() {

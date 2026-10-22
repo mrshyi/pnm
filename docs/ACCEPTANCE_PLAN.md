@@ -96,7 +96,7 @@ make release-check
 
 ## 6. 2026-10-23 本地执行及恢复检查边界
 
-环境、命令退出码、26 套件/254 项结果及日志路径统一记录在 [TASKS.md](TASKS.md)。L1 的系统服务、账户操作和监听使用 mock，文件系统、权限、摘要和密码学工具真实执行；非 root 诊断及恢复调度兼容性另用真实 nobody UID 验证。
+环境、命令退出码、27 套件/263 项结果及日志路径统一记录在 [TASKS.md](TASKS.md)。L1 的系统服务、账户操作和监听使用 mock，文件系统、权限、摘要和密码学工具真实执行；非 root 诊断、TLS 可读性探测及恢复调度兼容性另用真实 nobody UID 验证。
 
 | 本地覆盖 | 实际断言 | 仍需补充 |
 |---|---|---|
@@ -110,6 +110,7 @@ make release-check
 | [恢复包解析测试](../tests/unit/test_backup_archive.sh)，2 项 | 完整包进入隔离验证 stub；12 类坏包在候选执行前拒绝，包括根目录/目录载荷、超大清单、缺 TLS、绝对/穿越路径、链接、重复/未知/过量成员 | 不执行候选二进制；PAX/GNU 内部扩展头资源限制及来源信任仍待确认，不代表完整 T-23/T-24 或任意不可信包安全 |
 | [恢复文件系统补偿测试](../tests/unit/test_restore_recovery.sh)，9 项 | 真实文件字节及 UID/GID/mode 恢复、既有及新目录补偿、最终属主登记、发布/属主修改/登记入口元数据漂移拒绝、部分 chown 失败、symlink/外来目录属主拒绝、applied 文件及目录补偿 | 调用真实发布/补偿辅助函数；服务及账户名称映射为模拟，仍需 L2/L3 验收 |
 | [恢复调度测试](../tests/unit/test_restore_flow.sh)，15 项 | 实际解析和调度；晚期写入/健康/applied/commit 失败恢复；active/disabled、inactive、not-found、未知及无效服务状态；原 confirmed InvocationID 更新；未知及外部改动证据保留；真实 flock、清理错误、enable 目录及受保护服务基线文件 | 目的路径映射到私有 host 夹具；Core 执行及 systemd 为模拟；root 使用真实 UID/GID，非 root 兼容运行模拟 root/服务账户策略；仍需真实并发 CLI、systemd、重启和客户端验收 |
+| [TLS 访问测试](../tests/unit/test_tls_access.sh)，8 项；[账户测试](../tests/unit/test_accounts.sh)，7 项 | 真实 root/nobody 的 `test -r` 及父目录权限、owner/mode/group、symlink/缺文件、异常元数据/缺工具/skip；TLS 文件字节和元数据不变、无凭据输出；服务账户拒绝 UID/GID 0、非法 ID 和组名不符且不执行 useradd/groupadd | NSS/账户名称映射为模拟，不创建真实 hysteria 账户；`test -r` 不代表证书/密钥加载成功；非 root 的 TLS 专项明确跳过；仍需真实 systemd、LSM/sandbox、Core 加载及握手验收 |
 
 未决部署的受控人工检查应先保留受保护的完整证据，不删除 uncertainty、改 journal 或设置 configured=yes 来绕过保护。`sudo pnm --json check`、`sudo pnm node show` 在未决状态返回70是预期拒绝。记录/快照可能包含凭据，不直接打印或附到普通报告。
 

@@ -2,7 +2,7 @@
 
 This document describes the source baseline plus safety/G-02, persisted-port, lifecycle-evidence and update/restore-input changes through 2026-10-23. It is not a production deployment attestation. Verify behavior against source and tests when changing it.
 
-**Increment baseline:** branch `dev`, HEAD `e1de1f534ba2d32c89ee5db77068b6db8f5653b6`, `VERSION` `0.16.0-rc.1` (checked 2026-10-23).
+**Increment baseline:** branch `dev`, HEAD `ab92c9ea8555c4972edaaa4990f033f2b8cc1f8d`, `VERSION` `0.16.0-rc.1` (checked 2026-10-23).
 
 ## System boundary
 
@@ -14,6 +14,8 @@ PNM is a Bash management CLI for one Debian or Ubuntu VPS. It manages two indepe
 | Official Hysteria2 | Hysteria2 over QUIC | UDP/8443 | `hysteria-server.service` | `/usr/local/bin/hysteria`; `/etc/hysteria/config.yaml` |
 
 The Core units and service accounts are separate. Xray runs as `xray`; Hysteria2 runs as `hysteria`. Xray's generated unit grants only `CAP_NET_BIND_SERVICE` for TCP/443 while retaining non-root execution. See `lib/service.sh` and its unit tests. These are source-level facts; a host's installed units still require direct verification.
+
+Service-account provisioning/reuse validates a nonzero numeric UID and primary GID, the fixed home/shell policy, and the expected group name/GID. A service name or `nologin` shell alone is insufficient evidence of an unprivileged identity. TLS permission diagnostics validate leaf file ownership/modes and, when run as root, use the service identity's `test -r` probes to include ancestor traversal. This is an effective readability check, not proof that the Core successfully loaded a real certificate/key or passed its systemd sandbox restrictions.
 
 ## CLI and module boundaries
 
