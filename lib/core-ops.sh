@@ -233,7 +233,7 @@ pnm_core_apply_config() {
     else
         pnm_load_hysteria_secret "$secret_name" && pnm_validate_hysteria_secret_config "$secret_name" || return "$PNM_EXIT_CONFIG"
     fi
-    stage="$(pnm_make_temp_dir)" || return $?
+    pnm_make_temp_dir stage || return $?
     config="$stage/config"
     if [[ "$core" == xray ]]; then
         pnm_render_xray_config "$node_name" "$secret_name" >"$config" || return $?
@@ -339,7 +339,7 @@ pnm_core_backup() {
             return "$PNM_EXIT_CONFIG"
         fi
     done
-    staging="$(pnm_make_temp_dir)" || return $?
+    pnm_make_temp_dir staging || return $?
     for file in "${files[@]}"; do
         [[ -f "/$file" && ! -L "/$file" ]] || continue
         mkdir -p -- "$staging/$(dirname -- "$file")" || return "$PNM_EXIT_CANTCREAT"
@@ -419,7 +419,7 @@ pnm_core_update_locked() {
     [[ "$PNM_LIFECYCLE_PRE_ACTIVE" == active ]] || return "$PNM_EXIT_CONFIG"
     old_version="$(pnm_binary_version_number "$PNM_CORE_BINARY" "$style")" || return "$PNM_EXIT_CONFIG"
     [[ -n "$old_version" ]] || return "$PNM_EXIT_CONFIG"
-    PNM_CORE_STAGE="$(pnm_make_temp_dir)" || return $?
+    pnm_make_temp_dir PNM_CORE_STAGE || return $?
     asset="$PNM_CORE_STAGE/asset"
     pnm_asset_download_verified "$PNM_CORE_ID" "$version" "$hash" "$asset" || return $?
     if [[ "$PNM_CORE_ID" == xray ]]; then
@@ -540,7 +540,7 @@ pnm_core_rollback_locked() {
     [[ "$(pnm_binary_version_number "$previous_file" "$style")" == "$version" ]] || return "$PNM_EXIT_CONFIG"
     pnm_core_lifecycle_snapshot "$core" || return $?
     [[ "$PNM_LIFECYCLE_PRE_ACTIVE" == active ]] || return "$PNM_EXIT_CONFIG"
-    PNM_CORE_STAGE="$(pnm_make_temp_dir)" || return $?
+    pnm_make_temp_dir PNM_CORE_STAGE || return $?
     current_version="$(pnm_binary_version_number "$PNM_CORE_BINARY" "$style")" || return "$PNM_EXIT_CONFIG"
     [[ -n "$current_version" ]] || return "$PNM_EXIT_CONFIG"
     install -m 0755 -- "$PNM_CORE_BINARY" "$PNM_CORE_STAGE/current" || return "$PNM_EXIT_CANTCREAT"
@@ -754,7 +754,7 @@ pnm_core_restore_locked() {
     [[ -f "$archive" && ! -L "$archive" ]] || return "$PNM_EXIT_CONFIG"
     [[ "$(stat -c '%a:%u' -- "$archive" 2>/dev/null)" == 600:0 ]] || return "$PNM_EXIT_NOPERM"
     pnm_platform_supported || return "$PNM_EXIT_CONFIG"
-    staging="$(pnm_make_temp_dir)" || return $?
+    pnm_make_temp_dir staging || return $?
     if python3 - "$archive" "$staging" <<'PY'
 import pathlib, resource, shutil, sys, tarfile
 allowed = {"etc/pnm/node.conf", "etc/pnm/versions.conf", "etc/pnm/secrets/reality.env",
@@ -888,7 +888,7 @@ pnm_core_restore_apply_staged() {
         [[ "$(pnm_tx_file_sha256 "$record")" == "${PNM_CORE_RESTORE_APPLIED_HASH[$core]}" &&
             "$(stat -c '%a:%u:%g' -- "$record")" == "${PNM_CORE_RESTORE_APPLIED_ATTRIBUTES[$core]}" ]] || return "$PNM_EXIT_SOFTWARE"
     done
-    PNM_CORE_STAGE="$(pnm_make_temp_dir)" || return "$PNM_EXIT_CANTCREAT"
+    pnm_make_temp_dir PNM_CORE_STAGE || return "$PNM_EXIT_CANTCREAT"
     pnm_core_record_applied_config xray "$PNM_XRAY_CONFIG" "$PNM_CORE_STAGE" || return $?
     pnm_core_record_applied_config hysteria2 "$PNM_HY2_CONFIG" "$PNM_CORE_STAGE" || return $?
     pnm_tx_verify_written_resources

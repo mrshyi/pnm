@@ -1,8 +1,8 @@
 # PNM Current Tasks
 
-**Last reconciled:** 2026-10-23 (G-04 archive parser budget continuation; Debian 13 WSL `make check` passes 266 tests; systemd/production acceptance remains open)
+**Last reconciled:** 2026-10-23 (G-04 staging cleanup continuation; Debian WSL `make check` passes 273 tests; systemd/production acceptance remains open)
 
-**Current increment baseline:** branch `dev`, HEAD `bc734e61e309e821a7b5d4b89dabd7eb09344a06`, VERSION `0.16.0-rc.1`.
+**Current increment baseline:** branch `dev`, HEAD `888ee3c8f69f74eb93db8fcacbf73e8c58915ed6`, VERSION `0.16.0-rc.1`.
 
 This page is a status snapshot, not a test report. Status must be refreshed from current source, test output, or host evidence before it is changed. Historical Phase 2 analysis is preserved in [PHASE2_GAP_ANALYSIS.md](PHASE2_GAP_ANALYSIS.md).
 
@@ -449,6 +449,33 @@ taking a lock, its manifest uses fixed default ports, and temporary cleanup
 registration occurs inside command substitutions. Refresh these main-flow
 boundaries before treating G-04 as locally complete. Real systemd/interruption,
 VM reboot and external protocol acceptance remain open.
+
+## G-04 temporary staging cleanup — 2026-10-23
+
+Root cause: command substitutions around the nine direct `pnm_make_temp_dir`
+calls registered private paths only in child shells. A restore candidate rejection
+left its extracted staging directory after EXIT. The helper also lost registration
+errors, and failed cleanup could replace the primary command error. Internal
+callers now use scalar output arguments in the current shell; the existing stdout
+interface remains compatible. Both output paths remove empty new directories on
+publication failure. Missing registered paths are harmless, and failed removal
+warns on stderr while preserving status.
+
+The staging suite grew from three to ten cases, with real private filesystem and
+child EXIT behavior. Initial red evidence was 3 passed / 4 failed; exit-handling
+additions produced 7 passed / 2 failed. Independent review found the stdout failure
+case, reproduced with `/dev/full` (9 passed / 1 failed) and fixed before final
+checks. Review accepted the correction. No host services or accounts were changed.
+Whole-operation backup capture inside uninstall remains the next stage, together
+with snapshot locking and manifest ports.
+
+Final verification: frozen Debian WSL Linux copy `/var/tmp/pnm-cleanup-final`,
+`make check` **exit 0, 27 suites / 273 passed / 0 failed** (syntax/security scan
+included), `make shellcheck` **exit 0**. Actual nobody staging suite **10/10,
+exit 0**. Logs: `/var/tmp/pnm-cleanup-final.check.log`,
+`/var/tmp/pnm-cleanup-final.lint.log`, `/var/tmp/pnm-cleanup-final.nobody.log`.
+These checks cover private staging and mocked service/Core paths, not real
+systemd interruption/reboot or external client connectivity.
 
 ## Verification already reported (historical host evidence)
 

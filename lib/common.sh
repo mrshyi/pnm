@@ -80,7 +80,7 @@ pnm_runtime_exit() {
             if pnm_apply_gate_fail "$rc"; then :; else rc=$?; fi
         fi
     fi
-    pnm_cleanup
+    pnm_cleanup || pnm_warn 'Temporary cleanup failed; private staging files may remain.' >&2
     exit "$rc"
 }
 
@@ -98,19 +98,22 @@ pnm_with_deployment_read_lock() {
 }
 
 pnm_cleanup() {
-    local path
+    local path rc=0
 
     for path in "${PNM_CLEANUP_PATHS[@]:-}"; do
         [[ -n "$path" ]] || continue
         case "$path" in
             /tmp/pnm.* | /run/pnm/*)
-                [[ -e "$path" ]] && rm -rf -- "$path"
+                if [[ -e "$path" || -L "$path" ]]; then
+                    rm -rf -- "$path" || rc="$PNM_EXIT_SOFTWARE"
+                fi
                 ;;
             *)
                 # Cleanup is intentionally fail-closed for unregistered roots.
                 ;;
         esac
     done
+    return "$rc"
 }
 
 pnm_register_cleanup_path() {
@@ -127,13 +130,33 @@ pnm_register_cleanup_path() {
 }
 
 pnm_make_temp_dir() {
-    local temp_root="${TMPDIR:-/tmp}"
-    local temp_dir
-
-    temp_dir="$(mktemp -d -- "$temp_root/pnm.XXXXXXXX")" || return "$PNM_EXIT_CANTCREAT"
-    chmod 0700 -- "$temp_dir"
-    pnm_register_cleanup_path "$temp_dir"
-    printf '%s\n' "$temp_dir"
+    local pnm_temp_root="${TMPDIR:-/tmp}" pnm_temp_output="${1-}" pnm_temp_directory pnm_temp_rc
+    # Internal callers pass a scalar output name so registration happens in
+    # their shell, not in a command substitution that loses cleanup state.
+    [[ -z "$pnm_temp_output" || ( "$pnm_temp_output" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ && "$pnm_temp_output" != pnm_temp_* ) ]] || return "$PNM_EXIT_CONFIG"
+    pnm_validate_managed_path "$pnm_temp_root" || return $?
+    pnm_temp_directory="$(mktemp -d -- "$pnm_temp_root/pnm.XXXXXXXX")" || return "$PNM_EXIT_CANTCREAT"
+    if chmod 0700 -- "$pnm_temp_directory"; then :; else
+        rmdir -- "$pnm_temp_directory" || true
+        return "$PNM_EXIT_NOPERM"
+    fi
+    if pnm_register_cleanup_path "$pnm_temp_directory"; then :; else
+        pnm_temp_rc=$?
+        rmdir -- "$pnm_temp_directory" || true
+        return "$pnm_temp_rc"
+    fi
+    if [[ -n "$pnm_temp_output" ]]; then
+        printf -v "$pnm_temp_output" '%s' "$pnm_temp_directory" || {
+            rmdir -- "$pnm_temp_directory" || true
+            return "$PNM_EXIT_CONFIG"
+        }
+    else
+        printf '%s\n' "$pnm_temp_directory" || {
+            pnm_temp_rc=$?
+            rmdir -- "$pnm_temp_directory" || true
+            return "$pnm_temp_rc"
+        }
+    fi
 }
 
 pnm_command_exists() {

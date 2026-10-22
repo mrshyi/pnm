@@ -165,7 +165,7 @@ pnm_deploy_stage_configured() {
     pnm_load_node_config node || return "$PNM_EXIT_CONFIG"
     pnm_validate_node_config node || return "$PNM_EXIT_CONFIG"
     [[ "${node[PNM_CONFIGURED]}" == no ]] || return "$PNM_EXIT_CONFIG"
-    temp_dir="$(pnm_make_temp_dir)" || return $?
+    pnm_make_temp_dir temp_dir || return $?
     staged="$temp_dir/node.conf"
     if ! printf 'SCHEMA_VERSION=%s\nNODE_REGION=%s\nNODE_ADDRESS=%s\nTIMEZONE=%s\nPNM_CONFIGURED=yes\nXRAY_PORT=%s\nXRAY_SERVER_NAME=%s\nXRAY_TARGET=%s\nHY2_PORT=%s\nHY2_TLS_MODE=%s\nHY2_TLS_SERVER_NAME=%s\n' \
         "${node[SCHEMA_VERSION]}" "${node[NODE_REGION]}" "${node[NODE_ADDRESS]-}" "${node[TIMEZONE]}" "${node[XRAY_PORT]}" \

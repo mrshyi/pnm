@@ -2,7 +2,9 @@
 
 This document describes the source baseline plus safety/G-02, persisted-port, lifecycle-evidence and update/restore-input changes through 2026-10-23. It is not a production deployment attestation. Verify behavior against source and tests when changing it.
 
-**Increment baseline:** branch `dev`, HEAD `bc734e61e309e821a7b5d4b89dabd7eb09344a06`, `VERSION` `0.16.0-rc.1` (checked 2026-10-23).
+**Increment baseline:** branch `dev`, HEAD `888ee3c8f69f74eb93db8fcacbf73e8c58915ed6`, `VERSION` `0.16.0-rc.1` (checked 2026-10-23).
+
+Internal staging callers receive paths through `pnm_make_temp_dir variable`, retaining cleanup registration in the calling shell. The zero-argument stdout interface remains available. Creation refuses unsafe/unregistered roots and removes the empty new directory on permission, registration or output failure. EXIT cleanup tolerates missing paths and reports removal failures on stderr without replacing the original command status. Whole-operation command substitutions still need separate review; this does not establish signal/crash transaction recovery.
 
 ## System boundary
 

@@ -107,7 +107,7 @@ pnm_tx_rollback() {
 }
 pnm_tx_commit() { return 0; }
 pnm_tx_close() { PNM_TX_ACTIVE=0; }
-pnm_make_temp_dir() { printf '%s\n' "$PNM_TEST_APPLY_ROOT/stage"; }
+pnm_make_temp_dir() { printf -v "$1" '%s' "$PNM_TEST_APPLY_ROOT/stage"; }
 
 test_xray_apply_validation_failure_preserves_runtime_config() {
     local original rc

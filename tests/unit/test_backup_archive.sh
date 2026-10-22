@@ -17,7 +17,7 @@ PNM_LOCK_FILE="$suite_root/pnm.lock" PNM_STATE_DIR="$suite_root/state"
 
 pnm_require_root() { return 0; }
 pnm_platform_supported() { return 0; }
-pnm_make_temp_dir() { mktemp -d "$suite_root/stage.XXXXXXXX"; }
+pnm_make_temp_dir() { local created_stage; created_stage="$(mktemp -d "$suite_root/stage.XXXXXXXX")" || return $?; printf -v "$1" '%s' "$created_stage"; }
 # Archive parsing tests stop before candidate execution or managed-path writes.
 pnm_core_restore_validate_staged() { validation_reached=1; return 78; }
 # Root ownership is simulated only when the suite runs as an unprivileged user.

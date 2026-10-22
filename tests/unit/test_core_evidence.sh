@@ -63,7 +63,7 @@ prepare_evidence_fixture() {
 # Only external services, downloads and Core-specific validation are simulated.
 # CLI operations, versions, file receipts, recovery and applied checks are real.
 pnm_require_root() { return 0; }
-pnm_make_temp_dir() { mktemp -d "$fixture_root/stage.XXXXXXXX"; }
+pnm_make_temp_dir() { local created_stage; created_stage="$(mktemp -d "$fixture_root/stage.XXXXXXXX")" || return $?; printf -v "$1" '%s' "$created_stage"; }
 pnm_systemd_active_state() { printf '%s\n' "${fixture_active[$1]}"; }
 pnm_systemd_enabled_state() { printf 'enabled\n'; }
 pnm_systemd_daemon_reload() { return 0; }
@@ -463,7 +463,7 @@ test_mutable_baselines_are_read_under_the_write_lock() {
 
 test_contending_writer_refuses_before_preparation() {
     local core operation fixture_owner_fd rc
-    pnm_make_temp_dir() { touch "$fixture_root/prepared"; mktemp -d "$fixture_root/stage.XXXXXXXX"; }
+    pnm_make_temp_dir() { touch "$fixture_root/prepared"; local created_stage; created_stage="$(mktemp -d "$fixture_root/stage.XXXXXXXX")" || return $?; printf -v "$1" '%s' "$created_stage"; }
     for core in xray hysteria2; do
         for operation in update rollback; do
             prepare_evidence_fixture
@@ -486,7 +486,7 @@ test_contending_writer_refuses_before_preparation() {
 test_pending_deployment_refuses_before_preparation() {
     local core operation rc
     pnm_tx_assert_no_pending_deployment() { return 70; }
-    pnm_make_temp_dir() { touch "$fixture_root/prepared"; mktemp -d "$fixture_root/stage.XXXXXXXX"; }
+    pnm_make_temp_dir() { touch "$fixture_root/prepared"; local created_stage; created_stage="$(mktemp -d "$fixture_root/stage.XXXXXXXX")" || return $?; printf -v "$1" '%s' "$created_stage"; }
     for core in xray hysteria2; do
         for operation in update rollback; do
             prepare_evidence_fixture

@@ -143,7 +143,7 @@ pnm_node_fetch_latest_versions() {
 
     PNM_NODE_LATEST_VERSIONS=()
     PNM_NODE_LATEST_ERROR=''
-    temp_dir="$(pnm_make_temp_dir)" || return $?
+    pnm_make_temp_dir temp_dir || return $?
     xray_metadata="$temp_dir/xray-release.json"
     hysteria_metadata="$temp_dir/hysteria-release.json"
     xray_digest="$temp_dir/xray.dgst"
@@ -436,7 +436,7 @@ pnm_node_init() {
         return "$PNM_EXIT_CONFIG"
     fi
 
-    temp_dir="$(pnm_make_temp_dir)" || return $?
+    pnm_make_temp_dir temp_dir || return $?
     node_stage="$temp_dir/node.conf"
     versions_stage="$temp_dir/versions.conf"
     pnm_node_write_staged_files "$temp_dir" node_config versions_config || return $?

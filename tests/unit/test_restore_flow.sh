@@ -68,7 +68,7 @@ stat() {
     fi
     command stat "$@"
 }
-pnm_make_temp_dir() { mktemp -d "$fixture_root/stage.XXXXXXXX"; }
+pnm_make_temp_dir() { local created_stage; created_stage="$(mktemp -d "$fixture_root/stage.XXXXXXXX")" || return $?; printf -v "$1" '%s' "$created_stage"; }
 pnm_core_restore_validate_staged() { fixture_stage_checked=1; return 0; }
 pnm_systemd_available() { return 0; }
 pnm_systemd_load_state() { printf '%s\n' "${fixture_loaded[$1]}"; }
