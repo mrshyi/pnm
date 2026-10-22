@@ -96,8 +96,8 @@ PNM_STATE_DIR="$private/state" PNM_LOCK_FILE="$private/lock"
 pnm_require_root() { return 0; }
 pnm_platform_supported() { return 0; }
 stat() {
-    if ((EUID != 0)) && [[ "$1" == -c && "$2" == '%a:%u' ]]; then
-        command stat -c '%a:0' -- "$4"
+    if ((EUID != 0)) && [[ "$1" == -c && "$2" == '%a:%u:%d:%i' ]]; then
+        command stat -c '%a:0:%d:%i' -- "$4"
     else
         command stat "$@"
     fi

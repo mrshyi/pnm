@@ -782,14 +782,16 @@ pnm_core_restore() {
 }
 
 pnm_core_restore_locked() {
-    local archive=$1 staging rc
+    local archive=$1 staging rc archive_identity
     PNM_CORE_RESTORE_STARTED=0
     [[ -f "$archive" && ! -L "$archive" ]] || return "$PNM_EXIT_CONFIG"
-    [[ "$(stat -c '%a:%u' -- "$archive" 2>/dev/null)" == 600:0 ]] || return "$PNM_EXIT_NOPERM"
+    archive_identity="$(stat -c '%a:%u:%d:%i' -- "$archive" 2>/dev/null)" || return "$PNM_EXIT_NOPERM"
+    [[ "$archive_identity" =~ ^600:0:[0-9]+:[0-9]+$ ]] || return "$PNM_EXIT_NOPERM"
+    archive_identity="${archive_identity#600:0:}"
     pnm_platform_supported || return "$PNM_EXIT_CONFIG"
     pnm_make_temp_dir staging || return $?
-    if python3 - "$archive" "$staging" <<'PY'
-import pathlib, resource, shutil, sys, tarfile
+    if python3 - "$archive" "$staging" "$archive_identity" <<'PY'
+import contextlib, os, pathlib, resource, shutil, stat, sys, tarfile
 allowed = {"etc/pnm/node.conf", "etc/pnm/versions.conf", "etc/pnm/secrets/reality.env",
  "etc/pnm/secrets/hysteria.env", "usr/local/etc/xray/config.json", "etc/hysteria/config.yaml",
  "etc/hysteria/tls/server.crt", "etc/hysteria/tls/server.key", "usr/local/bin/xray",
@@ -803,7 +805,17 @@ try:
         inherited = resource.getrlimit(kind)
         limit = min([budget] + [value for value in inherited if value != resource.RLIM_INFINITY])
         resource.setrlimit(kind, (limit, limit))
-    with tarfile.open(sys.argv[1], "r:gz") as source:
+    with contextlib.ExitStack() as resources:
+        # Pin the object checked by the caller. NONBLOCK prevents a swapped
+        # FIFO from waiting before fstat can reject it; tar reads regular files.
+        stream = resources.enter_context(os.fdopen(os.open(
+            sys.argv[1], os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK), "rb"))
+        identity = os.fstat(stream.fileno())
+        if (not stat.S_ISREG(identity.st_mode) or identity.st_uid != os.geteuid()
+                or stat.S_IMODE(identity.st_mode) != 0o600
+                or f"{identity.st_dev}:{identity.st_ino}" != sys.argv[3]):
+            raise ValueError("backup identity or protected permissions changed")
+        source = resources.enter_context(tarfile.open(fileobj=stream, mode="r:gz"))
         members, seen, manifest_item = {}, set(), None
         total_size = 0
         # Stop at the limit while enumerating, rather than first retaining an

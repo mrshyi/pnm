@@ -22,8 +22,8 @@ pnm_make_temp_dir() { local created_stage; created_stage="$(mktemp -d "$suite_ro
 pnm_core_restore_validate_staged() { validation_reached=1; return 78; }
 # Root ownership is simulated only when the suite runs as an unprivileged user.
 stat() {
-    if ((EUID != 0)) && [[ "$1" == -c && "$2" == '%a:%u' ]]; then
-        command stat -c '%a:0' -- "$4"
+    if ((EUID != 0)) && [[ "$1" == -c && "$2" == '%a:%u:%d:%i' ]]; then
+        command stat -c '%a:0:%d:%i' -- "$4"
     else
         command stat "$@"
     fi
@@ -196,6 +196,39 @@ test_internal_tar_extensions_fail_cleanly_without_candidate_execution() {
     done
 }
 
+test_checked_archive_identity_survives_replacement() {
+    local scenario=$1 archive="$suite_root/identity-$1.tar.gz" replacement="$suite_root/replacement-$1.tar.gz" validation_reached=0
+    make_backup_archive "$archive" valid || return 1
+    make_backup_archive "$replacement" valid || return 1
+    python3() {
+        # Replace only at the real parser launch boundary, after the shell stat.
+        if [[ "${2-}" == "$archive" && "${3-}" == "$suite_root/stage."* ]]; then
+            case "$scenario" in
+                inode) mv -f -- "$replacement" "$archive" ;;
+                symlink) rm -- "$archive"; ln -s -- "$replacement" "$archive" ;;
+                fifo) rm -- "$archive"; mkfifo -m 0600 -- "$archive" ;;
+                mode) chmod 0644 -- "$archive" ;;
+            esac
+        fi
+        # The old FIFO parser must not hang the test runner.
+        command timeout 5s python3 "$@"
+    }
+    run_capture pnm_core_restore "$archive"
+    assert_eq 78 "$RUN_RC" || return 1
+    assert_eq 0 "$validation_reached" || return 1
+    assert_contains "$RUN_ERROR" 'invalid backup:' || return 1
+    assert_not_contains "$RUN_ERROR" Traceback
+}
+
+test_archive_replaced_with_another_regular_file() { test_checked_archive_identity_survives_replacement inode; }
+test_archive_replaced_with_a_symlink() { test_checked_archive_identity_survives_replacement symlink; }
+test_archive_replaced_with_a_fifo() { test_checked_archive_identity_survives_replacement fifo; }
+test_archive_permissions_changed_after_check() { test_checked_archive_identity_survives_replacement mode; }
+
+run_test 'checked archive identity rejects replacement with another regular file' test_archive_replaced_with_another_regular_file
+run_test 'checked archive identity rejects replacement with a symlink' test_archive_replaced_with_a_symlink
+run_test 'checked archive identity rejects a FIFO without waiting for a writer' test_archive_replaced_with_a_fifo
+run_test 'opened archive must retain protected permissions' test_archive_permissions_changed_after_check
 run_test 'complete backup reaches isolated validation without executing candidates' test_complete_archive_reaches_isolated_validation
 run_test 'unsafe backup archives stop before candidate execution' test_unsafe_archives_stop_before_candidate_execution
 run_test 'archive parser sets finite memory and CPU budgets' test_parser_has_finite_memory_and_cpu_budgets_before_validation

@@ -2,7 +2,9 @@
 
 This document describes the source baseline plus safety/G-02, persisted-port, lifecycle-evidence and update/restore-input changes through 2026-10-23. It is not a production deployment attestation. Verify behavior against source and tests when changing it.
 
-**Increment baseline:** branch `dev`, HEAD `ec7f057b1f86233699cec8660a4bbb186c033cc9`, `VERSION` `0.16.0-rc.1` (checked 2026-10-23).
+**Increment baseline:** branch `dev`, HEAD `454b6443469ba6e93a1009ac9ae40f4e6b45a01a`, `VERSION` `0.16.0-rc.1` (checked 2026-10-23).
+
+Restore binds its initial root/mode check to a device/inode pair. The parser opens with `O_NOFOLLOW|O_NONBLOCK`, checks the descriptor is the same regular file with protected ownership/mode, and reads tar data from that descriptor. Replacement with another file, symlink or FIFO is refused before candidate validation. This does not prevent a privileged writer changing bytes in place, authenticate the archive or replace the trusted-provenance requirement.
 
 Internal staging callers receive paths through `pnm_make_temp_dir variable`, retaining cleanup registration in the calling shell. The zero-argument stdout interface remains available. Creation refuses unsafe/unregistered roots and removes the empty new directory on permission, registration or output failure. EXIT cleanup tolerates missing paths and reports removal failures on stderr without replacing the original command status. Uninstall calls backup directly and reads its fixed internal result field, retaining nested staging registration. This does not establish signal/crash transaction recovery.
 

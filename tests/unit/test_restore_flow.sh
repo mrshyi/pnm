@@ -58,8 +58,8 @@ stat() {
     # CI runs unprivileged: simulate only the root policy at the two host I/O
     # boundaries, while transaction metadata stays real. Root runs use real IDs.
     if ((EUID != 0)) && [[ "$1" == -c ]]; then
-        if [[ "$2" == '%a:%u' && "$target" == "$fixture_root/archive.tar.gz" ]]; then
-            command stat -c '%a:0' -- "$target"
+        if [[ "$2" == '%a:%u:%d:%i' && "$target" == "$fixture_root/archive.tar.gz" ]]; then
+            command stat -c '%a:0:%d:%i' -- "$target"
             return $?
         elif [[ "$2" == '%u:%g' && "$target" == "$fixture_host/"* && -d "$target" ]]; then
             printf '0:0\n'

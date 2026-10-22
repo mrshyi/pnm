@@ -1,8 +1,8 @@
 # PNM Current Tasks
 
-**Last reconciled:** 2026-10-23 (G-04 backup consistency continuation; Debian WSL `make check` passes 282 tests; systemd/production acceptance remains open)
+**Last reconciled:** 2026-10-23 (G-04 archive identity continuation; Debian WSL `make check` passes 286 tests; systemd/production acceptance remains open)
 
-**Current increment baseline:** branch `dev`, HEAD `ec7f057b1f86233699cec8660a4bbb186c033cc9`, VERSION `0.16.0-rc.1`.
+**Current increment baseline:** branch `dev`, HEAD `454b6443469ba6e93a1009ac9ae40f4e6b45a01a`, VERSION `0.16.0-rc.1`.
 
 This page is a status snapshot, not a test report. Status must be refreshed from current source, test output, or host evidence before it is changed. Historical Phase 2 analysis is preserved in [PHASE2_GAP_ANALYSIS.md](PHASE2_GAP_ANALYSIS.md).
 
@@ -511,6 +511,33 @@ remain assumptions; this does not authenticate archives or prove crash durabilit
 An uncatchable exit may leave a private hidden publication file. Restore input
 identity and standalone catchable interruption remain source follow-ups, followed
 by real systemd/reboot/client acceptance.
+
+## G-04 restore archive file identity — 2026-10-23
+
+Root cause: shell ownership/mode checks and Python tar parsing opened the archive
+path separately. A replacement after the check could reach candidate validation;
+a swapped FIFO could block waiting for a writer. The shell now records device and
+inode in the same stat as mode/UID. Python opens without following a leaf symlink,
+uses nonblocking open so fstat can reject FIFOs, validates the descriptor's regular
+type/owner/mode/identity and reads that same descriptor through tarfile. ExitStack
+closes both stream and parser on every parsing failure.
+
+Four regressions replace the checked file with another regular file, symlink or
+FIFO, or alter its mode to 0644. Original behavior: **5 passed / 4 failed** in the
+nine-case archive suite (`/var/tmp/pnm-archive-identity-next.mode-red.log`); the
+old FIFO path has a five-second test timeout. Synthetic candidates never execute.
+Static independent review found no concrete issue in the fix. Nonroot test policy
+substitutes only the shell root-UID predicate and retains real device/inode/mode;
+the descriptor check uses the actual effective identity.
+
+Final fixed copy `/var/tmp/pnm-archive-identity-final`: `make check` **exit 0,
+28 suites / 286 passed / 0 failed**, including syntax/security scan;
+`make shellcheck` **exit 0**. Actual nobody archive **9/9**, staging **10/10**
+and restore dispatch **15/15**, all **exit 0**. Logs use that same prefix:
+`.check.log`, `.lint.log`, `.nobody.log`, `.staging-nobody.log`,
+`.restore-nobody.log`. This closes the checked/opened-object
+window, not privileged in-place modification or trusted provenance. Standalone
+transaction interruption and real systemd/reboot/client acceptance remain open.
 
 ## Verification already reported (historical host evidence)
 
