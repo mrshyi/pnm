@@ -5,11 +5,15 @@ TEST_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
 PROJECT_ROOT="$(cd -- "$TEST_ROOT/.." && pwd -P)"
 source "$PROJECT_ROOT/lib/common.sh"
 source "$PROJECT_ROOT/lib/output.sh"
+source "$PROJECT_ROOT/lib/config.sh"
+source "$PROJECT_ROOT/lib/lock.sh"
+source "$PROJECT_ROOT/lib/transaction.sh"
 source "$PROJECT_ROOT/lib/core-ops.sh"
 source "$TEST_ROOT/testlib.sh"
 
 suite_root="$(mktemp -d)"
 trap 'rm -rf -- "$suite_root"' EXIT
+PNM_LOCK_FILE="$suite_root/pnm.lock" PNM_STATE_DIR="$suite_root/state"
 
 pnm_require_root() { return 0; }
 pnm_platform_supported() { return 0; }

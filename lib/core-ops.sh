@@ -8,6 +8,10 @@ PNM_CORE_RESTORE_XRAY_ACTIVE=''
 PNM_CORE_RESTORE_XRAY_ENABLED=''
 PNM_CORE_RESTORE_HY2_ACTIVE=''
 PNM_CORE_RESTORE_HY2_ENABLED=''
+PNM_CORE_RESTORE_XRAY_LOAD=''
+PNM_CORE_RESTORE_HY2_LOAD=''
+PNM_CORE_RESTORE_STARTED=0
+declare -Ag PNM_CORE_RESTORE_CONFIG_HASH=() PNM_CORE_RESTORE_APPLIED_HASH=() PNM_CORE_RESTORE_APPLIED_ATTRIBUTES=()
 PNM_CORE_UPDATE_FAILURE_STAGE=''
 
 pnm_core_resolve() {
@@ -97,7 +101,9 @@ pnm_core_recover_applied() {
     # An inactive baseline is restored by stopping, not by claiming a healthy
     # running invocation. Keep its original evidence bytes unchanged.
     [[ "$PNM_LIFECYCLE_PRE_ACTIVE" == active ]] || return 0
-    pnm_systemd_unit_healthy "$PNM_CORE_UNIT" || return "$PNM_EXIT_SOFTWARE"
+    # Recovery must preserve an active-but-disabled baseline. The install
+    # health policy additionally requires enabled and is inappropriate here.
+    [[ "$(pnm_systemd_active_state "$PNM_CORE_UNIT")" == active ]] || return "$PNM_EXIT_SOFTWARE"
     pnm_core_check_applied_baseline || return $?
     invocation="$(pnm_systemd_show_value "$PNM_CORE_UNIT" InvocationID)" || return "$PNM_EXIT_SOFTWARE"
     [[ "$invocation" =~ ^[a-fA-F0-9]{32}$ ]] || return "$PNM_EXIT_SOFTWARE"
@@ -575,7 +581,7 @@ pnm_core_restore_prepare_directory() {
     pnm_validate_managed_path "$path" || return $?
     # Existing private directories must already be administrator-controlled.
     # Refuse foreign ownership instead of changing it outside the transaction.
-    if [[ -e "$path" ]]; then
+    if [[ "$mode" != - && -e "$path" ]]; then
         [[ -d "$path" && "$(stat -c '%u:%g' -- "$path")" == 0:0 ]] || return "$PNM_EXIT_NOPERM"
     fi
     pnm_tx_prepare_directory "$path" "$mode"
@@ -599,33 +605,97 @@ pnm_core_restore_write_file() {
 }
 
 pnm_core_restore_rollback() {
-    local rc=0
+    local core unit load active enabled prefix
+    local PNM_CORE_PRIOR_CONFIG_HASH PNM_CORE_PRIOR_APPLIED_HASH PNM_CORE_PRIOR_APPLIED_ATTRIBUTES PNM_LIFECYCLE_PRE_ACTIVE
+    if ((PNM_CORE_RESTORE_STARTED == 1)); then
+        for unit in xray.service hysteria-server.service; do
+            load="$(pnm_systemd_load_state "$unit")" || return "$PNM_EXIT_SOFTWARE"
+            case "$load" in
+                loaded)
+                    pnm_systemctl stop "$unit" || return "$PNM_EXIT_SOFTWARE"
+                    [[ "$(pnm_systemd_active_state "$unit")" == inactive ]] || return "$PNM_EXIT_SOFTWARE"
+                    pnm_systemctl disable "$unit" || return "$PNM_EXIT_SOFTWARE"
+                    ;;
+                not-found) [[ "$(pnm_systemd_active_state "$unit")" == inactive ]] || return "$PNM_EXIT_SOFTWARE" ;;
+                *) return "$PNM_EXIT_SOFTWARE" ;;
+            esac
+        done
+    fi
     # Snapshot metadata is authoritative; applying candidate ownership again
     # after restoration would corrupt the pre-operation state.
     pnm_tx_restore_written_files || return "$PNM_EXIT_SOFTWARE"
-    pnm_systemd_daemon_reload || rc="$PNM_EXIT_SOFTWARE"
-    if [[ "$PNM_CORE_RESTORE_XRAY_ENABLED" == enabled ]]; then
-        pnm_systemctl enable xray.service || rc="$PNM_EXIT_SOFTWARE"
-    else
-        pnm_systemctl disable xray.service || rc="$PNM_EXIT_SOFTWARE"
+    if ((PNM_CORE_RESTORE_STARTED == 1)); then
+        pnm_systemd_daemon_reload || return "$PNM_EXIT_SOFTWARE"
+        for core in xray hysteria2; do
+            pnm_core_resolve "$core" || return $?
+            unit="$PNM_CORE_UNIT" prefix=PNM_CORE_RESTORE_XRAY
+            [[ "$core" == xray ]] || prefix=PNM_CORE_RESTORE_HY2
+            load="${prefix}_LOAD" active="${prefix}_ACTIVE" enabled="${prefix}_ENABLED"
+            load="${!load}" active="${!active}" enabled="${!enabled}"
+            [[ "$(pnm_systemd_load_state "$unit")" == "$load" ]] || return "$PNM_EXIT_SOFTWARE"
+            if [[ "$load" == not-found ]]; then
+                [[ "$(pnm_systemd_active_state "$unit")" == inactive ]] || return "$PNM_EXIT_SOFTWARE"
+                continue
+            fi
+            if [[ "$enabled" == enabled ]]; then pnm_systemctl enable "$unit"; else pnm_systemctl disable "$unit"; fi || return "$PNM_EXIT_SOFTWARE"
+            if [[ "$active" == active ]]; then pnm_systemctl restart "$unit"; else pnm_systemctl stop "$unit"; fi || return "$PNM_EXIT_SOFTWARE"
+            [[ "$(pnm_systemd_active_state "$unit")" == "$active" &&
+                "$(pnm_systemd_enabled_state "$unit")" == "$enabled" ]] || return "$PNM_EXIT_SOFTWARE"
+            PNM_CORE_PRIOR_CONFIG_HASH="${PNM_CORE_RESTORE_CONFIG_HASH[$core]-}"
+            PNM_CORE_PRIOR_APPLIED_HASH="${PNM_CORE_RESTORE_APPLIED_HASH[$core]-}"
+            PNM_CORE_PRIOR_APPLIED_ATTRIBUTES="${PNM_CORE_RESTORE_APPLIED_ATTRIBUTES[$core]-}"
+            PNM_LIFECYCLE_PRE_ACTIVE="$active"
+            pnm_core_recover_applied || return "$PNM_EXIT_SOFTWARE"
+        done
     fi
-    if [[ "$PNM_CORE_RESTORE_HY2_ENABLED" == enabled ]]; then
-        pnm_systemctl enable hysteria-server.service || rc="$PNM_EXIT_SOFTWARE"
-    else
-        pnm_systemctl disable hysteria-server.service || rc="$PNM_EXIT_SOFTWARE"
-    fi
-    if [[ "$PNM_CORE_RESTORE_XRAY_ACTIVE" == active ]]; then
-        pnm_systemctl restart xray.service || rc="$PNM_EXIT_SOFTWARE"
-    else
-        pnm_systemctl stop xray.service || rc="$PNM_EXIT_SOFTWARE"
-    fi
-    if [[ "$PNM_CORE_RESTORE_HY2_ACTIVE" == active ]]; then
-        pnm_systemctl restart hysteria-server.service || rc="$PNM_EXIT_SOFTWARE"
-    else
-        pnm_systemctl stop hysteria-server.service || rc="$PNM_EXIT_SOFTWARE"
-    fi
-    ((rc == 0)) || return "$rc"
     pnm_tx_restore_directories
+}
+
+pnm_core_restore_snapshot() {
+    local core unit prefix load active enabled
+    local PNM_CORE_PRIOR_CONFIG_HASH PNM_CORE_PRIOR_APPLIED_HASH PNM_CORE_PRIOR_APPLIED_ATTRIBUTES
+    PNM_CORE_RESTORE_CONFIG_HASH=() PNM_CORE_RESTORE_APPLIED_HASH=() PNM_CORE_RESTORE_APPLIED_ATTRIBUTES=()
+    for core in xray hysteria2; do
+        pnm_core_resolve "$core" || return $?
+        unit="$PNM_CORE_UNIT" prefix=PNM_CORE_RESTORE_XRAY
+        [[ "$core" == xray ]] || prefix=PNM_CORE_RESTORE_HY2
+        load="$(pnm_systemd_load_state "$unit")" || return "$PNM_EXIT_UNAVAILABLE"
+        case "$load" in
+            loaded)
+                active="$(pnm_systemd_active_state "$unit")" || return "$PNM_EXIT_UNAVAILABLE"
+                enabled="$(pnm_systemd_enabled_state "$unit")" || return "$PNM_EXIT_UNAVAILABLE"
+                [[ "$active" =~ ^(active|inactive)$ && "$enabled" =~ ^(enabled|disabled)$ ]] || return "$PNM_EXIT_UNAVAILABLE"
+                ;;
+            not-found)
+                active="$(pnm_systemd_active_state "$unit")" || return "$PNM_EXIT_UNAVAILABLE"
+                enabled="$(pnm_systemd_enabled_state "$unit")" || return "$PNM_EXIT_UNAVAILABLE"
+                [[ "$active" == inactive && ( "$enabled" == not-found || "$enabled" == disabled ) ]] || return "$PNM_EXIT_UNAVAILABLE"
+                enabled=disabled
+                ;;
+            *) return "$PNM_EXIT_UNAVAILABLE" ;;
+        esac
+        printf -v "${prefix}_LOAD" '%s' "$load"
+        printf -v "${prefix}_ACTIVE" '%s' "$active"
+        printf -v "${prefix}_ENABLED" '%s' "$enabled"
+        PNM_CORE_PRIOR_CONFIG_HASH='' PNM_CORE_PRIOR_APPLIED_HASH='' PNM_CORE_PRIOR_APPLIED_ATTRIBUTES=''
+        [[ "$load" == not-found ]] || pnm_core_capture_applied || return $?
+        PNM_CORE_RESTORE_CONFIG_HASH[$core]="$PNM_CORE_PRIOR_CONFIG_HASH"
+        PNM_CORE_RESTORE_APPLIED_HASH[$core]="$PNM_CORE_PRIOR_APPLIED_HASH"
+        PNM_CORE_RESTORE_APPLIED_ATTRIBUTES[$core]="$PNM_CORE_PRIOR_APPLIED_ATTRIBUTES"
+    done
+}
+
+pnm_core_restore_abort() {
+    local original_rc="$1" recovery_rc=0
+    PNM_TX_STEP_FAILURE_RC="$original_rc"
+    if pnm_tx_rollback; then
+        pnm_error "Core restore failed (rc=$original_rc); prior resources and service policy were restored."
+    else
+        recovery_rc=$?
+        pnm_error "Core restore failed (rc=$original_rc) and rollback failed (rc=$recovery_rc); recovery files were retained."
+    fi
+    pnm_tx_close || pnm_warn 'Restore transaction cleanup failed; inspect recovery evidence.'
+    return "$original_rc"
 }
 
 pnm_core_restore_validate_staged() {
@@ -674,9 +744,13 @@ pnm_core_restore_validate_staged() {
 }
 
 pnm_core_restore() {
-    local archive=$1 staging file destination mode owner directory rc index=0
-    local -a files=()
     pnm_require_root || return $?
+    pnm_core_with_write_lock pnm_core_restore_locked "$1"
+}
+
+pnm_core_restore_locked() {
+    local archive=$1 staging rc
+    PNM_CORE_RESTORE_STARTED=0
     [[ -f "$archive" && ! -L "$archive" ]] || return "$PNM_EXIT_CONFIG"
     [[ "$(stat -c '%a:%u' -- "$archive" 2>/dev/null)" == 600:0 ]] || return "$PNM_EXIT_NOPERM"
     pnm_platform_supported || return "$PNM_EXIT_CONFIG"
@@ -743,20 +817,37 @@ PY
         return "$rc"
     fi
     pnm_systemd_available || return "$PNM_EXIT_UNAVAILABLE"
-    PNM_CORE_RESTORE_XRAY_ACTIVE="$(pnm_systemd_active_state xray.service)" || return "$PNM_EXIT_UNAVAILABLE"
-    PNM_CORE_RESTORE_XRAY_ENABLED="$(pnm_systemd_enabled_state xray.service)" || return "$PNM_EXIT_UNAVAILABLE"
-    PNM_CORE_RESTORE_HY2_ACTIVE="$(pnm_systemd_active_state hysteria-server.service)" || return "$PNM_EXIT_UNAVAILABLE"
-    PNM_CORE_RESTORE_HY2_ENABLED="$(pnm_systemd_enabled_state hysteria-server.service)" || return "$PNM_EXIT_UNAVAILABLE"
+    pnm_core_restore_snapshot || return $?
     pnm_tx_begin core-restore || return $?
     pnm_tx_add_rollback pnm_core_restore_rollback || { pnm_tx_close; return "$PNM_EXIT_SOFTWARE"; }
-    for directory in /etc/pnm /usr/local/etc/xray /etc/hysteria /etc/hysteria/tls; do
-        pnm_core_restore_prepare_directory "$directory" 0755 || {
-            rc=$?; pnm_tx_rollback || true; pnm_tx_close; return "$rc";
-        }
+    if pnm_core_restore_apply_staged "$staging"; then :; else
+        rc=$?; pnm_core_restore_abort "$rc"; return $?;
+    fi
+    pnm_tx_commit || { rc=$?; pnm_core_restore_abort "$rc"; return $?; }
+    pnm_tx_close || return $?
+    pnm_success 'Both Cores restored and healthy.'
+}
+
+pnm_core_restore_apply_staged() {
+    local staging="$1" directory file destination mode owner unit core record index=0
+    local -a files=()
+    # Retain the service baseline as protected data for manual recovery after
+    # an uncatchable interruption. It is never sourced or replayed as code.
+    (umask 077; printf 'SCHEMA_VERSION=1\nXRAY_LOAD=%s\nXRAY_ACTIVE=%s\nXRAY_ENABLED=%s\nHY2_LOAD=%s\nHY2_ACTIVE=%s\nHY2_ENABLED=%s\n' \
+        "$PNM_CORE_RESTORE_XRAY_LOAD" "$PNM_CORE_RESTORE_XRAY_ACTIVE" "$PNM_CORE_RESTORE_XRAY_ENABLED" \
+        "$PNM_CORE_RESTORE_HY2_LOAD" "$PNM_CORE_RESTORE_HY2_ACTIVE" "$PNM_CORE_RESTORE_HY2_ENABLED" \
+        >"$PNM_TX_PATH/restore.env") || return "$PNM_EXIT_CANTCREAT"
+    PNM_CORE_RESTORE_STARTED=1
+    for unit in xray.service hysteria-server.service; do
+        if [[ "$(pnm_systemd_load_state "$unit")" == loaded ]]; then
+            pnm_systemctl stop "$unit" || return $?
+            [[ "$(pnm_systemd_active_state "$unit")" == inactive ]] || return "$PNM_EXIT_SOFTWARE"
+        fi
     done
-    pnm_core_restore_prepare_directory /etc/pnm/secrets 0700 || {
-        rc=$?; pnm_tx_rollback || true; pnm_tx_close; return "$rc";
-    }
+    for directory in /etc/pnm /usr/local/etc/xray /etc/hysteria /etc/hysteria/tls; do
+        pnm_core_restore_prepare_directory "$directory" 0755 || return $?
+    done
+    pnm_core_restore_prepare_directory /etc/pnm/secrets 0700 || return $?
     while IFS= read -r -d '' file; do files+=("$file"); done < <(find "$staging" -type f -print0)
     for file in "${files[@]}"; do
         [[ "$file" == "$staging/MANIFEST.txt" ]] && continue
@@ -771,36 +862,28 @@ PY
             *) mode=0600 ;;
         esac
         ((index += 1))
-        pnm_core_restore_write_file "$file" "$destination" "restore_$index" "$mode" "$owner" || {
-            rc=$?; pnm_tx_rollback || true; pnm_tx_close; return "$rc";
-        }
+        pnm_core_restore_write_file "$file" "$destination" "restore_$index" "$mode" "$owner" || return $?
     done
-    pnm_systemd_daemon_reload || { pnm_tx_rollback || true; pnm_tx_close; return "$PNM_EXIT_SOFTWARE"; }
-    pnm_systemctl enable xray.service || { rc=$?; pnm_tx_rollback || true; pnm_tx_close; return "$rc"; }
-    pnm_systemctl enable hysteria-server.service || { rc=$?; pnm_tx_rollback || true; pnm_tx_close; return "$rc"; }
-    pnm_systemctl restart xray.service || { rc=$?; pnm_tx_rollback || true; pnm_tx_close; return "$rc"; }
-    pnm_systemctl restart hysteria-server.service || { rc=$?; pnm_tx_rollback || true; pnm_tx_close; return "$rc"; }
-    pnm_systemd_unit_healthy xray.service && pnm_systemd_unit_healthy hysteria-server.service || {
-        pnm_tx_rollback || true; pnm_tx_close; return "$PNM_EXIT_CONFIG";
-    }
-    declare -F pnm_check_deploy_core_health >/dev/null 2>&1 || {
-        pnm_tx_rollback || true; pnm_tx_close; return "$PNM_EXIT_UNAVAILABLE";
-    }
-    pnm_check_deploy_core_health xray && pnm_check_deploy_core_health hysteria2 || {
-        pnm_tx_rollback || true; pnm_tx_close; return "$PNM_EXIT_CONFIG";
-    }
-    PNM_CORE_STAGE="$(pnm_make_temp_dir)" || { pnm_tx_rollback || true; pnm_tx_close; return "$PNM_EXIT_CANTCREAT"; }
-    if pnm_core_record_applied_config xray "$PNM_XRAY_CONFIG" "$PNM_CORE_STAGE" &&
-        pnm_core_record_applied_config hysteria2 "$PNM_HY2_CONFIG" "$PNM_CORE_STAGE"; then :; else
-        rc=$?
-        pnm_tx_rollback || true
-        pnm_tx_close
-        return "$rc"
-    fi
-    pnm_tx_verify_written_resources || { rc=$?; pnm_tx_rollback || true; pnm_tx_close; return "$rc"; }
-    pnm_tx_commit || { rc=$?; pnm_tx_rollback || true; pnm_tx_close; return "$rc"; }
-    pnm_tx_close || return $?
-    pnm_success 'Both Cores restored and healthy.'
+    pnm_systemd_daemon_reload || return "$PNM_EXIT_SOFTWARE"
+    pnm_core_restore_prepare_directory /etc/systemd/system/multi-user.target.wants - || return $?
+    pnm_systemctl enable xray.service || return $?
+    pnm_systemctl enable hysteria-server.service || return $?
+    pnm_systemctl restart xray.service || return $?
+    pnm_systemctl restart hysteria-server.service || return $?
+    pnm_systemd_unit_healthy xray.service && pnm_systemd_unit_healthy hysteria-server.service || return "$PNM_EXIT_CONFIG"
+    declare -F pnm_check_deploy_core_health >/dev/null 2>&1 || return "$PNM_EXIT_UNAVAILABLE"
+    pnm_check_deploy_core_health xray && pnm_check_deploy_core_health hysteria2 || return "$PNM_EXIT_CONFIG"
+    for core in xray hysteria2; do
+        [[ -n "${PNM_CORE_RESTORE_APPLIED_HASH[$core]-}" ]] || continue
+        record="$PNM_STATE_DIR/cores/$core/applied.env"
+        pnm_validate_managed_path "$record" || return $?
+        [[ "$(pnm_tx_file_sha256 "$record")" == "${PNM_CORE_RESTORE_APPLIED_HASH[$core]}" &&
+            "$(stat -c '%a:%u:%g' -- "$record")" == "${PNM_CORE_RESTORE_APPLIED_ATTRIBUTES[$core]}" ]] || return "$PNM_EXIT_SOFTWARE"
+    done
+    PNM_CORE_STAGE="$(pnm_make_temp_dir)" || return "$PNM_EXIT_CANTCREAT"
+    pnm_core_record_applied_config xray "$PNM_XRAY_CONFIG" "$PNM_CORE_STAGE" || return $?
+    pnm_core_record_applied_config hysteria2 "$PNM_HY2_CONFIG" "$PNM_CORE_STAGE" || return $?
+    pnm_tx_verify_written_resources
 }
 
 PNM_CORE_REMOVE_PATHS=()
