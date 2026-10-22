@@ -170,7 +170,7 @@ pnm_core_record_applied_config() {
     local record_dir="$PNM_STATE_DIR/cores/$core"
     local record="$record_dir/applied.env"
     local staged="$stage_dir/applied-$core.env"
-    local digest rc unit invocation
+    local digest rc unit invocation metadata_policy="${expected_digest:+required}"
 
     [[ "$core" == xray || "$core" == hysteria2 ]] || return "$PNM_EXIT_CONFIG"
     digest="$(sha256sum -- "$config" 2>/dev/null | awk '{print $1}')" || return "$PNM_EXIT_SOFTWARE"
@@ -183,7 +183,7 @@ pnm_core_record_applied_config() {
     esac
     invocation="$(pnm_systemd_show_value "$unit" InvocationID 2>/dev/null)" || return "$PNM_EXIT_UNAVAILABLE"
     [[ "$invocation" =~ ^[a-fA-F0-9]{32}$ ]] || return "$PNM_EXIT_UNAVAILABLE"
-    if [[ "${PNM_TX_OPERATION:-}" == deployment ]]; then
+    if [[ "${PNM_TX_OPERATION:-}" == deployment || "${PNM_TX_OPERATION:-}" == core-restore ]]; then
         pnm_tx_prepare_directory "$PNM_STATE_DIR/cores" 0700 || return $?
         pnm_tx_prepare_directory "$record_dir" 0700 || return $?
     else
@@ -193,7 +193,8 @@ pnm_core_record_applied_config() {
     printf 'SCHEMA_VERSION=1\nCORE=%s\nCONFIG_SHA256=%s\nSERVICE_INVOCATION_ID=%s\n' \
         "$core" "$digest" "${invocation,,}" >"$staged" || return "$PNM_EXIT_CANTCREAT"
     chmod 0600 -- "$staged" || { rm -f -- "$staged"; return "$PNM_EXIT_NOPERM"; }
-    if pnm_tx_write_file "$staged" "$record" "applied_$core" 0600 "${expected_digest:+required}"; then
+    [[ "${PNM_TX_OPERATION:-}" != core-restore ]] || metadata_policy=required
+    if pnm_tx_write_file "$staged" "$record" "applied_$core" 0600 "$metadata_policy"; then
         :
     else
         rc=$?
@@ -569,22 +570,39 @@ pnm_core_rollback_locked() {
     pnm_success "$core rolled back to $version."
 }
 
+pnm_core_restore_prepare_directory() {
+    local path="${1:?restore directory required}" mode="${2:?directory mode required}"
+    pnm_validate_managed_path "$path" || return $?
+    # Existing private directories must already be administrator-controlled.
+    # Refuse foreign ownership instead of changing it outside the transaction.
+    if [[ -e "$path" ]]; then
+        [[ -d "$path" && "$(stat -c '%u:%g' -- "$path")" == 0:0 ]] || return "$PNM_EXIT_NOPERM"
+    fi
+    pnm_tx_prepare_directory "$path" "$mode"
+}
+
+pnm_core_restore_write_file() {
+    local source="$1" destination="$2" label="$3" mode="$4" owner="$5" rc=0
+    local owner_uid="${5%%:*}" owner_gid="${5#*:}"
+    [[ "$owner" == *:* ]] || return "$PNM_EXIT_CONFIG"
+    [[ "$owner_uid" =~ ^[0-9]+$ ]] || owner_uid="$(id -u "$owner_uid")" || return "$PNM_EXIT_NOPERM"
+    [[ "$owner_gid" =~ ^[0-9]+$ ]] || owner_gid="$(getent group "$owner_gid" | cut -d: -f3)" || return "$PNM_EXIT_NOPERM"
+    [[ "$owner_uid" =~ ^[0-9]+$ && "$owner_gid" =~ ^[0-9]+$ ]] || return "$PNM_EXIT_NOPERM"
+    pnm_tx_prepare_directory "$(dirname -- "$destination")" - || return $?
+    pnm_tx_write_file "$source" "$destination" "$label" "$mode" required || return $?
+    # Check publication receipts before taking responsibility for our own chown.
+    # Otherwise a post-publication external chmod could be silently re-enrolled.
+    pnm_tx_verify_written_resources || return $?
+    chown -- "$owner" "$destination" || rc="$PNM_EXIT_NOPERM"
+    pnm_tx_record_written_metadata "$destination" required "${mode#0}|$owner_uid|$owner_gid" || return $?
+    return "$rc"
+}
+
 pnm_core_restore_rollback() {
     local rc=0
+    # Snapshot metadata is authoritative; applying candidate ownership again
+    # after restoration would corrupt the pre-operation state.
     pnm_tx_restore_written_files || return "$PNM_EXIT_SOFTWARE"
-    [[ ! -f "$PNM_XRAY_CONFIG" ]] || pnm_core_fix_owner xray "$PNM_XRAY_CONFIG" || rc="$PNM_EXIT_SOFTWARE"
-    if [[ -f "$PNM_HY2_CONFIG" ]]; then
-        chown hysteria:hysteria -- "$PNM_HY2_CONFIG" || rc="$PNM_EXIT_SOFTWARE"
-        chmod 0600 -- "$PNM_HY2_CONFIG" || rc="$PNM_EXIT_SOFTWARE"
-    fi
-    if [[ -f /etc/hysteria/tls/server.crt ]]; then
-        chown root:hysteria -- /etc/hysteria/tls/server.crt || rc="$PNM_EXIT_SOFTWARE"
-        chmod 0644 -- /etc/hysteria/tls/server.crt || rc="$PNM_EXIT_SOFTWARE"
-    fi
-    if [[ -f /etc/hysteria/tls/server.key ]]; then
-        chown hysteria:hysteria -- /etc/hysteria/tls/server.key || rc="$PNM_EXIT_SOFTWARE"
-        chmod 0600 -- /etc/hysteria/tls/server.key || rc="$PNM_EXIT_SOFTWARE"
-    fi
     pnm_systemd_daemon_reload || rc="$PNM_EXIT_SOFTWARE"
     if [[ "$PNM_CORE_RESTORE_XRAY_ENABLED" == enabled ]]; then
         pnm_systemctl enable xray.service || rc="$PNM_EXIT_SOFTWARE"
@@ -606,7 +624,8 @@ pnm_core_restore_rollback() {
     else
         pnm_systemctl stop hysteria-server.service || rc="$PNM_EXIT_SOFTWARE"
     fi
-    return "$rc"
+    ((rc == 0)) || return "$rc"
+    pnm_tx_restore_directories
 }
 
 pnm_core_restore_validate_staged() {
@@ -655,7 +674,7 @@ pnm_core_restore_validate_staged() {
 }
 
 pnm_core_restore() {
-    local archive=$1 staging file destination mode rc index=0
+    local archive=$1 staging file destination mode owner directory rc index=0
     local -a files=()
     pnm_require_root || return $?
     [[ -f "$archive" && ! -L "$archive" ]] || return "$PNM_EXIT_CONFIG"
@@ -730,34 +749,32 @@ PY
     PNM_CORE_RESTORE_HY2_ENABLED="$(pnm_systemd_enabled_state hysteria-server.service)" || return "$PNM_EXIT_UNAVAILABLE"
     pnm_tx_begin core-restore || return $?
     pnm_tx_add_rollback pnm_core_restore_rollback || { pnm_tx_close; return "$PNM_EXIT_SOFTWARE"; }
+    for directory in /etc/pnm /usr/local/etc/xray /etc/hysteria /etc/hysteria/tls; do
+        pnm_core_restore_prepare_directory "$directory" 0755 || {
+            rc=$?; pnm_tx_rollback || true; pnm_tx_close; return "$rc";
+        }
+    done
+    pnm_core_restore_prepare_directory /etc/pnm/secrets 0700 || {
+        rc=$?; pnm_tx_rollback || true; pnm_tx_close; return "$rc";
+    }
     while IFS= read -r -d '' file; do files+=("$file"); done < <(find "$staging" -type f -print0)
     for file in "${files[@]}"; do
         [[ "$file" == "$staging/MANIFEST.txt" ]] && continue
         destination="/${file#"$staging"/}"
+        owner=root:root
         case "$destination" in
             /usr/local/bin/*) mode=0755 ;;
-            /etc/systemd/system/*.service|/etc/hysteria/tls/server.crt) mode=0644 ;;
+            /etc/systemd/system/*.service) mode=0644 ;;
+            /usr/local/etc/xray/config.json) mode=0640 owner=root:xray ;;
+            /etc/hysteria/config.yaml|/etc/hysteria/tls/server.key) mode=0600 owner=hysteria:hysteria ;;
+            /etc/hysteria/tls/server.crt) mode=0644 owner=root:hysteria ;;
             *) mode=0600 ;;
         esac
-        mkdir -p -- "$(dirname -- "$destination")" || { pnm_tx_rollback || true; pnm_tx_close; return "$PNM_EXIT_CANTCREAT"; }
         ((index += 1))
-        pnm_tx_write_file "$file" "$destination" "restore_$index" "$mode" || {
+        pnm_core_restore_write_file "$file" "$destination" "restore_$index" "$mode" "$owner" || {
             rc=$?; pnm_tx_rollback || true; pnm_tx_close; return "$rc";
         }
-        case "$destination" in
-            /usr/local/etc/xray/config.json) pnm_core_fix_owner xray "$destination" || { pnm_tx_rollback || true; pnm_tx_close; return "$PNM_EXIT_NOPERM"; } ;;
-            /etc/hysteria/config.yaml|/etc/hysteria/tls/server.key) chown hysteria:hysteria -- "$destination" || { pnm_tx_rollback || true; pnm_tx_close; return "$PNM_EXIT_NOPERM"; } ;;
-            /etc/hysteria/tls/server.crt) chown root:hysteria -- "$destination" || { pnm_tx_rollback || true; pnm_tx_close; return "$PNM_EXIT_NOPERM"; } ;;
-            /etc/pnm/*) chown root:root -- "$destination" || { pnm_tx_rollback || true; pnm_tx_close; return "$PNM_EXIT_NOPERM"; } ;;
-        esac
     done
-    chmod 0755 /etc/pnm /usr/local/etc/xray /etc/hysteria /etc/hysteria/tls || {
-        pnm_tx_rollback || true; pnm_tx_close; return "$PNM_EXIT_NOPERM";
-    }
-    chmod 0700 /etc/pnm/secrets || { pnm_tx_rollback || true; pnm_tx_close; return "$PNM_EXIT_NOPERM"; }
-    chown root:root /etc/pnm /etc/pnm/secrets /usr/local/etc/xray /etc/hysteria /etc/hysteria/tls || {
-        pnm_tx_rollback || true; pnm_tx_close; return "$PNM_EXIT_NOPERM";
-    }
     pnm_systemd_daemon_reload || { pnm_tx_rollback || true; pnm_tx_close; return "$PNM_EXIT_SOFTWARE"; }
     pnm_systemctl enable xray.service || { rc=$?; pnm_tx_rollback || true; pnm_tx_close; return "$rc"; }
     pnm_systemctl enable hysteria-server.service || { rc=$?; pnm_tx_rollback || true; pnm_tx_close; return "$rc"; }
@@ -780,8 +797,9 @@ PY
         pnm_tx_close
         return "$rc"
     fi
+    pnm_tx_verify_written_resources || { rc=$?; pnm_tx_rollback || true; pnm_tx_close; return "$rc"; }
     pnm_tx_commit || { rc=$?; pnm_tx_rollback || true; pnm_tx_close; return "$rc"; }
-    pnm_tx_close
+    pnm_tx_close || return $?
     pnm_success 'Both Cores restored and healthy.'
 }
 

@@ -784,6 +784,7 @@ pnm_tx_restore_file() {
 
 pnm_tx_record_written_metadata() {
     local path="$1" index attributes encoded receipt="$PNM_TX_PATH/file-attributes.tsv"
+    local expected_attributes="${3-}"
     [[ "$PNM_TX_OPERATION" == deployment || "${2-}" == required ]] || return 0
     pnm_validate_managed_path "$path" || return $?
     if [[ -e "$receipt" || -L "$receipt" ]]; then
@@ -793,6 +794,9 @@ pnm_tx_record_written_metadata() {
         [[ "${PNM_TX_WRITTEN_PATHS[index]}" == "$path" ]] || continue
         [[ "$(pnm_tx_file_sha256 "$path")" == "${PNM_TX_WRITTEN_HASHES[index]}" ]] || return "$PNM_EXIT_SOFTWARE"
         attributes="$(stat -c '%a|%u|%g' -- "$path")" || return "$PNM_EXIT_CONFIG"
+        # A caller normalizing ownership may supply its fixed target. Validate
+        # the sample we actually record instead of adopting intervening edits.
+        [[ -z "$expected_attributes" || "$attributes" == "$expected_attributes" ]] || return "$PNM_EXIT_SOFTWARE"
         PNM_TX_WRITTEN_ATTRIBUTES[index]="$attributes"
         encoded="$(printf '%s' "$path" | base64 -w0)" || return "$PNM_EXIT_SOFTWARE"
         (umask 077; printf '%s\t%s\t%s\t%s\n' "${PNM_TX_WRITTEN_LABELS[index]}" "$encoded" "$attributes" \

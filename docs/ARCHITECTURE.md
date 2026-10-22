@@ -2,7 +2,7 @@
 
 This document describes the source baseline plus safety/G-02, persisted-port, lifecycle-evidence and update/restore-input changes through 2026-10-23. It is not a production deployment attestation. Verify behavior against source and tests when changing it.
 
-**Increment baseline:** branch `dev`, HEAD `91ff1b6d420799cd47cae1d236139657b7f7145f`, `VERSION` `0.16.0-rc.1` (checked 2026-10-23).
+**Increment baseline:** branch `dev`, HEAD `f9b4117eb6418d425603991264189d48c73c4477`, `VERSION` `0.16.0-rc.1` (checked 2026-10-23).
 
 ## System boundary
 
@@ -68,6 +68,8 @@ Update/rollback retain the existing exclusive PNM lock from preparation through 
 Update/rollback explicitly enroll metadata for the current binary, previous binary and `previous.env`, and verify all published transaction resources before commit. Compensation preserves an intervening content or metadata edit and reports recovery required. Transaction-close errors propagate without a success message, even if the commit already completed; outer lock cleanup still runs.
 
 Restore parsing enumerates at most 64 visible members, rejects absolute/traversing names and payload-bearing directory entries, bounds the manifest to 64 KiB and declared resource totals to 512 MiB, and requires the complete 12-resource set before candidate validation. These are member-level checks; internal tar PAX/GNU extension parsing and complete hostile-archive resource exhaustion are not accepted. Candidate validation executes the staged Core binaries, so file ownership/mode checks do not establish archive provenance or make untrusted executables safe.
+
+Restore enrolls file metadata and directory preparation in the existing transaction. Private destination directories must already be root-owned with root group; foreign ownership is refused rather than silently changed. File ownership normalization records only its fixed expected numeric UID/GID/mode, so intervening metadata edits cannot become a new expected state. Applied records and their directories participate in the same compensation. Recovery restores original file bytes/metadata without applying candidate ownership again, then compensates directory changes after service recovery. Resource verification precedes commit, and transaction-close errors suppress the success message. Full service/invocation recovery and concurrency acceptance remain separate work in `docs/TASKS.md`.
 
 Restart/update/rollback carry forward only previously confirmed applied evidence. Under the transaction lock they capture the record, configuration digest and metadata; after health checks they publish the new invocation against that fixed digest through the existing transaction. Missing, changed or damaged evidence is retained without promotion. Compensation restores resource bytes and the service baseline before refreshing a previously confirmed active invocation; an inactive baseline keeps its original record. These applied writes explicitly enroll metadata before post-publication receipts, so external content/metadata drift retains recovery evidence rather than being silently overwritten. This does not implement automatic reboot reconciliation or race-free coordination with arbitrary privileged writers.
 

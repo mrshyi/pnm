@@ -1,14 +1,14 @@
 # PNM Current Tasks
 
-**Last reconciled:** 2026-10-23 (G-03 preparation lock continuation; Debian 13 WSL `make check` passes 230 tests; systemd/production acceptance remains open)
+**Last reconciled:** 2026-10-23 (G-04 filesystem compensation continuation; Debian 13 WSL `make check` passes 239 tests; systemd/production acceptance remains open)
 
-**Current increment baseline:** branch `dev`, HEAD `91ff1b6d420799cd47cae1d236139657b7f7145f`, VERSION `0.16.0-rc.1`.
+**Current increment baseline:** branch `dev`, HEAD `f9b4117eb6418d425603991264189d48c73c4477`, VERSION `0.16.0-rc.1`.
 
 This page is a status snapshot, not a test report. Status must be refreshed from current source, test output, or host evidence before it is changed. Historical Phase 2 analysis is preserved in [PHASE2_GAP_ANALYSIS.md](PHASE2_GAP_ANALYSIS.md).
 
 ## Active phase
 
-**Phase 3 — existing defect fixes and acceptance.** Phase 4 has not started. G-02, A-03/A-04 and G-03 resource/G-04 archive rejection have local evidence in committed increments. The current continuation protects update/rollback preparation with the existing write lock; real systemd, reboot and client acceptance remain open.
+**Phase 3 — existing defect fixes and acceptance.** Phase 4 has not started. G-02, A-03/A-04 and G-03 resource/preparation locking have local evidence in committed increments. The current continuation repairs G-04 file/directory compensation; restore service/invocation recovery, real systemd, reboot and client acceptance remain open. The user has authorized consecutive local stages and commits, and confirmed Debian WSL is the only available test environment.
 
 Current review artifacts (2026-10-22):
 
@@ -93,7 +93,7 @@ not close G-02 or prove systemd recovery, reboot or public client connectivity.
 | G-01 — runtime/config/link state | BLOCKED for production acceptance | Current `lib/node.sh` source prints an HY2 runtime row. Prior production output reportedly omitted it despite the same VERSION; deployed executable/source identity has not been verified in this session. | On an authorized host, perform read-only path/version/source-hash comparison; do not apply or upgrade as diagnosis. |
 | G-02 — complete deployment rollback | IMPLEMENTED / local filesystem and mock checks PASS; systemd acceptance open | One deployment transaction now spans resources, lifecycle, applied/node state and final outer checks; durable marker and unresolved-deployment guards are tested. | Run the disposable-systemd/interrupt/reboot matrix in [the acceptance plan](ACCEPTANCE_PLAN.md); do not infer production readiness. |
 | G-03 — Core update transaction | PARTIAL L1 PASS / Linux acceptance open | Local publication faults restore current/previous/version-metadata pairs; external edits and recovery failures are visible. Kernel flock tests now cover preparation, contention, unresolved deployments, reentrancy and cleanup errors. | Run the real systemd binary/metadata/service/concurrent-command/interruption matrix in a disposable VM. |
-| G-04 — backup/restore safety | PARTIAL archive L1 PASS / full restore recovery open | Parser rejects malformed member paths/types, oversized manifest and incomplete resource sets before candidate execution; tests do not execute staged binaries. | Complete hostile PAX/GNU resource-limit review and trusted-candidate policy; test restore writes, directories, permissions, services and applied recovery before acceptance. |
+| G-04 — backup/restore safety | PARTIAL archive/filesystem L1 PASS / runtime recovery open | Archive rejection and isolated file/directory/metadata/applied compensation cases pass; services and candidate validation remain simulated. | Complete hostile PAX/GNU resource-limit review and trusted-candidate policy; test full restore orchestration, service/invocation recovery and concurrency before acceptance. |
 | G-05 — dependency preflight | MOCK TESTS PASS / systemd acceptance open | Debian 13 WSL preflight suite passes 14/14, including configured ports, invalid-node refusal, repeat-install refusal and missing-tool checks. Mock results do not prove real systemd install ordering. | Verify missing tools before managed-resource mutation in a disposable systemd VM. |
 | G-06 — HY2 TLS permissions | NOT TESTED for exception paths | Check and TLS permission code exists; wrong owner/mode and service-account readability cases have not been verified in Debian/systemd. | Exercise certificate/key ownership and access cases in a disposable VM. |
 
@@ -276,6 +276,50 @@ This is local cooperating-writer evidence; full
 parallel CLI/systemd/reboot/client acceptance and noncooperating privileged-writer
 races are not established. G-04 restore-write recovery and archive-extension
 resource limits remain open.
+
+## G-04 filesystem compensation continuation — 2026-10-23
+
+Root causes reproduced with real Linux files: the restore callback normalized
+ownership/modes after restoring snapshots, changing `751:65534:65534` to
+`640:0:0`; directory mode `711` remained at `755`, and newly created paths were
+not removed. The original two regressions failed before repair and passed after.
+
+Restore now uses existing directory receipts, enrolls every published file's
+metadata, and verifies resources before commit. Existing private destination
+directories with non-root ownership/group are refused before chmod. File owner
+changes must match a fixed mode/numeric UID/GID tuple before metadata is recorded.
+The metadata recorder's optional expected tuple checks its actual stat sample;
+existing callers without that argument retain their behavior. This prevents a
+post-publication/owner-change chmod from becoming an accepted new expectation.
+Applied records and newly created record directories participate in compensation.
+The callback trusts original snapshots instead of applying candidate ownership
+again, and restores directories after files and service recovery. Close errors
+propagate without a success message.
+
+The focused suite passes **9/9** cases: original file metadata/content, existing/new
+directories, final owner enrollment, publication metadata drift, partial chown
+failure, drift during chown and during enrollment, symlink/foreign-owner refusal,
+and applied-record/directory compensation. Fixtures use real numeric ownership
+under WSL root; named service-account ownership and service calls are simulated.
+Tests refuse filesystem mutations outside private fixtures. Two extra review
+regressions first reproduced incorrect success before their fixes.
+
+Focused logs: `/var/tmp/pnm-restore-next.red.log`,
+`/var/tmp/pnm-restore-next.owner-red.log`,
+`/var/tmp/pnm-restore-next.enroll-red.log`, and
+`/var/tmp/pnm-restore-final.focused.log`.
+
+Final validation: isolated Linux copy `/var/tmp/pnm-restore-final` in Debian WSL;
+focused suite **exit 0, 9 passed**; `make check` **exit 0, 25 suites / 239 passed /
+0 failed**, including syntax/security scan; `make shellcheck` **exit 0**. Full log:
+`/var/tmp/pnm-restore-final.check.log`. Read-only review confirmed the fixed-tuple
+enrollment change and found no further concrete issue in this delta.
+
+These tests call the real publication/compensation helpers and applied recorder;
+they do not execute a staged Core or prove complete restore orchestration,
+systemd state/invocation recovery, lock-before-baseline ordering, reboot, public
+client connectivity, archive provenance or PAX/GNU resource limits. Those remain
+the next stages. No production operation or version change is included.
 
 ## Verification already reported (historical host evidence)
 
