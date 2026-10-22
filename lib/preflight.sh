@@ -240,9 +240,16 @@ pnm_recovery_unit_has_no_dropins() {
 pnm_recovery_listener_owned() {
     local protocol="${1:?protocol required}" port="${2:?port required}"
     local unit expected_user expected_binary unit_label expected_uid fragment user active enabled pid cgroup proc_uid executable unit_text
-    case "$protocol:$port" in
-        tcp:443) unit=xray.service unit_label=xray_unit expected_user=xray expected_binary=/usr/local/bin/xray ;;
-        udp:8443) unit=hysteria-server.service unit_label=hysteria_unit expected_user=hysteria expected_binary=/usr/local/bin/hysteria ;;
+    pnm_validate_port "$port" || return 1
+    case "$protocol" in
+        tcp)
+            [[ "$port" == "${PNM_PREFLIGHT_NODE_CONFIG[XRAY_PORT]-}" ]] || return 1
+            unit=xray.service unit_label=xray_unit expected_user=xray expected_binary=/usr/local/bin/xray
+            ;;
+        udp)
+            [[ "$port" == "${PNM_PREFLIGHT_NODE_CONFIG[HY2_PORT]-}" ]] || return 1
+            unit=hysteria-server.service unit_label=hysteria_unit expected_user=hysteria expected_binary=/usr/local/bin/hysteria
+            ;;
         *) return 1 ;;
     esac
     pnm_recovery_has_failed_deployment_record || return 1
@@ -298,8 +305,12 @@ pnm_preflight_collect() {
     pnm_preflight_platform
     pnm_preflight_runtime
     pnm_preflight_configuration
-    pnm_preflight_port tcp 443
-    pnm_preflight_port udp 8443
+    if pnm_validate_node_config PNM_PREFLIGHT_NODE_CONFIG; then
+        pnm_preflight_port tcp "${PNM_PREFLIGHT_NODE_CONFIG[XRAY_PORT]}"
+        pnm_preflight_port udp "${PNM_PREFLIGHT_NODE_CONFIG[HY2_PORT]}"
+    else
+        pnm_preflight_add ports UNKNOWN 'Required ports cannot be checked' 'node desired state is missing or invalid'
+    fi
 }
 
 pnm_preflight_overall() {

@@ -734,16 +734,17 @@ pnm_tx_restore_file() {
     snapshot_info="$(pnm_tx_snapshot_state "$label")" || return $?
     IFS='|' read -r state original_mode original_uid original_gid <<<"$snapshot_info"
     current="$(pnm_tx_file_sha256 "$source")" || return $?
-    if [[ "$PNM_TX_OPERATION" == deployment ]]; then
-        for index in "${!PNM_TX_WRITTEN_PATHS[@]}"; do
-            [[ "${PNM_TX_WRITTEN_PATHS[index]}" == "$source" ]] || continue
-            if [[ "$(stat -c '%a|%u|%g' -- "$source")" != "${PNM_TX_WRITTEN_ATTRIBUTES[index]}" ]]; then
-                PNM_TX_RECOVERY_REQUIRED=1
-                pnm_tx_journal RECOVERY_REQUIRED "label=$label metadata_drift" || true
-                return "$PNM_EXIT_SOFTWARE"
-            fi
-        done
-    fi
+    for index in "${!PNM_TX_WRITTEN_PATHS[@]}"; do
+        [[ "${PNM_TX_WRITTEN_PATHS[index]}" == "$source" ]] || continue
+        # Standalone callers can explicitly enroll metadata for a resource;
+        # legacy callers that normalize ownership later keep their convention.
+        [[ "$PNM_TX_OPERATION" == deployment || -n "${PNM_TX_WRITTEN_ATTRIBUTES[index]}" ]] || continue
+        if [[ "$(stat -c '%a|%u|%g' -- "$source")" != "${PNM_TX_WRITTEN_ATTRIBUTES[index]}" ]]; then
+            PNM_TX_RECOVERY_REQUIRED=1
+            pnm_tx_journal RECOVERY_REQUIRED "label=$label metadata_drift" || true
+            return "$PNM_EXIT_SOFTWARE"
+        fi
+    done
     if [[ "$current" != "$expected_sha256" ]]; then
         PNM_TX_RECOVERY_REQUIRED=1
         pnm_tx_journal RECOVERY_REQUIRED "label=$label current_hash_mismatch" || true
@@ -783,7 +784,7 @@ pnm_tx_restore_file() {
 
 pnm_tx_record_written_metadata() {
     local path="$1" index attributes encoded receipt="$PNM_TX_PATH/file-attributes.tsv"
-    [[ "$PNM_TX_OPERATION" == deployment ]] || return 0
+    [[ "$PNM_TX_OPERATION" == deployment || "${2-}" == required ]] || return 0
     pnm_validate_managed_path "$path" || return $?
     if [[ -e "$receipt" || -L "$receipt" ]]; then
         [[ -f "$receipt" && ! -L "$receipt" && "$(stat -c '%a|%u' -- "$receipt")" == "600|$EUID" ]] || return "$PNM_EXIT_CONFIG"
@@ -822,6 +823,7 @@ pnm_tx_write_file() {
     local destination="${2:?destination file required}"
     local label="${3:?snapshot label required}"
     local mode="${4:?destination mode required}"
+    local metadata_policy="${5-}"
     local destination_parent digest snapshot_info original_state original_mode original_uid original_gid
     local staged_destination
 
@@ -852,8 +854,14 @@ pnm_tx_write_file() {
     PNM_TX_WRITTEN_PATHS+=("$destination")
     PNM_TX_WRITTEN_LABELS+=("$label")
     PNM_TX_WRITTEN_HASHES+=("$digest")
-    PNM_TX_WRITTEN_ATTRIBUTES+=('')
-    pnm_tx_record_written_metadata "$destination" || return $?
+    # Required enrollment must precede every post-publication receipt. If the
+    # metadata read itself fails, PENDING makes compensation retain the file.
+    if [[ "$metadata_policy" == required ]]; then
+        PNM_TX_WRITTEN_ATTRIBUTES+=(PENDING)
+    else
+        PNM_TX_WRITTEN_ATTRIBUTES+=('')
+    fi
+    pnm_tx_record_written_metadata "$destination" "$metadata_policy" || return $?
     pnm_tx_manifest_append APPLIED "$label" "$destination" "$original_state" "$original_mode" "$digest" || return "$PNM_EXIT_CANTCREAT"
     pnm_tx_journal WRITE "label=$label" || return "$PNM_EXIT_CANTCREAT"
 }

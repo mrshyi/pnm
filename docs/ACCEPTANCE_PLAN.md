@@ -96,7 +96,7 @@ make release-check
 
 ## 6. 2026-10-23 本地执行及恢复检查边界
 
-环境、命令退出码、22 套件/202 项结果及日志路径统一记录在 [TASKS.md](TASKS.md)。L1 的系统服务、账户操作和监听使用 mock，文件系统、权限、摘要和密码学工具真实执行；非 root 诊断另用真实 nobody UID 验证。
+环境、命令退出码、23 套件/219 项结果及日志路径统一记录在 [TASKS.md](TASKS.md)。L1 的系统服务、账户操作和监听使用 mock，文件系统、权限、摘要和密码学工具真实执行；非 root 诊断另用真实 nobody UID 验证。
 
 | 本地覆盖 | 实际断言 | 仍需补充 |
 |---|---|---|
@@ -105,6 +105,8 @@ make release-check
 | 同套件归属及 applied | 真实 CLI IFS 下拒绝无归属标准 unit/二进制；仅刷新原 confirmed applied；外部 applied 编辑保留 | 真实 systemd FragmentPath/drop-in/PID/监听归属和运行旧配置验证 |
 | [沙箱接入测试](../tests/unit/test_sandbox_install.sh)，12 项 | 真实 sandbox、lifecycle、node/applied 参与函数共用事务，外层失败后恢复；既有 Secret/TLS 和补偿用例；宿主 TLS 复用分支在隔离路径中验证原字节及 UID/GID/mode 恢复 | 实际 Core 而非测试资产的 L2 激活与访问权限 |
 | [读取权限测试](../tests/unit/test_read_access.sh)，1 项 | root0600 锁和0700状态目录下，非 root check 输出 UNKNOWN、退出1，show/links退出77且无stdout，links help可用 | 发行版用户权限及并发集成 |
+| [端口及预检测试](../tests/unit/test_preflight.sh)，14 项 | 自定义端口探测、占用拒绝、无效节点不探测默认端口、恢复分支匹配配置端口，以及既有依赖和归属检查 | 真实 systemd/PID/监听归属及配置端口启动 |
+| [生命周期证据测试](../tests/unit/test_core_evidence.sh)，13 项 | 双 Core 的 restart/update/rollback 成功、health/applied-write/commit/收据失败、inactive 恢复、缺失/漂移/损坏证据不提升、捕获和发布阶段配置编辑、外部记录及权限编辑保留，另一 Core 不重启 | 服务、下载和 Core 配置验证为模拟；需 L2 启动时序、真实固定资产验证、reboot 及外部连接 |
 
 未决部署的受控人工检查应先保留受保护的完整证据，不删除 uncertainty、改 journal 或设置 configured=yes 来绕过保护。`sudo pnm --json check`、`sudo pnm node show` 在未决状态返回70是预期拒绝。记录/快照可能包含凭据，不直接打印或附到普通报告。
 

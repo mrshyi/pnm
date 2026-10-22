@@ -1,8 +1,8 @@
 # PNM Architecture
 
-This document describes the source baseline plus the 2026-10-22 safety, main-flow and G-02 changes, reviewed through 2026-10-23. It is not a production deployment attestation. Verify behavior against source and tests when changing it.
+This document describes the source baseline plus the safety/G-02 changes and the 2026-10-23 persisted-port and lifecycle-evidence continuation. It is not a production deployment attestation. Verify behavior against source and tests when changing it.
 
-**Source baseline:** branch `dev`, HEAD `7a8dfe134f0c07e7ba16d740eb0e3c54db53b9ec`, `VERSION` `0.16.0-rc.1` (checked 2026-10-21).
+**Increment baseline:** branch `dev`, HEAD `686328f134f5f19af8dd86b9779f0b661c476019`, `VERSION` `0.16.0-rc.1` (checked 2026-10-23).
 
 ## System boundary
 
@@ -49,6 +49,8 @@ Xray and HY2 have distinct TLS/SNI semantics. `XRAY_SERVER_NAME` and `XRAY_TARGE
 
 The public install path is `lib/install.sh` → preflight → `lib/apply-gate.sh` → `lib/deploy.sh`. The gate holds the exclusive lock through final health/deadline checks. Explicit sandbox, lifecycle and node/applied-state participants share one `deployment` transaction. Standalone sandbox and per-Core lifecycle wrappers retain independent transactions; arbitrary implicit transaction nesting is rejected.
 
+Preflight probes the validated persisted `XRAY_PORT` and `HY2_PORT`. Invalid or missing node state produces an UNKNOWN port check alongside the configuration failure, without probing fallback ports. Recovery listener attribution uses the same configured protocol/port pair and retains its ownership checks.
+
 `lib/transaction.sh` provides schema-2 file snapshots with numeric UID/GID/mode, directory identity/metadata receipts, rollback callbacks and inspection; schema-1 records remain inspectable. `lib/deployment-state.sh` extends that engine with protected deployment baselines and a durable resource-bound marker. Deployment progress journals and gate receipts are derived; standalone operations keep their existing journal commit convention.
 
 Deployment publishes a durable uncertainty record before its marker. Uncertain publication or incomplete recovery retains evidence and blocks later writes and protected reads. Before commit, one recovery callback stops affected services, restores resource bytes/metadata and units, verifies each original service policy, then compensates created accounts and directories. Originally absent units remain absent; active-but-disabled baselines are preserved. Recovery refreshes applied InvocationID only for a previously confirmed, hash-matching runtime and unchanged original applied record.
@@ -60,6 +62,8 @@ Loaded units and existing Core resources require established PNM ownership recei
 `pnm status` reports service state and detected Core versions. Root `pnm check`, `node show` and links take a shared lock and reject unresolved deployment state. Non-root `check` retains diagnostics with UNKNOWN deployment/configuration-readiness results; `node show` and links require root (link help remains public). Local listening is not a proof of public reachability or successful client handshakes. There is no implemented Profile model; installation targets both cores.
 
 The Core operations include per-Core restart/log/apply/update/rollback and backup/restore/uninstall routes (`lib/core-ops.sh`). Updates use pinned versions and checksums. Restore stages and validates archive contents before applying. Feature presence in source is not by itself proof that every rollback/failure path is verified; consult `docs/TASKS.md` for current acceptance status.
+
+Restart/update/rollback carry forward only previously confirmed applied evidence. Under the transaction lock they capture the record, configuration digest and metadata; after health checks they publish the new invocation against that fixed digest through the existing transaction. Missing, changed or damaged evidence is retained without promotion. Compensation restores resource bytes and the service baseline before refreshing a previously confirmed active invocation; an inactive baseline keeps its original record. These applied writes explicitly enroll metadata before post-publication receipts, so external content/metadata drift retains recovery evidence rather than being silently overwritten. This does not implement automatic reboot reconciliation or race-free coordination with arbitrary privileged writers.
 
 ## Security boundaries
 

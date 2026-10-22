@@ -26,19 +26,22 @@ pnm_core_resolve() {
 
 pnm_core_restart() {
     local core rc
+    local PNM_CORE_PRIOR_CONFIG_HASH='' PNM_CORE_PRIOR_APPLIED_HASH='' PNM_CORE_PRIOR_APPLIED_ATTRIBUTES=''
     pnm_core_resolve "$1" || return $?
     core=$PNM_CORE_ID
     pnm_require_root || return $?
     pnm_core_lifecycle_snapshot "$core" || return $?
     pnm_tx_begin "core-lifecycle-$core" || return $?
+    pnm_core_capture_applied || { rc=$?; pnm_tx_close; return "$rc"; }
     if ((PNM_DRY_RUN == 0)); then
         pnm_tx_record_core_state "$core" "$PNM_CORE_UNIT" "$PNM_LIFECYCLE_PRE_ACTIVE" "$PNM_LIFECYCLE_PRE_ENABLED" || {
             rc=$?; pnm_tx_close; return "$rc";
         }
     fi
-    pnm_tx_add_rollback pnm_core_lifecycle_restore || { pnm_tx_close; return "$PNM_EXIT_SOFTWARE"; }
+    pnm_tx_add_rollback pnm_core_restart_restore || { pnm_tx_close; return "$PNM_EXIT_SOFTWARE"; }
     if pnm_tx_run restart pnm_core_restart_step; then :; else rc=$?; pnm_tx_close; return "$rc"; fi
     if pnm_tx_run health pnm_core_lifecycle_health_step; then :; else rc=$?; pnm_tx_close; return "$rc"; fi
+    if pnm_tx_run applied_evidence pnm_core_refresh_applied; then :; else rc=$?; pnm_tx_close; return "$rc"; fi
     pnm_tx_commit || { rc=$?; pnm_tx_rollback || true; pnm_tx_close; return "$rc"; }
     pnm_tx_close
     pnm_success "$core restarted and healthy."
@@ -46,6 +49,62 @@ pnm_core_restart() {
 
 pnm_core_restart_step() {
     pnm_systemctl restart "$PNM_CORE_UNIT"
+}
+
+pnm_core_restart_restore() {
+    pnm_tx_restore_written_files || return "$PNM_EXIT_SOFTWARE"
+    pnm_core_lifecycle_restore || return "$PNM_EXIT_SOFTWARE"
+    pnm_core_recover_applied
+}
+
+# Only carry forward evidence confirmed before this operation. A lifecycle
+# command must not silently certify missing, stale or externally edited state.
+pnm_core_capture_applied() {
+    local record="$PNM_STATE_DIR/cores/$PNM_CORE_ID/applied.env" attributes
+    local -A prior=()
+    [[ "$(pnm_core_applied_config_status "$PNM_CORE_ID" "$PNM_CORE_CONFIG")" == confirmed ]] || return 0
+    pnm_validate_managed_path "$record" && pnm_validate_managed_path "$PNM_CORE_CONFIG" || return "$PNM_EXIT_CONFIG"
+    attributes="$(stat -c '%a:%u:%g' -- "$record")" || return "$PNM_EXIT_CONFIG"
+    [[ "$attributes" == "600:$EUID:"* ]] || return "$PNM_EXIT_CONFIG"
+    PNM_CORE_PRIOR_APPLIED_HASH="$(pnm_tx_file_sha256 "$record")" || return "$PNM_EXIT_SOFTWARE"
+    pnm_config_load "$record" prior SCHEMA_VERSION CORE CONFIG_SHA256 SERVICE_INVOCATION_ID || return "$PNM_EXIT_SOFTWARE"
+    PNM_CORE_PRIOR_CONFIG_HASH="$(pnm_tx_file_sha256 "$PNM_CORE_CONFIG")" || return "$PNM_EXIT_SOFTWARE"
+    PNM_CORE_PRIOR_APPLIED_ATTRIBUTES="$attributes"
+    [[ "${prior[SCHEMA_VERSION]-}" == 1 && "${prior[CORE]-}" == "$PNM_CORE_ID" &&
+        "${prior[CONFIG_SHA256]-}" == "$PNM_CORE_PRIOR_CONFIG_HASH" &&
+        "${prior[SERVICE_INVOCATION_ID]-}" == "$(pnm_systemd_show_value "$PNM_CORE_UNIT" InvocationID)" &&
+        "$(pnm_tx_file_sha256 "$record")" == "$PNM_CORE_PRIOR_APPLIED_HASH" ]] || return "$PNM_EXIT_SOFTWARE"
+}
+
+pnm_core_check_applied_baseline() {
+    local record="$PNM_STATE_DIR/cores/$PNM_CORE_ID/applied.env"
+    pnm_validate_managed_path "$record" && pnm_validate_managed_path "$PNM_CORE_CONFIG" || return "$PNM_EXIT_SOFTWARE"
+    [[ "$(pnm_tx_file_sha256 "$PNM_CORE_CONFIG")" == "$PNM_CORE_PRIOR_CONFIG_HASH" &&
+        "$(pnm_tx_file_sha256 "$record")" == "$PNM_CORE_PRIOR_APPLIED_HASH" &&
+        "$(stat -c '%a:%u:%g' -- "$record")" == "$PNM_CORE_PRIOR_APPLIED_ATTRIBUTES" ]] || return "$PNM_EXIT_SOFTWARE"
+}
+
+pnm_core_refresh_applied() {
+    [[ -n "${PNM_CORE_PRIOR_CONFIG_HASH:-}" ]] || return 0
+    pnm_core_check_applied_baseline || return $?
+    pnm_core_record_applied_config "$PNM_CORE_ID" "$PNM_CORE_CONFIG" "$PNM_TX_PATH" "$PNM_CORE_PRIOR_CONFIG_HASH" || return $?
+    [[ "$(pnm_core_applied_config_status "$PNM_CORE_ID" "$PNM_CORE_CONFIG")" == confirmed ]] || return "$PNM_EXIT_SOFTWARE"
+}
+
+pnm_core_recover_applied() {
+    local invocation
+    [[ -n "${PNM_CORE_PRIOR_CONFIG_HASH:-}" ]] || return 0
+    # An inactive baseline is restored by stopping, not by claiming a healthy
+    # running invocation. Keep its original evidence bytes unchanged.
+    [[ "$PNM_LIFECYCLE_PRE_ACTIVE" == active ]] || return 0
+    pnm_systemd_unit_healthy "$PNM_CORE_UNIT" || return "$PNM_EXIT_SOFTWARE"
+    pnm_core_check_applied_baseline || return $?
+    invocation="$(pnm_systemd_show_value "$PNM_CORE_UNIT" InvocationID)" || return "$PNM_EXIT_SOFTWARE"
+    [[ "$invocation" =~ ^[a-fA-F0-9]{32}$ ]] || return "$PNM_EXIT_SOFTWARE"
+    pnm_tx_refresh_recovered_applied "$PNM_STATE_DIR/cores/$PNM_CORE_ID/applied.env" "$PNM_CORE_ID" \
+        "$PNM_CORE_PRIOR_CONFIG_HASH" "${invocation,,}" "$PNM_CORE_PRIOR_APPLIED_HASH" \
+        "$PNM_CORE_PRIOR_APPLIED_ATTRIBUTES" || return "$PNM_EXIT_SOFTWARE"
+    [[ "$(pnm_core_applied_config_status "$PNM_CORE_ID" "$PNM_CORE_CONFIG")" == confirmed ]] || return "$PNM_EXIT_SOFTWARE"
 }
 
 pnm_core_log() {
@@ -107,6 +166,7 @@ pnm_core_record_applied_config() {
     local core="${1:?Core id required}"
     local config="${2:?configuration path required}"
     local stage_dir="${3:?stage directory required}"
+    local expected_digest="${4-}"
     local record_dir="$PNM_STATE_DIR/cores/$core"
     local record="$record_dir/applied.env"
     local staged="$stage_dir/applied-$core.env"
@@ -115,6 +175,8 @@ pnm_core_record_applied_config() {
     [[ "$core" == xray || "$core" == hysteria2 ]] || return "$PNM_EXIT_CONFIG"
     digest="$(sha256sum -- "$config" 2>/dev/null | awk '{print $1}')" || return "$PNM_EXIT_SOFTWARE"
     [[ "$digest" =~ ^[a-f0-9]{64}$ ]] || return "$PNM_EXIT_SOFTWARE"
+    # Lifecycle operations may only carry forward the pre-restart digest.
+    [[ -z "$expected_digest" || "$digest" == "$expected_digest" ]] || return "$PNM_EXIT_SOFTWARE"
     case "$core" in
         xray) unit=xray.service ;;
         hysteria2) unit=hysteria-server.service ;;
@@ -131,7 +193,7 @@ pnm_core_record_applied_config() {
     printf 'SCHEMA_VERSION=1\nCORE=%s\nCONFIG_SHA256=%s\nSERVICE_INVOCATION_ID=%s\n' \
         "$core" "$digest" "${invocation,,}" >"$staged" || return "$PNM_EXIT_CANTCREAT"
     chmod 0600 -- "$staged" || { rm -f -- "$staged"; return "$PNM_EXIT_NOPERM"; }
-    if pnm_tx_write_file "$staged" "$record" "applied_$core" 0600; then
+    if pnm_tx_write_file "$staged" "$record" "applied_$core" 0600 "${expected_digest:+required}"; then
         :
     else
         rc=$?
@@ -299,6 +361,7 @@ pnm_core_backup() {
 pnm_core_update() {
     local requested='' version hash arg asset staged rc previous_dir previous_file previous_meta old_version style metadata_stage snapshot_stage
     local staged_version staged_validation
+    local PNM_CORE_PRIOR_CONFIG_HASH='' PNM_CORE_PRIOR_APPLIED_HASH='' PNM_CORE_PRIOR_APPLIED_ATTRIBUTES=''
     local -A PNM_UPDATE_NODE=() PNM_UPDATE_SECRET=()
     pnm_core_resolve "$1" || return $?
     shift
@@ -353,6 +416,7 @@ pnm_core_update() {
     metadata_stage="$PNM_CORE_STAGE/previous.env"
     snapshot_stage="$PNM_CORE_STAGE/previous"
     pnm_tx_begin "core-update-$PNM_CORE_ID" || return $?
+    pnm_core_capture_applied || { rc=$?; pnm_tx_close; return "$rc"; }
     pnm_tx_add_rollback pnm_core_update_rollback || { pnm_tx_close; return "$PNM_EXIT_SOFTWARE"; }
     pnm_tx_write_file "$staged" "$PNM_CORE_BINARY" core_binary 0755 || {
         rc=$?; pnm_core_update_abort update 'binary publication' "$rc"; return "$rc";
@@ -384,6 +448,7 @@ pnm_core_update() {
     [[ "$(pnm_binary_version_number "$previous_file" "$style" 2>/dev/null)" == "$old_version" ]] || {
         pnm_core_update_abort update 'previous binary and metadata consistency check' "$PNM_EXIT_CONFIG"; return "$PNM_EXIT_CONFIG";
     }
+    pnm_core_refresh_applied || { rc=$?; pnm_core_update_abort update 'applied evidence publication' "$rc"; return "$rc"; }
     pnm_tx_commit || { rc=$?; pnm_core_update_abort update 'transaction commit' "$rc"; return "$rc"; }
     pnm_tx_close
     pnm_success "$PNM_CORE_ID updated to $version; use 'pnm rollback $PNM_CORE_ID' to revert."
@@ -392,7 +457,8 @@ pnm_core_update() {
 pnm_core_update_rollback() {
     pnm_tx_restore_written_files || return "$PNM_EXIT_SOFTWARE"
     pnm_systemctl restart "$PNM_CORE_UNIT" || return "$PNM_EXIT_SOFTWARE"
-    pnm_systemd_unit_healthy "$PNM_CORE_UNIT"
+    pnm_systemd_unit_healthy "$PNM_CORE_UNIT" || return "$PNM_EXIT_SOFTWARE"
+    pnm_core_recover_applied
 }
 
 pnm_core_publish_previous_state() {
@@ -422,6 +488,7 @@ pnm_core_update_abort() {
 
 pnm_core_rollback() {
     local core version current_version previous_dir previous_file previous_meta rc style metadata_stage
+    local PNM_CORE_PRIOR_CONFIG_HASH='' PNM_CORE_PRIOR_APPLIED_HASH='' PNM_CORE_PRIOR_APPLIED_ATTRIBUTES=''
     pnm_core_resolve "$1" || return $?
     pnm_require_root || return $?
     core=$PNM_CORE_ID
@@ -443,6 +510,7 @@ pnm_core_rollback() {
     [[ -n "$current_version" ]] || return "$PNM_EXIT_CONFIG"
     install -m 0755 -- "$PNM_CORE_BINARY" "$PNM_CORE_STAGE/current" || return "$PNM_EXIT_CANTCREAT"
     pnm_tx_begin "core-rollback-$core" || return $?
+    pnm_core_capture_applied || { rc=$?; pnm_tx_close; return "$rc"; }
     pnm_tx_add_rollback pnm_core_update_rollback || { pnm_tx_close; return "$PNM_EXIT_SOFTWARE"; }
     pnm_tx_write_file "$previous_file" "$PNM_CORE_BINARY" core_binary 0755 || {
         rc=$?; pnm_core_update_abort rollback 'binary publication' "$rc"; return "$rc";
@@ -466,6 +534,7 @@ pnm_core_rollback() {
     [[ "$(pnm_binary_version_number "$previous_file" "$style" 2>/dev/null)" == "$current_version" ]] || {
         pnm_core_update_abort rollback 'previous binary and metadata consistency check' "$PNM_EXIT_CONFIG"; return "$PNM_EXIT_CONFIG";
     }
+    pnm_core_refresh_applied || { rc=$?; pnm_core_update_abort rollback 'applied evidence publication' "$rc"; return "$rc"; }
     pnm_tx_commit || { rc=$?; pnm_core_update_abort rollback 'transaction commit' "$rc"; return "$rc"; }
     pnm_tx_close
     pnm_success "$core rolled back to $version."

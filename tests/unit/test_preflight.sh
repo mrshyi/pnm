@@ -184,6 +184,66 @@ test_missing_python3_fails_install_dry_run_before_apply() {
     assert_eq 0 "$DEPLOY_STARTED" || return 1
 }
 
+test_custom_ports_ignore_busy_defaults() (
+    local temp_dir
+    temp_dir="$(mktemp -d)"
+    trap 'rm -rf -- "$temp_dir"' EXIT
+    cp "$PNM_CONFIG_DIR/node.conf" "$PNM_CONFIG_DIR/versions.conf" "$temp_dir/"
+    sed -i -e 's/PNM_CONFIGURED=yes/PNM_CONFIGURED=no/' -e 's/XRAY_PORT=443/XRAY_PORT=1443/' -e 's/HY2_PORT=8443/HY2_PORT=18443/' "$temp_dir/node.conf"
+    PNM_CONFIG_DIR="$temp_dir" PNM_MISSING_TOOL=''
+    pnm_listener_present() { printf '%s:%s\n' "$1" "$2" >>"$temp_dir/queries"; [[ "$2" == 443 || "$2" == 8443 ]]; }
+    pnm_preflight_collect
+    assert_eq OK "$(pnm_preflight_overall)" || return 1
+    assert_eq $'tcp:1443\nudp:18443' "$(<"$temp_dir/queries")"
+)
+
+test_busy_custom_ports_block_install_before_apply() (
+    local temp_dir
+    temp_dir="$(mktemp -d)"
+    trap 'rm -rf -- "$temp_dir"' EXIT
+    cp "$PNM_CONFIG_DIR/node.conf" "$PNM_CONFIG_DIR/versions.conf" "$temp_dir/"
+    sed -i -e 's/PNM_CONFIGURED=yes/PNM_CONFIGURED=no/' -e 's/XRAY_PORT=443/XRAY_PORT=1443/' -e 's/HY2_PORT=8443/HY2_PORT=18443/' "$temp_dir/node.conf"
+    PNM_CONFIG_DIR="$temp_dir" PNM_MISSING_TOOL=''
+    pnm_listener_present() { [[ "$2" == 1443 || "$2" == 18443 ]]; }
+    run_capture pnm_install --apply --yes
+    assert_eq "$PNM_EXIT_FAIL" "$RUN_RC" || return 1
+    assert_eq 0 "$DEPLOY_STARTED" || return 1
+    assert_contains "$RUN_OUTPUT" 'Required TCP/1443 is already in use' || return 1
+    assert_contains "$RUN_OUTPUT" 'Required UDP/18443 is already in use'
+)
+
+test_invalid_node_does_not_probe_fallback_ports() (
+    local temp_dir
+    temp_dir="$(mktemp -d)"
+    trap 'rm -rf -- "$temp_dir"' EXIT
+    cp "$PNM_CONFIG_DIR/node.conf" "$PNM_CONFIG_DIR/versions.conf" "$temp_dir/"
+    sed -i 's/XRAY_PORT=443/XRAY_PORT=invalid/' "$temp_dir/node.conf"
+    PNM_CONFIG_DIR="$temp_dir" PNM_MISSING_TOOL=''
+    pnm_listener_present() { touch "$temp_dir/probed"; return 1; }
+    pnm_preflight_collect
+    assert_eq FAIL "$(pnm_preflight_overall)" || return 1
+    [[ ! -e "$temp_dir/probed" ]]
+)
+
+test_recovery_dispatch_requires_the_configured_port() (
+    local temp_dir
+    temp_dir="$(mktemp -d)"
+    trap 'rm -rf -- "$temp_dir"' EXIT
+    # Restore the real dispatcher; stop before any host resource is inspected.
+    source "$PNM_LIB_DIR/preflight.sh"
+    PNM_PREFLIGHT_NODE_CONFIG=([XRAY_PORT]=1443 [HY2_PORT]=18443)
+    pnm_recovery_has_failed_deployment_record() { touch "$temp_dir/dispatched"; return 1; }
+    if pnm_recovery_listener_owned tcp 1443; then return 1; fi
+    [[ -e "$temp_dir/dispatched" ]] || return 1
+    rm "$temp_dir/dispatched"
+    if pnm_recovery_listener_owned udp 18443; then return 1; fi
+    [[ -e "$temp_dir/dispatched" ]] || return 1
+    rm "$temp_dir/dispatched"
+    if pnm_recovery_listener_owned tcp 443; then return 1; fi
+    if pnm_recovery_listener_owned udp 8443; then return 1; fi
+    [[ ! -e "$temp_dir/dispatched" ]]
+)
+
 test_missing_openssl_is_classified_as_tls_stage_dependency() {
     local rc
     PNM_MISSING_TOOL=openssl
@@ -195,6 +255,10 @@ test_missing_openssl_is_classified_as_tls_stage_dependency() {
     assert_eq 0 "$DEPLOY_STARTED"
 }
 
+run_test 'custom ports ignore busy default listeners' test_custom_ports_ignore_busy_defaults
+run_test 'busy custom ports block install before apply' test_busy_custom_ports_block_install_before_apply
+run_test 'invalid node configuration does not probe fallback ports' test_invalid_node_does_not_probe_fallback_ports
+run_test 'recovery dispatch requires the configured protocol and port' test_recovery_dispatch_requires_the_configured_port
 run_test 'missing unzip fails dry-run preflight before installation starts' test_missing_unzip_fails_install_dry_run_before_apply
 run_test 'missing python3 fails dry-run preflight before installation starts' test_missing_python3_fails_install_dry_run_before_apply
 run_test 'missing openssl is classified as a TLS dependency before apply' test_missing_openssl_is_classified_as_tls_stage_dependency
