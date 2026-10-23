@@ -1,8 +1,8 @@
 # PNM Current Tasks
 
-**Last reconciled:** 2026-10-23 (runtime config publication protects metadata and ownership errors; Debian WSL `make check` passes 351 tests and isolated systemd harness passes 8/8; real Core/production acceptance remains open)
+**Last reconciled:** 2026-10-23 (Debian WSL default checks pass 351 tests, isolated systemd stand-ins 8/8, real Core positive local traffic 5/5; share-pin compatibility and production acceptance remain open)
 
-**Current increment baseline:** branch `dev`, HEAD `ccdb868`, VERSION `0.16.0-rc.1`.
+**Current increment baseline:** branch `dev`, HEAD `f5a13ce`, VERSION `0.16.0-rc.1`.
 
 This page is a status snapshot, not a test report. Status must be refreshed from current source, test output, or host evidence before it is changed. Historical Phase 2 analysis is preserved in [PHASE2_GAP_ANALYSIS.md](PHASE2_GAP_ANALYSIS.md).
 
@@ -872,11 +872,25 @@ fixed SHA-256/size for Xray v26.10.21 and Hysteria v2.13.0. Manifest JSON valida
 These are integration-test assets, not managed versions.conf or production approval.
 The design/sequence is [real Core WSL plan](superpowers/plans/2026-10-23-real-core-wsl.md).
 
-The initial release download connection timed out; official asset API transfers
-are in progress. No downloaded Core has executed and no real-Core service unit
-has started. Actual configuration/startup/TLS/local traffic remains unverified.
-Random transient units with existing nobody and PrivateNetwork are planned;
-account provisioning, reboot, external clients and deployed identity remain open.
+The official asset API transfers completed; exact sizes and SHA-256 match the pins.
+The opt-in `make test-real-cores` now passes **5/5** in the frozen Linux source copy
+`/var/tmp/pnm-realcore-positive-v6`, with sanitized `.run.log` and `.lint.log` beside
+it. Syntax/security/ShellCheck, explicit fixture ShellCheck and Python compilation
+also pass. Production renderers supply the server configurations; actual Xray
+config validation, both real unprivileged Core startups and both local proxy
+client transfers pass. All seven owned transient units and the success fixture
+were cleaned. No account, production service or host network was changed.
+
+The final probe uses a fixture-only address on lo inside a verified non-host
+namespace containing only lo. Earlier loopback attempts were blocked by the pinned
+Xray's default private-destination policy, confirmed in isolated diagnostic logs
+and official source; the final test does not weaken production configuration.
+HY2's positive test uses CA verification. PNM's share-link pin still needs real
+compatibility verification: internal SPKI/base64 differs from the official client's
+leaf DER/hex fingerprint. Next reproduce this mismatch and repair its wire encoding
+without migrating the persisted schema. Cause-qualified authentication/TLS rejection,
+actual account provisioning, reboot, external clients and deployed identity remain
+open; this positive stage does not close Phase 3.
 
 ## Verification already reported (historical host evidence)
 
