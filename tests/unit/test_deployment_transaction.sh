@@ -165,7 +165,9 @@ test_recovered_applied_record_matches_restarted_service() (
     source "$PROJECT_ROOT/lib/render.sh"
     prepare_deployment_fixture "$root"
     PNM_XRAY_CONFIG="$root/runtime.json" FIXTURE_INVOCATION="$old_invocation"
-    printf 'old runtime\n' >"$PNM_XRAY_CONFIG"
+    # Recovered listener evidence needs actual public runtime fields, rather
+    # than an arbitrary string whose digest alone says nothing about its port.
+    printf '%s\n' '{"inbounds":[{"port":443,"streamSettings":{"security":"reality","network":"tcp","realitySettings":{"dest":"old.example.net:443","serverNames":["old.example.net"]}}}]}' >"$PNM_XRAY_CONFIG"
     record="$PNM_STATE_DIR/cores/xray/applied.env"
     mkdir -p "${record%/*}"
     printf 'SCHEMA_VERSION=1\nCORE=xray\nCONFIG_SHA256=%s\nSERVICE_INVOCATION_ID=%s\n' \
@@ -191,6 +193,104 @@ test_recovered_applied_record_matches_restarted_service() (
 )
 
 test_external_applied_edit_is_retained() { test_recovered_applied_record_matches_restarted_service drift; }
+
+check_recovered_custom_listener_port() (
+    local core="${1:?Core required}" invalid="${2-}" root config record digest observed='' original_record attributes
+    local _fixture_protocol _fixture_port
+    local -A recovery_node=() recovery_reality=() recovery_hysteria=()
+    root="$(mktemp -d)"
+    trap 'rm -rf -- "$root"' EXIT
+    source "$PROJECT_ROOT/lib/render.sh"
+    prepare_deployment_fixture "$root"
+    PNM_CONFIG_DIR="$TEST_ROOT/fixtures/config-secrets"
+    pnm_load_node_config recovery_node && pnm_load_reality_secret recovery_reality &&
+        pnm_load_hysteria_secret recovery_hysteria || return 1
+    PNM_CONFIG_DIR="$root/config"
+    recovery_node[XRAY_PORT]=10443 recovery_node[HY2_PORT]=18443
+    PNM_XRAY_CONFIG="$root/runtime.json" PNM_HY2_CONFIG="$root/runtime.yaml"
+    pnm_render_xray_config recovery_node recovery_reality >"$PNM_XRAY_CONFIG" || return 1
+    pnm_render_hysteria_config recovery_node recovery_hysteria >"$PNM_HY2_CONFIG" || return 1
+    if [[ -n "$invalid" ]]; then
+        if [[ "$core" == xray ]]; then
+            if [[ "$invalid" == malformed ]]; then
+                printf '{\n' >"$PNM_XRAY_CONFIG"
+            else
+                python3 - "$PNM_XRAY_CONFIG" "$invalid" <<'PY'
+import json, sys
+path, problem = sys.argv[1:]
+with open(path) as source:
+    data = json.load(source)
+inbound = data['inbounds'][0]
+if problem == 'port':
+    inbound['port'] = 0
+else:
+    inbound['streamSettings']['network'] = 'udp'
+with open(path, 'w') as target:
+    json.dump(data, target)
+PY
+            fi
+        elif [[ "$invalid" == malformed ]]; then
+            printf 'listen: [\n' >"$PNM_HY2_CONFIG"
+        else
+            printf 'listen: :0\n' >"$PNM_HY2_CONFIG"
+        fi
+    fi
+    if [[ "$core" == xray ]]; then
+        config="$PNM_XRAY_CONFIG" _fixture_protocol=tcp _fixture_port=10443
+        PNM_DEPLOY_XRAY_CONFIG_HASH="$(pnm_tx_file_sha256 "$config")" PNM_DEPLOY_XRAY_APPLIED=1
+    else
+        config="$PNM_HY2_CONFIG" _fixture_protocol=udp _fixture_port=18443
+        PNM_DEPLOY_HY2_CONFIG_HASH="$(pnm_tx_file_sha256 "$config")" PNM_DEPLOY_HY2_APPLIED=1
+    fi
+    record="$PNM_STATE_DIR/cores/$core/applied.env"
+    mkdir -p -- "${record%/*}"
+    digest="$(pnm_tx_file_sha256 "$config")"
+    printf 'SCHEMA_VERSION=1\nCORE=%s\nCONFIG_SHA256=%s\nSERVICE_INVOCATION_ID=11111111111111111111111111111111\n' "$core" "$digest" >"$record"
+    chmod 0600 -- "$record"
+    PNM_DEPLOY_PRIOR_APPLIED_HASH[$core]="$(pnm_tx_file_sha256 "$record")"
+    PNM_DEPLOY_PRIOR_APPLIED_ATTRIBUTES[$core]="$(stat -c '%a:%u:%g' -- "$record")"
+    original_record="$(pnm_tx_file_sha256 "$record")" attributes="$(stat -c '%a:%u:%g' -- "$record")"
+    # Desired state may already be different: the recovered hash-bound runtime
+    # is authoritative for the port being verified during compensation.
+    declare -gA PNM_NODE_CONFIG=([XRAY_PORT]=443 [HY2_PORT]=8443)
+    pnm_systemd_show_value() { printf '22222222222222222222222222222222\n'; }
+    pnm_listener_present() {
+        observed="$1:$2"
+        [[ "$1" == "$_fixture_protocol" && "$2" == "$_fixture_port" ]]
+    }
+    PNM_TX_ID_OVERRIDE="tx-ports-$core"
+    # This unit isolates the existing recovery helper, not the deployment
+    # marker publisher (whose complete baseline is covered by other cases).
+    pnm_tx_begin "core-lifecycle-$core" || return 1
+    run_capture pnm_deploy_refresh_recovered_applied "$core"
+    if [[ -n "$invalid" ]]; then
+        assert_eq 70 "$RUN_RC" || return 1
+        assert_eq '' "$observed" || return 1
+        [[ "$(pnm_tx_file_sha256 "$record")" == "$original_record" &&
+            "$(stat -c '%a:%u:%g' -- "$record")" == "$attributes" ]] || return 1
+        pnm_tx_commit && pnm_tx_close
+        return $?
+    fi
+    assert_eq 0 "$RUN_RC" || return 1
+    assert_eq "$_fixture_protocol:$_fixture_port" "$observed" || return 1
+    assert_eq confirmed "$(pnm_core_applied_config_status "$core" "$config")" || return 1
+    pnm_tx_commit && pnm_tx_close
+)
+
+test_recovered_xray_custom_port() { check_recovered_custom_listener_port xray; }
+test_recovered_hy2_custom_port() { check_recovered_custom_listener_port hysteria2; }
+test_recovered_xray_invalid_listener_is_not_promoted() {
+    local variant
+    for variant in malformed port transport; do
+        check_recovered_custom_listener_port xray "$variant" || return 1
+    done
+}
+test_recovered_hy2_invalid_listener_is_not_promoted() {
+    local variant
+    for variant in malformed port; do
+        check_recovered_custom_listener_port hysteria2 "$variant" || return 1
+    done
+}
 
 test_marker_sync_failure_has_preexisting_uncertainty() (
     local root rc
@@ -361,6 +461,10 @@ run_test 'phase deadline state and commit failures restore the original resource
 run_test 'active disabled baseline is restored without changing its enable state' test_active_disabled_baseline_is_restored
 run_test 'baseline recording failure permits a clean retry' test_baseline_failure_can_be_retried
 run_test 'recovery refreshes only previously confirmed applied evidence' test_recovered_applied_record_matches_restarted_service
+run_test 'Xray recovery verifies its recovered runtime listener instead of desired defaults' test_recovered_xray_custom_port
+run_test 'HY2 recovery verifies its recovered runtime listener instead of desired defaults' test_recovered_hy2_custom_port
+run_test 'Xray recovery rejects malformed ports and transport without applied promotion' test_recovered_xray_invalid_listener_is_not_promoted
+run_test 'HY2 recovery rejects malformed listeners without applied promotion' test_recovered_hy2_invalid_listener_is_not_promoted
 run_test 'external applied edits are retained and require recovery' test_external_applied_edit_is_retained
 run_test 'marker sync failure retains uncertainty persisted before publication' test_marker_sync_failure_has_preexisting_uncertainty
 run_test 'unowned loaded services are rejected before any mutation' test_unowned_loaded_unit_is_not_stopped

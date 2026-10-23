@@ -111,6 +111,7 @@ EOF
     pnm_listener_present() { [[ "$1" == tcp && "$2" == 443 ]]; }
     pnm_check_reset
     PNM_CHECK_CONFIGURED=1
+    PNM_NODE_CONFIG[XRAY_PORT]=443
     original_path="$PATH"
     PATH="$temp_dir/path"
     pnm_check_xray
@@ -124,6 +125,53 @@ EOF
 
 test_xray_health_without_path_binary() { check_xray_binary_resolution no; }
 test_xray_health_ignores_competing_path_binary() { check_xray_binary_resolution yes; }
+
+test_configured_custom_ports_are_valid() (
+    local temp_dir expected_status=OK
+    temp_dir="$(mktemp -d -- "$CHECK_RUNTIME_DIR/ports.XXXXXXXX")"
+    mkdir -- "$temp_dir/config"
+    sed -e 's/^XRAY_PORT=.*/XRAY_PORT=10443/' -e 's/^HY2_PORT=.*/HY2_PORT=18443/' \
+        "$CHECK_CONFIG_DIR/node.conf" >"$temp_dir/config/node.conf"
+    PNM_CONFIG_DIR="$temp_dir/config"
+    pnm_check_reset
+    pnm_check_configuration
+    ((EUID == 0)) || expected_status=UNKNOWN
+    assert_eq "$expected_status" "${PNM_CHECK_STATUSES[0]}" || return 1
+    assert_eq 1 "$PNM_CHECK_CONFIGURED"
+)
+
+check_core_listener_ports() (
+    local unknown="${1:?unknown port flag required}" expected_status=OK probes=''
+    PNM_XRAY_BIN="$FAKE_DIR/xray" PNM_HY2_BIN="$FAKE_DIR/hysteria"
+    PNM_XRAY_CONFIG="$CHECK_RUNTIME_DIR/xray-config.json"
+    PNM_HY2_CONFIG="$CHECK_RUNTIME_DIR/hysteria-config.yaml"
+    pnm_service_state_line() { printf 'loaded|active|enabled|running\n'; }
+    pnm_listener_present() {
+        probes+="$1:$2 "
+        [[ "$1:$2" == tcp:10443 || "$1:$2" == udp:18443 ]]
+    }
+    pnm_check_reset
+    PNM_CHECK_CONFIGURED=1
+    if [[ "$unknown" == no ]]; then
+        PNM_NODE_CONFIG[XRAY_PORT]=10443 PNM_NODE_CONFIG[HY2_PORT]=18443
+    else
+        PNM_NODE_CONFIG[XRAY_PORT]=invalid PNM_NODE_CONFIG[HY2_PORT]=''
+    fi
+    pnm_check_xray
+    pnm_check_hysteria
+    if [[ "$unknown" == yes ]]; then
+        expected_status=UNKNOWN
+        assert_eq '' "$probes" || return 1
+    else
+        ((EUID == 0)) || expected_status=UNKNOWN
+        assert_eq 'tcp:10443 udp:18443 ' "$probes" || return 1
+    fi
+    assert_eq "$expected_status" "${PNM_CHECK_STATUSES[0]}" || return 1
+    assert_eq "$expected_status" "${PNM_CHECK_STATUSES[1]}"
+)
+
+test_core_health_probes_configured_ports() { check_core_listener_ports no; }
+test_unknown_core_ports_do_not_probe_defaults() { check_core_listener_ports yes; }
 
 test_passing_check_json() {
     PNM_FAKE_PROFILE=pass run_capture run_fake_pnm --json check
@@ -251,6 +299,9 @@ test_supported_platform_matrix() {
 
 run_test 'Xray health tests the managed binary when PATH has no xray' test_xray_health_without_path_binary
 run_test 'Xray health ignores a competing PATH executable' test_xray_health_ignores_competing_path_binary
+run_test 'persisted custom ports are valid desired state' test_configured_custom_ports_are_valid
+run_test 'both Core health checks probe configured listener ports' test_core_health_probes_configured_ports
+run_test 'unknown Core ports cannot fall back to unrelated default listeners' test_unknown_core_ports_do_not_probe_defaults
 run_test 'fully healthy fixture returns PASS JSON' test_passing_check_json
 run_test 'FAIL takes exit-code precedence' test_failure_exit_precedence
 run_test 'quiet mode emits no stdout' test_quiet_has_no_stdout

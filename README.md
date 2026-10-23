@@ -4,8 +4,8 @@
 
 PNM manages the lifecycle of two independent proxy cores on one supported Debian or Ubuntu VPS:
 
-- Xray-core: VLESS + REALITY on TCP/443
-- Official Hysteria2: QUIC on UDP/8443
+- Xray-core: VLESS + REALITY on TCP/443 by default
+- Official Hysteria2: QUIC on UDP/8443 by default
 
 PNM does not forward traffic. It installs pinned binaries, renders and validates each configuration, controls the corresponding systemd service, and manages secret-bearing backups.
 

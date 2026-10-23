@@ -1,8 +1,8 @@
 # PNM Current Tasks
 
-**Last reconciled:** 2026-10-24 (default363 tests; actual guest main-flow14/14, failure/retry16/16 and distinct-version update scenario22/22 pass; broader fault/reboot/external acceptance remain open)
+**Last reconciled:** 2026-10-24 (default370 tests; guest main-flow14/14, failure/retry16/16, distinct-version update22/22 and custom-port16/16 pass; broader fault/reboot/external acceptance remain open)
 
-**Current increment baseline:** branch `dev`, parent HEAD `fdac8a0`, VERSION `0.16.0-rc.1`.
+**Current increment baseline:** branch `dev`, parent HEAD `dfd864d`, VERSION `0.16.0-rc.1`.
 
 This page is a status snapshot, not a test report. Status must be refreshed from current source, test output, or host evidence before it is changed. Historical Phase 2 analysis is preserved in [PHASE2_GAP_ANALYSIS.md](PHASE2_GAP_ANALYSIS.md).
 
@@ -1183,13 +1183,42 @@ Broader fault recovery, custom-port integration, concurrency, reboot and externa
 acceptance remain open. Next exercise T-04's existing configurable ports and
 review the remaining hard-coded health assumptions against actual behavior.
 
+## Configured-port health and recovered listener repair — 2026-10-24
+
+Existing init flags, rendering, preflight and URIs accept persisted custom ports,
+but check still enforced443/8443 and probed those defaults. The recovered-applied
+helper also probed defaults. Forward health now uses only validated persisted
+ports, reporting UNKNOWN without fallback when unavailable. Compensation first
+verifies the recovered config hash, then parses its actual port through existing
+JSON/YAML helpers; Xray must be TCP. Desired/default ports cannot substitute for
+the recovered generation. Parser/port/transport failures do not probe or refresh
+applied evidence. Default ports and output remain compatible.
+
+Initial focused red: check15 pass/3 fail and deployment15 pass/2 fail. A later
+non-TCP negative fails before its extra guard. Final frozen
+`/var/tmp/pnm-port-health-green.erfo3wso` passes check18/18, deployment19/19,
+syntax/security/ShellCheck and `make check`: **31 suites/370 tests, exit0**.
+Negative cases verify malformed/invalid ports and non-TCP cannot promote applied
+or borrow default listeners. Independent source review found no blocking issue.
+
+Native red guest9s3b0ftl installs custom ports yet check rejects configuration.
+Final fresh `/var/tmp/pnm-install-guest.e59hkntn` passes **16/16**: actual10443/
+18443 occupancy refuses before managed writes, unrelated443/8443 sockets survive,
+and actual install/listeners/URI/lifecycle/restore follow selected ports. Parent
+evidence records nspawn0, no interruption, unchanged host databases, not-found
+scope and no fixture mounts. The helper recovery cases are focused filesystem/
+observations tests; this native scenario does not itself run recovery against a
+preexisting active custom-port baseline. Test-harness packaging is a separate
+increment; broader failure/concurrency/reboot/external acceptance remains open.
+
 ## Verification already reported (historical host evidence)
 
 A prior user-provided `proxy-tokyo` read-only report stated that PNM 0.16.0-rc.1, both Core services/listeners, `pnm check`, and selected permissions were healthy, and that public client connections had succeeded. This report is historical and was not independently refreshed in this documentation task. It does not close the local failure-injection gaps above or prove the current installed source matches this HEAD.
 
 ## Immediate next steps
 
-Next exercise configured ports and remaining fault cases in fresh native guests.
+Next exercise external restart evidence, concurrent readers/writers and remaining
+fault cases in fresh native guests.
 Successful main flow, update/rollback and late-deadline compensation cannot replace
 the following VM/reboot, deployed-host and external-client prerequisites.
 

@@ -1,8 +1,8 @@
 # PNM Architecture
 
-This document describes the source baseline plus safety/G-02, persisted-port, lifecycle-evidence and update/restore-input changes through 2026-10-23. It is not a production deployment attestation. Verify behavior against source and tests when changing it.
+This document describes implemented behavior through the configured-port health repair on 2026-10-24. It is not a production deployment attestation. Verify behavior against source and tests when changing it.
 
-**Increment baseline:** branch `dev`, HEAD `ccdb868`, `VERSION` `0.16.0-rc.1` (checked 2026-10-23).
+**Port-health increment baseline:** branch `dev`, parent HEAD `dfd864d`, `VERSION` `0.16.0-rc.1` (checked 2026-10-24).
 
 Config apply shares the guarded Core file writer with archive restore. Runtime
 configuration metadata is required at publication, checked before ownership
@@ -100,7 +100,15 @@ Xray link remains available. Link generation does not migrate stored credentials
 
 The public install path is `lib/install.sh` → preflight → `lib/apply-gate.sh` → `lib/deploy.sh`. The gate holds the exclusive lock through final health/deadline checks. Explicit sandbox, lifecycle and node/applied-state participants share one `deployment` transaction. Standalone sandbox and per-Core lifecycle wrappers retain independent transactions; arbitrary implicit transaction nesting is rejected.
 
-Preflight probes the validated persisted `XRAY_PORT` and `HY2_PORT`. Invalid or missing node state produces an UNKNOWN port check alongside the configuration failure, without probing fallback ports. Recovery listener attribution uses the same configured protocol/port pair and retains its ownership checks.
+Preflight probes the validated persisted `XRAY_PORT` and `HY2_PORT`. Invalid or missing node state produces an UNKNOWN port check alongside the configuration failure, without probing fallback ports. Preflight recovery listener attribution uses the same configured protocol/port pair and retains its ownership checks.
+
+Forward Core health also probes validated persisted ports; unknown ports cannot
+fall back to 443/8443 or borrow unrelated listeners. During recovered-applied
+verification, desired ports may differ from the recovered generation. After the
+runtime hash matches its captured baseline, the existing JSON/YAML parsers supply
+the recovered port; Xray must use TCP and HY2 must retain the supported listen
+form. Invalid runtime fields leave recovery unconfirmed rather than refreshing
+applied evidence. Node initialization still defaults to TCP443/UDP8443.
 
 `lib/transaction.sh` provides schema-2 file snapshots with numeric UID/GID/mode, directory identity/metadata receipts, rollback callbacks and inspection; schema-1 records remain inspectable. `lib/deployment-state.sh` extends that engine with protected deployment baselines and a durable resource-bound marker. Deployment progress journals and gate receipts are derived; standalone operations keep their existing journal commit convention.
 

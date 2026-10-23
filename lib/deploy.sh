@@ -283,8 +283,8 @@ RESOURCES
 }
 
 pnm_deploy_refresh_recovered_applied() {
-    local core="$1" config expected confirmed unit record invocation
-    local -A old=()
+    local core="$1" config expected confirmed unit record invocation runtime_values port
+    local -A old=() recovered_fields=()
     if [[ "$core" == xray ]]; then
         config="$PNM_XRAY_CONFIG" expected="$PNM_DEPLOY_XRAY_CONFIG_HASH"
         confirmed="$PNM_DEPLOY_XRAY_APPLIED" unit=xray.service
@@ -296,10 +296,18 @@ pnm_deploy_refresh_recovered_applied() {
     [[ "$(pnm_tx_file_sha256 "$config")" == "$expected" ]] || return "$PNM_EXIT_SOFTWARE"
     # Recovery restores the old enable policy, which may legitimately be
     # disabled. Do not apply the fresh-install "must be enabled" policy here.
+    # Desired node ports can differ from the recovered generation. Read only
+    # the already hash-verified runtime bytes before refreshing its evidence.
     if [[ "$core" == xray ]]; then
-        pnm_listener_present tcp 443 || return "$PNM_EXIT_SOFTWARE"
+        runtime_values="$(pnm_xray_config_runtime_values "$config")" || return "$PNM_EXIT_SOFTWARE"
+        [[ "${runtime_values##*$'\t'}" == tcp ]] || return "$PNM_EXIT_SOFTWARE"
+        port="${runtime_values%%$'\t'*}"
+        pnm_validate_port "$port" && pnm_listener_present tcp "$port" || return "$PNM_EXIT_SOFTWARE"
     else
-        pnm_listener_present udp 8443 || return "$PNM_EXIT_SOFTWARE"
+        pnm_hysteria_config_parse_candidate "$config" recovered_fields || return "$PNM_EXIT_SOFTWARE"
+        [[ "${recovered_fields[listen]-}" =~ ^:([0-9]+)$ ]] || return "$PNM_EXIT_SOFTWARE"
+        port="${BASH_REMATCH[1]}"
+        pnm_validate_port "$port" && pnm_listener_present udp "$port" || return "$PNM_EXIT_SOFTWARE"
     fi
     record="$PNM_STATE_DIR/cores/$core/applied.env"
     pnm_validate_managed_path "$record" || return "$PNM_EXIT_SOFTWARE"

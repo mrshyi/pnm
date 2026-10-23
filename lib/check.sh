@@ -92,15 +92,6 @@ pnm_check_configuration() {
         return 0
     fi
 
-    if ! pnm_validate_port "${PNM_NODE_CONFIG[XRAY_PORT]-}" || [[ "${PNM_NODE_CONFIG[XRAY_PORT]}" != '443' ]]; then
-        pnm_check_add configuration FAIL 'Invalid Xray port in desired state' 'expected TCP/443'
-        return 0
-    fi
-    if ! pnm_validate_port "${PNM_NODE_CONFIG[HY2_PORT]-}" || [[ "${PNM_NODE_CONFIG[HY2_PORT]}" != '8443' ]]; then
-        pnm_check_add configuration FAIL 'Invalid Hysteria2 port in desired state' 'expected UDP/8443'
-        return 0
-    fi
-
     PNM_CHECK_CONFIGURED=1
     pnm_check_add configuration OK 'PNM desired state is configured' 'schema 1'
 }
@@ -171,6 +162,7 @@ pnm_check_file_metadata() {
 
 pnm_check_xray() {
     local state active enabled version test_output version_rc
+    local port="${PNM_NODE_CONFIG[XRAY_PORT]-}"
     local severity='FAIL'
 
     ((PNM_CHECK_CONFIGURED == 0)) && severity='WARN'
@@ -203,15 +195,20 @@ pnm_check_xray() {
         pnm_check_add xray "$severity" 'Xray service is not active and enabled' "active=$active enabled=$enabled"
         return 0
     fi
-    if ! pnm_listener_present tcp 443; then
-        pnm_check_add xray "$severity" 'Xray TCP listener is absent' 'expected TCP/443'
+    if ! pnm_validate_port "$port"; then
+        pnm_check_add xray UNKNOWN 'Xray listener port is unknown' 'a valid saved node port is required'
         return 0
     fi
-    pnm_check_add xray OK 'Xray local checks passed' "$version; config valid; TCP/443 listening"
+    if ! pnm_listener_present tcp "$port"; then
+        pnm_check_add xray "$severity" 'Xray TCP listener is absent' "expected TCP/$port"
+        return 0
+    fi
+    pnm_check_add xray OK 'Xray local checks passed' "$version; config valid; TCP/$port listening"
 }
 
 pnm_check_hysteria() {
     local state active enabled version version_rc
+    local port="${PNM_NODE_CONFIG[HY2_PORT]-}"
     local severity='FAIL'
 
     ((PNM_CHECK_CONFIGURED == 0)) && severity='WARN'
@@ -240,11 +237,15 @@ pnm_check_hysteria() {
         pnm_check_add hysteria2 "$severity" 'Hysteria2 service is not active and enabled' "active=$active enabled=$enabled"
         return 0
     fi
-    if ! pnm_listener_present udp 8443; then
-        pnm_check_add hysteria2 "$severity" 'Hysteria2 UDP listener is absent' 'expected UDP/8443'
+    if ! pnm_validate_port "$port"; then
+        pnm_check_add hysteria2 UNKNOWN 'Hysteria2 listener port is unknown' 'a valid saved node port is required'
         return 0
     fi
-    pnm_check_add hysteria2 OK 'Hysteria2 local checks passed' "$version; UDP/8443 listening; external QUIC test still required"
+    if ! pnm_listener_present udp "$port"; then
+        pnm_check_add hysteria2 "$severity" 'Hysteria2 UDP listener is absent' "expected UDP/$port"
+        return 0
+    fi
+    pnm_check_add hysteria2 OK 'Hysteria2 local checks passed' "$version; UDP/$port listening; external QUIC test still required"
 }
 
 # Strict local deployment gate. This is intentionally limited to local Core
