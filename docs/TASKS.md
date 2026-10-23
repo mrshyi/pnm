@@ -2,7 +2,7 @@
 
 **Last reconciled:** 2026-10-23 (Debian WSL default checks pass 354 tests, isolated systemd stand-ins 8/8, real Core/URI positive and refusal checks 10/10; managed-account/lifecycle, reboot and external acceptance remain open)
 
-**Current increment baseline:** branch `dev`, HEAD `93b6368`, VERSION `0.16.0-rc.1`.
+**Current increment baseline:** branch `dev`, HEAD `5c832b2`, VERSION `0.16.0-rc.1`.
 
 This page is a status snapshot, not a test report. Status must be refreshed from current source, test output, or host evidence before it is changed. Historical Phase 2 analysis is preserved in [PHASE2_GAP_ANALYSIS.md](PHASE2_GAP_ANALYSIS.md).
 
@@ -16,7 +16,7 @@ Current review artifacts (2026-10-22):
 - [Deployment transaction design](DEPLOYMENT_TRANSACTION_DESIGN.md): accepted direction with a dated working-tree scope and remaining differences from the original proposal.
 - [Acceptance plan](ACCEPTANCE_PLAN.md): layered evidence and fault-injection matrix; not an executed test report.
 
-Source review confirms listener health gates, symmetric Core runtime reporting, transactional previous-binary/metadata publication, staged restore validation, dependency checks, and HY2 TLS access checks. Committed continuations repair generic recovery, deployment-wide compensation (A-01/G-02), directory/path safety (A-02/A-05), persisted ports (A-03), applied evidence (A-04), G-03 preparation/resources and G-04 filesystem compensation. The current stage extends restore dispatch and service/applied recovery with local filesystem/mocked-service evidence. Prioritize archive trust/resource limits, G-06 access cases and real lifecycle acceptance before extending capabilities.
+Source review confirms listener health gates, symmetric Core reporting, transactional publication/recovery, trusted-input policy and archive resource limits, unresolved-journal guards and HY2 TLS access checks. The latest production repair corrects HY2 client fingerprints while preserving stored configuration. The available WSL plan now has default regression, isolated systemd stand-in and real Core/URI positive/refusal evidence. The remaining work is actual managed-account and integrated lifecycle/recovery acceptance, disposable-target reboot/fault injection, deployed-source identity and external clients. Detailed chronological increments below retain their original evidence boundaries; the table and final next steps summarize current work.
 
 ## Safety prerequisite slice — working-tree implementation
 
@@ -92,10 +92,10 @@ not close G-02 or prove systemd recovery, reboot or public client connectivity.
 |---|---|---|---|
 | G-01 — runtime/config/link state | BLOCKED for production acceptance | Current `lib/node.sh` source prints an HY2 runtime row. Prior production output reportedly omitted it despite the same VERSION; deployed executable/source identity has not been verified in this session. | On an authorized host, perform read-only path/version/source-hash comparison; do not apply or upgrade as diagnosis. |
 | G-02 — complete deployment rollback | IMPLEMENTED / local filesystem and mock checks PASS; systemd acceptance open | One deployment transaction now spans resources, lifecycle, applied/node state and final outer checks; durable marker and unresolved-deployment guards are tested. | Run the disposable-systemd/interrupt/reboot matrix in [the acceptance plan](ACCEPTANCE_PLAN.md); do not infer production readiness. |
-| G-03 — Core update transaction | PARTIAL L1 PASS / Linux acceptance open | Local publication faults restore current/previous/version-metadata pairs; external edits and recovery failures are visible. Kernel flock tests now cover preparation, contention, unresolved deployments, reentrancy and cleanup errors. | Run the real systemd binary/metadata/service/concurrent-command/interruption matrix in a disposable VM. |
-| G-04 — backup/restore safety | PARTIAL L1 PASS / Linux acceptance open | Locked backup snapshot/manifest, caller staging cleanup, parser budgets/file identity and mocked restore service/applied recovery have local evidence. | Verify unresolved standalone journal guards, then accept real systemd, interruption/reboot and concurrent commands before closure. |
+| G-03 — Core update transaction | PARTIAL local/stand-in PASS / integrated Core acceptance open | Publication, preparation locks, metadata drift and compensation have local tests; isolated systemd callbacks preserve disabled baselines. Real Core traffic is separate evidence, not a managed Core update test. | Run the integrated binary/metadata/service/concurrent-command/interruption matrix in a disposable VM. |
+| G-04 — backup/restore safety | PARTIAL local/stand-in PASS / integrated Core acceptance open | Trusted-input policy requires independently verified provenance. Locked snapshots, archive budgets/file identity, staging cleanup and restore compensation are tested. Unresolved standalone guards are implemented and covered by the passing default suite. | Accept integrated restore with actual Core/accounts, interruption/reboot and concurrent commands in a disposable target. |
 | G-05 — dependency preflight | MOCK TESTS PASS / systemd acceptance open | Debian 13 WSL preflight suite passes 14/14, including configured ports, invalid-node refusal, repeat-install refusal and missing-tool checks. Mock results do not prove real systemd install ordering. | Verify missing tools before managed-resource mutation in a disposable systemd VM. |
-| G-06 — HY2 TLS permissions | PARTIAL local DAC PASS / service integration open | Real root/nobody permission probes cover ownership/mode, ancestor denial and tool/metadata exceptions; account names/NSS are mapped. Privileged service identities are refused. | Verify the actual hysteria account, real TLS loading and systemd sandbox access in a disposable VM. |
+| G-06 — HY2 TLS permissions | PARTIAL local DAC and real Core TLS PASS / managed-account integration open | Root/nobody DAC and failure probes pass. Official HY2 loads the fixture certificate/key and transfers under an unprivileged systemd sandbox; managed account names/NSS remain mapped. | Verify actual hysteria account provisioning/reuse and its managed-path permissions/sandbox in a disposable target. |
 
 ## G-02 deployment transaction — working-tree implementation
 
@@ -968,8 +968,8 @@ A prior user-provided `proxy-tokyo` read-only report stated that PNM 0.16.0-rc.1
 Remaining acceptance needs external prerequisites: an authorized deployed source
 identity for G-01, a disposable target for actual managed-account provisioning,
 integrated lifecycle/recovery and reboot/fault injection, and external clients for
-dual-protocol traffic. Only Debian
-WSL is currently available. The stand-in service results do not close these items;
+dual-protocol traffic. Only Debian WSL is currently available. The stand-in and
+private-network real Core results do not close these items;
 Phase 3 remains incomplete and release work has not started.
 
 ## Boundaries
