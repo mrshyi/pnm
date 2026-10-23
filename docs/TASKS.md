@@ -1,6 +1,6 @@
 # PNM Current Tasks
 
-**Last reconciled:** 2026-10-24 (default370 tests; guest main-flow14/14, failure/retry16/16, update22/22, custom-port16/16 and runtime-evidence19/19 pass; broader fault/reboot/external acceptance remain open)
+**Last reconciled:** 2026-10-24 (restore startup-failure/retry16/16 and focused recovery12/12 pass; new full run encounters host EIO; previous clean default370 remains historical; broader fault/reboot/external acceptance remain open)
 
 **Current increment baseline:** branch `dev`, parent HEAD `2d60bf9`, VERSION `0.16.0-rc.1`.
 
@@ -1235,14 +1235,51 @@ No production code changes; default source evidence remains31/370 without a
 redundant rerun. Broader fault recovery and independent VM/kernel reboot remain
 open; external service restart does not stand in for reboot acceptance.
 
+## Restore compensation after an actual failed unit start — 2026-10-24
+
+Actual HY2 `ExecStartPre` rejection reproduced an early recovery failure in fresh
+guests `wiqao337` and `jwemkkpp`. `systemctl stop` succeeds but leaves HY2 in
+`failed`, MainPID0; Xray has already been stopped/disabled. The restore callback
+required `inactive`, so it returned70 before restoring the twelve published files
+and correctly retained RECOVERY_REQUIRED. The probe observed only the rejected
+start, proving compensation never reached the second start.
+
+The callback now resets only that stopped failed unit, explicitly re-queries and
+requires `inactive`, then follows existing file/service/applied/directory recovery.
+Reset failure, query failure or a non-inactive result still retains uncertainty.
+Focused regressions first passed11/failed1, then passed **12/12**, including reset
+failure and successful-reset-without-state-change refusal. Syntax, security scan
+and ShellCheck pass in `/var/tmp/pnm-restore-start-green.3tylai3_`.
+
+Fresh `/var/tmp/pnm-install-guest.lood523m` passes **16/16**, Make exit0: actual
+restore startup failure recovers both original resource generations, numeric
+metadata, identities, service policy and confirmed applied bindings, followed by
+a trusted successful retry. nspawn0, host databases unchanged, scope not-found,
+no fixture mounts. Independent read-only review found no blocking issue.
+
+The concurrent new full run exited **2**, and is **not green**: failures include `flock: failed to
+execute true: Input/output error`. Direct host reads of `/usr/bin/true` and
+`/usr/bin/df` also return EIO. Windows C free-space probes were inconsistent
+(one reported0; Linux `/mnt/c` later reported689041408 available bytes), so this
+does not establish a disk/filesystem root cause. No system binary, host service,
+WSL instance or disk is repaired/restarted by this task. Preserve the failed log
+and restore stable WSL execution before relying on another full acceptance run.
+The earlier clean **31 suites/370 tests** is historical, not a pass for this fix.
+
+Reusable startup-fault scenarios are being packaged separately. Their test-only
+limits are now600 seconds for cases,690 for the cloned unit and720 for the host;
+the former300-second cases limit expired near the final link check of the larger
+update-failure scenario. Each CLI and owned socket/thread still has its own bound.
+
 ## Verification already reported (historical host evidence)
 
 A prior user-provided `proxy-tokyo` read-only report stated that PNM 0.16.0-rc.1, both Core services/listeners, `pnm check`, and selected permissions were healthy, and that public client connections had succeeded. This report is historical and was not independently refreshed in this documentation task. It does not close the local failure-injection gaps above or prove the current installed source matches this HEAD.
 
 ## Immediate next steps
 
-Next exercise actual Core startup failure compensation and remaining update/
-restore fault cases in fresh native guests.
+First restore stable host WSL filesystem/command execution, retain the failed
+full-run evidence, and rerun full checks. Finish packaging the startup-failure
+scenarios and verify the enlarged update/rollback case before further guest work.
 Successful main flow, update/rollback and late-deadline compensation cannot replace
 the following VM/reboot, deployed-host and external-client prerequisites.
 

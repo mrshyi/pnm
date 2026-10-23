@@ -195,6 +195,65 @@ test_restore_applied_records_and_directories_are_compensated() {
     pnm_tx_close
 }
 
+test_restore_stops_failed_unit_before_file_recovery() {
+    local reset_mode="${1:-success}" rc
+    local xray_state=active hy2_state=failed xray_enabled=enabled hy2_enabled=enabled
+    prepare_restore_fixture || return 1
+    PNM_CORE_RESTORE_STARTED=1
+    PNM_CORE_RESTORE_XRAY_LOAD=loaded PNM_CORE_RESTORE_HY2_LOAD=loaded
+    PNM_CORE_RESTORE_XRAY_ACTIVE=active PNM_CORE_RESTORE_HY2_ACTIVE=active
+    PNM_CORE_RESTORE_XRAY_ENABLED=enabled PNM_CORE_RESTORE_HY2_ENABLED=enabled
+    pnm_tx_write_file "$fixture_root/candidate" "$PNM_XRAY_CONFIG" xray_config 0640 required || return 1
+    pnm_systemd_load_state() { printf 'loaded\n'; }
+    pnm_systemd_active_state() {
+        if [[ "$1" == xray.service ]]; then printf '%s\n' "$xray_state"; else printf '%s\n' "$hy2_state"; fi
+    }
+    pnm_systemd_enabled_state() {
+        if [[ "$1" == xray.service ]]; then printf '%s\n' "$xray_enabled"; else printf '%s\n' "$hy2_enabled"; fi
+    }
+    pnm_systemctl() {
+        printf '%s %s\n' "$1" "$2" >>"$fixture_root/service-calls"
+        case "$1:$2" in
+            stop:xray.service) xray_state=inactive ;;
+            stop:hysteria-server.service) : ;; # systemd retains the failed state after stop.
+            reset-failed:hysteria-server.service)
+                [[ "$reset_mode" != error ]] || return 1
+                [[ "$reset_mode" != unchanged ]] || return 0
+                hy2_state=inactive ;;
+            disable:xray.service) xray_enabled=disabled ;;
+            disable:hysteria-server.service) hy2_enabled=disabled ;;
+            enable:xray.service) xray_enabled=enabled ;;
+            enable:hysteria-server.service) hy2_enabled=enabled ;;
+            restart:xray.service) xray_state=active ;;
+            restart:hysteria-server.service) hy2_state=active ;;
+            *) return 1 ;;
+        esac
+    }
+    pnm_core_resolve() {
+        PNM_CORE_UNIT=xray.service
+        [[ "$1" == xray ]] || PNM_CORE_UNIT=hysteria-server.service
+    }
+    pnm_core_recover_applied() { return 0; }
+    if pnm_tx_rollback; then rc=0; else rc=$?; fi
+    if [[ "$reset_mode" == success ]]; then
+        assert_eq 0 "$rc" || return 1
+        assert_eq 'original xray' "$(<"$PNM_XRAY_CONFIG")" || return 1
+        assert_eq active "$hy2_state" || return 1
+        assert_eq enabled "$hy2_enabled" || return 1
+        assert_contains "$(<"$fixture_root/service-calls")" 'reset-failed hysteria-server.service' || return 1
+    else
+        assert_eq 70 "$rc" || return 1
+        assert_eq 1 "$PNM_TX_RECOVERY_REQUIRED" || return 1
+        assert_eq candidate "$(<"$PNM_XRAY_CONFIG")" || return 1
+    fi
+    pnm_tx_close
+}
+
+run_test 'restore recovers a stopped unit that retains failed state' test_restore_stops_failed_unit_before_file_recovery
+test_restore_failed_reset_refusal() { test_restore_stops_failed_unit_before_file_recovery error; }
+test_restore_failed_reset_verification() { test_restore_stops_failed_unit_before_file_recovery unchanged; }
+run_test 'restore retains uncertainty when failed-state reset fails' test_restore_failed_reset_refusal
+run_test 'restore verifies inactivity after failed-state reset' test_restore_failed_reset_verification
 run_test 'restore compensation preserves original file ownership and modes' test_restore_callback_preserves_snapshot_metadata
 run_test 'restore compensation recovers directories after removing new files' test_restore_callback_recovers_directories_after_files
 run_test 'restore publication enrolls final owner and mode' test_restore_publication_enrolls_final_metadata

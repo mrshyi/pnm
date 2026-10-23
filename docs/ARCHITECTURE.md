@@ -45,6 +45,14 @@ Catchable EXIT/INT/TERM during an active standalone transaction uses the existin
 
 Restore binds its initial root/mode check to a device/inode pair. The parser opens with `O_NOFOLLOW|O_NONBLOCK`, checks the descriptor is the same regular file with protected ownership/mode, and reads tar data from that descriptor. Replacement with another file, symlink or FIFO is refused before candidate validation. This does not prevent a privileged writer changing bytes in place, authenticate the archive or replace the trusted-provenance requirement.
 
+Restore compensation stops both managed units before recovering files. If a
+stopped unit still reports `failed`, it clears that unit's failure with
+`reset-failed` and independently requires `inactive` before continuing. A failed
+reset, failed query or any remaining non-inactive state retains recovery-required;
+it cannot authorize file replacement or applied promotion. Original resources,
+service policy and previously confirmed applied evidence are then restored by
+the existing transaction callback.
+
 Internal staging callers receive paths through `pnm_make_temp_dir variable`, retaining cleanup registration in the calling shell. The zero-argument stdout interface remains available. Creation refuses unsafe/unregistered roots and removes the empty new directory on permission, registration or output failure. EXIT cleanup tolerates missing paths and reports removal failures on stderr without replacing the original command status. Uninstall calls backup directly and reads its fixed internal result field, retaining nested staging registration. This does not establish signal/crash transaction recovery.
 
 ## System boundary

@@ -640,7 +640,7 @@ pnm_core_restore_write_file() {
 }
 
 pnm_core_restore_rollback() {
-    local core unit load active enabled prefix
+    local core unit load active enabled prefix stopped
     local PNM_CORE_PRIOR_CONFIG_HASH PNM_CORE_PRIOR_APPLIED_HASH PNM_CORE_PRIOR_APPLIED_ATTRIBUTES PNM_LIFECYCLE_PRE_ACTIVE
     if ((PNM_CORE_RESTORE_STARTED == 1)); then
         for unit in xray.service hysteria-server.service; do
@@ -648,7 +648,15 @@ pnm_core_restore_rollback() {
             case "$load" in
                 loaded)
                     pnm_systemctl stop "$unit" || return "$PNM_EXIT_SOFTWARE"
-                    [[ "$(pnm_systemd_active_state "$unit")" == inactive ]] || return "$PNM_EXIT_SOFTWARE"
+                    stopped="$(pnm_systemd_active_state "$unit")" || return "$PNM_EXIT_SOFTWARE"
+                    # A failed ExecStart/ExecStartPre remains failed after stop.
+                    # Clear that owned failure before restoring files, then
+                    # independently verify that no active unit remains.
+                    if [[ "$stopped" == failed ]]; then
+                        pnm_systemctl reset-failed "$unit" || return "$PNM_EXIT_SOFTWARE"
+                        stopped="$(pnm_systemd_active_state "$unit")" || return "$PNM_EXIT_SOFTWARE"
+                    fi
+                    [[ "$stopped" == inactive ]] || return "$PNM_EXIT_SOFTWARE"
                     pnm_systemctl disable "$unit" || return "$PNM_EXIT_SOFTWARE"
                     ;;
                 not-found) [[ "$(pnm_systemd_active_state "$unit")" == inactive ]] || return "$PNM_EXIT_SOFTWARE" ;;
