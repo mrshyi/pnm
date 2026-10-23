@@ -602,7 +602,7 @@ pnm_node_links() {
 pnm_node_links_unlocked() {
     local address='' argument xray_public_key xray_link='' hy2_link='' xray_label hy2_label rc
     local xray_status xray_service xray_config_state xray_applied xray_reason
-    local hy2_status hy2_service hy2_config_state hy2_applied hy2_reason hy2_server_name=''
+    local hy2_status hy2_service hy2_config_state hy2_applied hy2_reason hy2_server_name='' hy2_client_pin=''
     local -A node_config=() reality_secret=() hysteria_secret=()
 
     while (($# > 0)); do
@@ -687,11 +687,17 @@ pnm_node_links_unlocked() {
             <<<"$(pnm_node_core_link_status hysteria2 node_config hysteria_secret)"
     fi
 
+    if [[ "$hy2_status" == ready && "${node_config[HY2_TLS_MODE]}" == selfsigned-pin ]]; then
+        if ! hy2_client_pin="$(pnm_tls_certificate_sha256 "${hysteria_secret[HY2_TLS_CERT_PATH]}")"; then
+            hy2_status=unknown
+            hy2_reason='HY2 TLS certificate fingerprint could not be derived'
+        fi
+    fi
     if [[ "$hy2_status" == ready ]]; then
         hy2_label="$(pnm_node_uri_encode "PNM-${node_config[NODE_REGION]}-Hysteria2")"
         hy2_link="hysteria2://$(pnm_node_uri_encode "${hysteria_secret[HY2_AUTH_PASSWORD]}")@$address:${node_config[HY2_PORT]}/?sni=$(pnm_node_uri_encode "$hy2_server_name")"
         if [[ "${node_config[HY2_TLS_MODE]}" == selfsigned-pin ]]; then
-            hy2_link+="&insecure=1&pinSHA256=$(pnm_node_uri_encode "${hysteria_secret[HY2_TLS_PIN_SHA256]}")"
+            hy2_link+="&insecure=1&pinSHA256=$(pnm_node_uri_encode "$hy2_client_pin")"
         fi
         hy2_link+="#$hy2_label"
     fi

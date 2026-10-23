@@ -73,6 +73,47 @@ test_certificate_check_reports_valid_expired_unreadable_and_skipped_modes() (
     assert_contains "$status" 'SKIP|'
 )
 
+test_client_fingerprint_hashes_certificate_der_not_spki() (
+    local temp_dir expected first second spki_first spki_second
+    temp_dir="$(mktemp -d)"
+    trap 'rm -rf -- "$temp_dir"' EXIT
+    openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes -days 1 \
+        -subj '/CN=fixture.invalid' -set_serial 1 -keyout "$temp_dir/key" -out "$temp_dir/one.crt" >/dev/null 2>&1 || return 1
+    openssl req -x509 -key "$temp_dir/key" -days 1 -subj '/CN=fixture.invalid' -set_serial 2 \
+        -out "$temp_dir/two.crt" >/dev/null 2>&1 || return 1
+    openssl x509 -in "$temp_dir/one.crt" -outform DER -out "$temp_dir/cert.der" || return 1
+    expected="$(sha256sum "$temp_dir/cert.der")"; expected="${expected%% *}"
+    first="$(pnm_tls_certificate_sha256 "$temp_dir/one.crt")" || return 1
+    second="$(pnm_tls_certificate_sha256 "$temp_dir/two.crt")" || return 1
+    spki_first="$(pnm_tls_spki_pin "$temp_dir/one.crt")" || return 1
+    spki_second="$(pnm_tls_spki_pin "$temp_dir/two.crt")" || return 1
+    [[ "$first" =~ ^[0-9a-f]{64}$ && "$first" == "$expected" && "$first" != "$second" ]] || return 1
+    [[ "$spki_first" == "$spki_second" ]]
+)
+
+test_client_fingerprint_rejects_invalid_inputs_and_tool_output() (
+    local temp_dir candidate
+    temp_dir="$(mktemp -d)"
+    trap 'rm -rf -- "$temp_dir"' EXIT
+    printf 'not a certificate\n' >"$temp_dir/bad.crt"
+    ln -s -- "$temp_dir/bad.crt" "$temp_dir/link.crt"
+    for candidate in "$temp_dir/missing.crt" "$temp_dir/bad.crt" "$temp_dir/link.crt"; do
+        run_capture pnm_tls_certificate_sha256 "$candidate"
+        assert_eq "$PNM_EXIT_CONFIG" "$RUN_RC" || return 1
+        assert_eq '' "$RUN_OUTPUT" || return 1
+    done
+    openssl() { return 77; }
+    run_capture pnm_tls_certificate_sha256 "$temp_dir/bad.crt"
+    assert_eq "$PNM_EXIT_CONFIG" "$RUN_RC" || return 1
+    assert_eq '' "$RUN_OUTPUT" || return 1
+    openssl() { printf 'sha256 Fingerprint=malformed\n'; }
+    run_capture pnm_tls_certificate_sha256 "$temp_dir/bad.crt"
+    assert_eq "$PNM_EXIT_CONFIG" "$RUN_RC" || return 1
+    assert_eq '' "$RUN_OUTPUT"
+)
+
+run_test 'client fingerprint hashes full certificate DER and changes on same-key renewal' test_client_fingerprint_hashes_certificate_der_not_spki
+run_test 'client fingerprint rejects invalid input and tool failure or malformed output' test_client_fingerprint_rejects_invalid_inputs_and_tool_output
 run_test 'self-signed certificate pair is valid and produces Base64 pin' test_selfsigned_pair_is_valid_and_pinned
 run_test 'certificate/private-key mismatch is rejected' test_mismatched_pair_is_rejected
 run_test 'TLS certificate check reports valid, expired, unreadable, and skipped modes' test_certificate_check_reports_valid_expired_unreadable_and_skipped_modes

@@ -90,6 +90,12 @@ Configuration parsing and schema checks are in `lib/config.sh`; node initializat
 
 Xray and HY2 have distinct TLS/SNI semantics. `XRAY_SERVER_NAME` and `XRAY_TARGET` configure REALITY; `HY2_TLS_SERVER_NAME` is validated against the configured HY2 certificate and is used for HY2 link/config behavior. Existing valid credentials are reused rather than silently rotated.
 
+`HY2_TLS_PIN_SHA256` retains its existing internal SPKI/base64 representation.
+Selfsigned-pin client links derive `pinSHA256` from the configured leaf certificate's
+full DER SHA-256 fingerprint in lowercase hex, as required by the official Hysteria
+client. Failure to obtain this fingerprint suppresses only the HY2 link; a ready
+Xray link remains available. Link generation does not migrate stored credentials.
+
 ## Install and apply flow
 
 The public install path is `lib/install.sh` → preflight → `lib/apply-gate.sh` → `lib/deploy.sh`. The gate holds the exclusive lock through final health/deadline checks. Explicit sandbox, lifecycle and node/applied-state participants share one `deployment` transaction. Standalone sandbox and per-Core lifecycle wrappers retain independent transactions; arbitrary implicit transaction nesting is rejected.

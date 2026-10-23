@@ -52,7 +52,7 @@ test_hy2_tls_sni_is_independent_and_matches_certificate_san() {
 }
 
 test_node_links_use_certificate_san_without_changing_reality_sni_or_pin() {
-    local temp_dir cert server_key pin fake_xray expected_pin
+    local temp_dir cert server_key pin fake_xray expected_pin secret_before secret_after
     local old_config_dir old_xray_config old_hy2_config old_xray_bin
     local -A node_cfg=() reality_cfg=() hysteria_cfg=()
     temp_dir="$(mktemp -d)"
@@ -97,13 +97,18 @@ test_node_links_use_certificate_san_without_changing_reality_sni_or_pin() {
     pnm_listener_present() { return 0; }
     pnm_require_root() { return 0; }
     PNM_OUTPUT_MODE=text
+    secret_before="$(sha256sum "$PNM_CONFIG_DIR/secrets/hysteria.env")" || return 1
     run_capture pnm_node_links --address 203.0.113.10
-    expected_pin="$(pnm_node_uri_encode "${hysteria_cfg[HY2_TLS_PIN_SHA256]}")"
+    secret_after="$(sha256sum "$PNM_CONFIG_DIR/secrets/hysteria.env")" || return 1
+    openssl x509 -in "$cert" -outform DER -out "$temp_dir/cert.der" || return 1
+    expected_pin="$(sha256sum "$temp_dir/cert.der")" || return 1
+    expected_pin="${expected_pin%% *}"
     PNM_CONFIG_DIR="$old_config_dir"
     PNM_XRAY_CONFIG="$old_xray_config"
     PNM_HY2_CONFIG="$old_hy2_config"
     PNM_XRAY_BIN="$old_xray_bin"
     rm -rf -- "$temp_dir"
+    [[ "$secret_before" == "$secret_after" && "${hysteria_cfg[HY2_TLS_PIN_SHA256]}" == "$pin" ]] || return 1
     if [[ "$RUN_RC" != 0 ]]; then
         printf 'link command returned %s: %s\n' "$RUN_RC" "$RUN_ERROR" >&2
         return 1
@@ -225,7 +230,7 @@ test_hy2_tls_sni_mismatch_is_rejected_without_printing_credentials() {
 }
 
 run_test 'HY2 TLS SNI is independent and must match certificate SAN' test_hy2_tls_sni_is_independent_and_matches_certificate_san
-run_test 'client links use the HY2 certificate SAN and preserve REALITY SNI and pin' test_node_links_use_certificate_san_without_changing_reality_sni_or_pin
+run_test 'client links use HY2 SAN and DER fingerprint while preserving REALITY SNI and stored SPKI' test_node_links_use_certificate_san_without_changing_reality_sni_or_pin
 run_test 'legacy configuration infers a unique certificate SAN without rewriting it' test_legacy_node_infers_a_unique_certificate_san_without_migration
 run_test 'legacy node.conf remains valid without silently adding the new key' test_legacy_node_conf_without_new_key_remains_valid_and_unmodified
 run_test 'external CA node initialization requires an explicit TLS server name' test_external_ca_node_init_requires_explicit_tls_server_name

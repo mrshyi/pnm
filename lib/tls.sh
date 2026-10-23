@@ -16,6 +16,21 @@ pnm_tls_spki_pin() {
     printf '\n'
 }
 
+# Official Hysteria clients pin the full leaf certificate DER, not its SPKI.
+# Keep the persisted SPKI/base64 field for existing configuration compatibility.
+pnm_tls_certificate_sha256() {
+    local certificate="${1:?certificate required}"
+    local fingerprint
+
+    pnm_tls_require_openssl || return $?
+    [[ -f "$certificate" && ! -L "$certificate" ]] || return "$PNM_EXIT_CONFIG"
+    fingerprint="$(LC_ALL=C openssl x509 -in "$certificate" -noout -sha256 -fingerprint 2>/dev/null)" || return "$PNM_EXIT_CONFIG"
+    fingerprint="${fingerprint#*=}"
+    fingerprint="${fingerprint//:/}"
+    [[ "$fingerprint" =~ ^[A-Fa-f0-9]{64}$ ]] || return "$PNM_EXIT_CONFIG"
+    printf '%s\n' "${fingerprint,,}"
+}
+
 pnm_tls_validate_pair() {
     local certificate="${1:?certificate required}"
     local private_key="${2:?private key required}"

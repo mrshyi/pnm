@@ -17,6 +17,7 @@ import sys
 import tempfile
 import time
 import uuid
+from urllib.parse import parse_qs, unquote, urlsplit
 import zipfile
 
 
@@ -95,6 +96,7 @@ class Harness:
             directory = self.root / name
             directory.mkdir(mode=0o750)
             os.chown(directory, 0, self.gid)
+            directory.chmod(0o750)  # Restore required traversal after private umask.
         (self.root / "logs").mkdir(mode=0o700)
         with zipfile.ZipFile(io.BytesIO(assets["xray"])) as archive:
             member = archive.getinfo("xray")
@@ -267,6 +269,27 @@ class Harness:
             self.start(f"{core}-client", args, join=unit)
             self.wait_probe(fd, port, marker)
             self.check(f"{core} transfers through its real local client")
+            if core == "hysteria2":
+                self.stage = "PNM share-link pin"
+                uri = json.loads((self.root / "hy2-link.json").read_text())["hysteria2"]
+                link = urlsplit(uri)
+                query = parse_qs(link.query, strict_parsing=True)
+                require(link.scheme == "hysteria2" and link.hostname == "127.0.0.1" and link.port == 32443
+                        and unquote(link.username or "") == password and query["sni"] == ["pnm-accept.invalid"]
+                        and query["insecure"] == ["1"], "production share-link fields differ from fixture")
+                # Let the official client import the entire production URI;
+                # JSON quoting is valid YAML and protects '#' and credentials.
+                pin_config = self.write("hy2-pin-client.yaml", f"server: {json.dumps(uri)}\n"
+                                        "socks5:\n  listen: 127.0.0.1:31811\n")
+                try:
+                    self.start("hy2-pin-client", [str(self.hy2), "client", "-c", str(pin_config)], join=unit)
+                    self.wait_probe(fd, 31811, marker)
+                except CheckFailed as error:
+                    log = self.root / "logs/hy2-pin-client.log"
+                    if log.exists() and "no certificate matches the pinned hash" in log.read_text():
+                        raise CheckFailed("PNM share pin rejected: certificate fingerprint mismatch") from error
+                    raise
+                self.check("PNM share-link pin transfers through the official HY2 client")
 
     def cleanup(self, success: bool) -> bool:
         okay = True
@@ -317,6 +340,8 @@ def main() -> int:
         return 64
     if os.geteuid() != 0:
         return 77
+    # Files must be private from creation, before final ownership adjustments.
+    os.umask(0o077)
     harness: Harness | None = None
     result = 1
     try:

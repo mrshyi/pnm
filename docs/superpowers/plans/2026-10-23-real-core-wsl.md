@@ -67,3 +67,22 @@ configuration unchanged. Failed-run credentials/logs are kept behind a root-owne
 Next: exercise PNM's HY2 wire pin with the official client. Source inspection shows
 PNM stores an SPKI/base64 hash while this official client expects a leaf-certificate
 DER/hex fingerprint. Reproduce this mismatch before choosing a compatible repair.
+
+Share-pin repair design: retain `HY2_TLS_PIN_SHA256` as the existing internal
+SPKI/base64 field and preserve CLI/schema/URI query names. For selfsigned-pin
+share links only, derive the official client's SHA-256 leaf-certificate DER
+fingerprint as lowercase hex from the configured certificate. Extraction failure
+must omit only HY2 and retain a ready Xray link. Test the current generated URI
+with the official client after the CA-positive control and reproduce the specific
+pin mismatch. Add focused DER/hex/error and independent-Core link regressions
+before the smallest production repair. Run default checks and the real client,
+then independently review before committing. Wrong-pin/auth refusal cases must
+show their expected causes and preserve a valid positive control.
+
+Repair evidence: the original URI pin failed after all five protocol/CA controls
+passed (`pnm-realcore-pin-red`). Focused TLS/link regressions failed before the
+production change, then passed 5/5 and 30/30. `pnm-pin-green-v2.real.log` passes
+6/6 using the full PNM-generated URI as the official client's server field, with
+no hand-mapped authentication/TLS fields. All eight test units were cleaned.
+Readiness is mapped solely in the URI fixture and independently tested startup
+is not full PNM managed-service readiness. The repair retains the internal schema.

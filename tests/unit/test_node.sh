@@ -33,6 +33,7 @@ pnm_hysteria_tls_server_name() {
     local -n node_ref="$node_name"
     printf '%s\n' "${node_ref[HY2_TLS_SERVER_NAME]}"
 }
+pnm_tls_certificate_sha256() { printf '%064d\n' 0; }
 
 assert_sensitive_output_contains() { [[ "${1-}" == *"${2-}"* ]]; }
 assert_sensitive_output_not_contains() { [[ "${1-}" != *"${2-}"* ]]; }
@@ -119,7 +120,7 @@ test_node_links_render_client_import_uris() {
     assert_sensitive_output_contains "$RUN_OUTPUT" 'pbk=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' || return 1
     assert_sensitive_output_contains "$RUN_OUTPUT" 'hysteria2://abcdefghijklmnopqrstuvwxyz012345@203.0.113.10:8443/' || return 1
     assert_sensitive_output_contains "$RUN_OUTPUT" '?sni=proxy-frankfurt&insecure=1' || return 1
-    assert_sensitive_output_contains "$RUN_OUTPUT" 'pinSHA256=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA%3D' || return 1
+    assert_sensitive_output_contains "$RUN_OUTPUT" "pinSHA256=$(printf '%064d' 0)" || return 1
     assert_sensitive_output_not_contains "$RUN_OUTPUT" '\\' || return 1
     assert_eq 'A%2FB%2BC%3D' "$(pnm_node_uri_encode 'A/B+C=')" || return 1
     assert_sensitive_output_not_contains "$RUN_OUTPUT" 'fixture-private'
@@ -848,6 +849,23 @@ test_init_writes_valid_files_transactionally() {
     return "$rc"
 }
 
+test_node_links_preserve_xray_when_hy2_fingerprint_fails() (
+    PNM_CONFIG_DIR="$TEST_ROOT/fixtures/config-secrets"
+    PNM_OUTPUT_MODE=json
+    pnm_require_root() { return 0; }
+    pnm_node_core_link_status() { printf 'ready|active|consistent|applied|fixture\n'; }
+    pnm_node_xray_reality_public_key() { printf 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n'; }
+    pnm_tls_certificate_sha256() { return "$PNM_EXIT_CONFIG"; }
+    run_capture pnm_node_links_unlocked --address 203.0.113.10
+    assert_eq 0 "$RUN_RC" || return 1
+    assert_sensitive_output_contains "$RUN_OUTPUT" 'vless://' || return 1
+    assert_sensitive_output_contains "$RUN_OUTPUT" '"hysteria2":null' || return 1
+    assert_sensitive_output_contains "$RUN_OUTPUT" '"hysteria2_status":"unknown"' || return 1
+    assert_contains "$RUN_ERROR" 'fingerprint' || return 1
+    assert_sensitive_output_not_contains "$RUN_OUTPUT$RUN_ERROR" 'abcdefghijklmnopqrstuvwxyz012345'
+)
+
+run_test 'node links preserve ready Xray when HY2 certificate fingerprint fails' test_node_links_preserve_xray_when_hy2_fingerprint_fails
 run_test 'node validation accepts a complete configuration' test_validate_existing_node
 run_test 'node show reports only non-secret desired state' test_show_hides_secrets_and_exposes_node
 run_test 'node links render client import URIs without private keys' test_node_links_render_client_import_uris

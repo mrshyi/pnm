@@ -34,6 +34,13 @@ This file records durable decisions supported by current project rules and imple
 
 **Evidence/status:** `pnm_node_core_link_status` in `lib/render.sh`, node show/link paths in `lib/node.sh`, tests in `tests/unit/test_node.sh`. Implemented at source/test level; host behavior depends on deployed source identity.
 
+Selfsigned-pin HY2 links use the configured leaf certificate's DER/hex SHA-256,
+while the persisted SPKI/base64 field remains compatible with existing nodes.
+The [official client implementation](https://github.com/HyNetworks/hysteria/blob/app/v2.13.0/app/cmd/client.go)
+hashes the full end-entity certificate. The former SPKI wire value was rejected
+in isolated real-client testing after a successful CA control. Fingerprint errors
+omit only HY2, consistent with this decision's independent-Core gates.
+
 ## D-005 — Never silently rotate valid node credentials
 
 **Decision:** Reuse valid existing REALITY/HY2 credentials; reject invalid existing credentials rather than replacing them silently.

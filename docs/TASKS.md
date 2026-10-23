@@ -1,14 +1,14 @@
 # PNM Current Tasks
 
-**Last reconciled:** 2026-10-23 (Debian WSL default checks pass 351 tests, isolated systemd stand-ins 8/8, real Core positive local traffic 5/5; share-pin compatibility and production acceptance remain open)
+**Last reconciled:** 2026-10-23 (Debian WSL default checks pass 354 tests, isolated systemd stand-ins 8/8, real Core/PNM HY2 URI traffic 6/6; rejection cases and production acceptance remain open)
 
-**Current increment baseline:** branch `dev`, HEAD `f5a13ce`, VERSION `0.16.0-rc.1`.
+**Current increment baseline:** branch `dev`, HEAD `b658013`, VERSION `0.16.0-rc.1`.
 
 This page is a status snapshot, not a test report. Status must be refreshed from current source, test output, or host evidence before it is changed. Historical Phase 2 analysis is preserved in [PHASE2_GAP_ANALYSIS.md](PHASE2_GAP_ANALYSIS.md).
 
 ## Active phase
 
-**Phase 3 — existing defect fixes and acceptance.** Phase 4 has not started. G-02, A-03/A-04, G-03/G-04 recovery, backup/input safety and G-06 access have local evidence in committed increments. The current continuation verifies compensation policy against real systemd stand-in services; actual Core, reboot and client acceptance remain open. The user has authorized consecutive local stages and commits, and confirmed Debian WSL is the only available test environment.
+**Phase 3 — existing defect fixes and acceptance.** Phase 4 has not started. G-02, A-03/A-04, G-03/G-04 recovery, backup/input safety and G-06 access have local evidence in committed increments. Compensation has isolated systemd stand-in evidence, and real Core/local client traffic now passes, including the repaired HY2 URI pin. Rejection cases, actual account/lifecycle integration, reboot and external clients remain open. The user has authorized consecutive local stages and commits, and confirmed Debian WSL is the only available test environment.
 
 Current review artifacts (2026-10-22):
 
@@ -885,12 +885,40 @@ The final probe uses a fixture-only address on lo inside a verified non-host
 namespace containing only lo. Earlier loopback attempts were blocked by the pinned
 Xray's default private-destination policy, confirmed in isolated diagnostic logs
 and official source; the final test does not weaken production configuration.
-HY2's positive test uses CA verification. PNM's share-link pin still needs real
-compatibility verification: internal SPKI/base64 differs from the official client's
-leaf DER/hex fingerprint. Next reproduce this mismatch and repair its wire encoding
-without migrating the persisted schema. Cause-qualified authentication/TLS rejection,
+HY2's initial positive test uses CA verification. The follow-up below verifies and
+repairs share-link fingerprint compatibility. Cause-qualified authentication/TLS rejection,
 actual account provisioning, reboot, external clients and deployed identity remain
 open; this positive stage does not close Phase 3.
+
+## HY2 share-link certificate fingerprint repair — 2026-10-23
+
+Root cause: `node links` copied the internal SPKI/base64 hash into `pinSHA256`,
+but the official client hashes the complete leaf certificate DER and compares hex.
+In `/var/tmp/pnm-realcore-pin-red`, both normal protocol/CA controls passed, then
+the PNM URI pin was rejected with the specific certificate-fingerprint mismatch;
+all eight owned units were cleaned. New focused TLS/link regressions also failed
+before the repair (`pnm-pin-unit-red` logs).
+
+The small repair computes a validated lowercase 64-hex leaf-certificate hash only
+for selfsigned-pin links. Existing persisted schema/SPKI values and credentials
+remain unchanged. Missing/invalid certificates or tool/output failures suppress
+only HY2 while retaining a ready Xray link. Ordinary diagnostics contain no link,
+password or private key. TLS focused tests pass 5/5 and node tests pass 30/30.
+
+Real evidence: `/var/tmp/pnm-pin-real-final.real.log`, **6/6**, including the complete
+PNM-generated HY2 URI imported directly by the official client and actual fixture
+transfer after the CA-positive control. The URI fixture maps service readiness,
+so this verifies URI/client compatibility, not full PNM readiness. All eight owned
+units and success fixtures were cleaned. Production source/default tests match
+the frozen `pnm-pin-final` copy; final opt-in file creation also uses private umask
+and explicitly restores required directory traversal for nobody.
+Syntax/security/ShellCheck, fixture ShellCheck and Python compilation pass.
+Full default `make check` exits 0, **31 suites / 354 tests passed**, with output
+in `/var/tmp/pnm-pin-final.full.log`. The first full attempt exposed an old SPKI
+wire expectation and an overly private source-copy parent; the final SNI regression
+independently checks DER and unchanged persisted Secret, and the public source copy
+allows real non-root traversal. Private fixture/evidence parents remain protected.
+Rejection cases and external/reboot/account acceptance remain open.
 
 ## Verification already reported (historical host evidence)
 
