@@ -862,6 +862,22 @@ not-found/inactive, with no runtime files or enable links after cleanup.
 These results do not prove actual xray/hysteria account provisioning, Core/TLS
 loading, reboot or external traffic.
 
+## Real Core WSL acceptance preparation — 2026-10-23
+
+The user reiterated continuous stages/commits. WSL systemd remains running and
+`unshare --net true` passes (exit 0), enabling a narrower real-Core test design
+without host network exposure. Test-only pins are in
+`tests/integration/real_core_versions.json`: official release metadata supplies
+fixed SHA-256/size for Xray v26.10.21 and Hysteria v2.13.0. Manifest JSON validates.
+These are integration-test assets, not managed versions.conf or production approval.
+The design/sequence is [real Core WSL plan](superpowers/plans/2026-10-23-real-core-wsl.md).
+
+The initial release download connection timed out; official asset API transfers
+are in progress. No downloaded Core has executed and no real-Core service unit
+has started. Actual configuration/startup/TLS/local traffic remains unverified.
+Random transient units with existing nobody and PrivateNetwork are planned;
+account provisioning, reboot, external clients and deployed identity remain open.
+
 ## Verification already reported (historical host evidence)
 
 A prior user-provided `proxy-tokyo` read-only report stated that PNM 0.16.0-rc.1, both Core services/listeners, `pnm check`, and selected permissions were healthy, and that public client connections had succeeded. This report is historical and was not independently refreshed in this documentation task. It does not close the local failure-injection gaps above or prove the current installed source matches this HEAD.
