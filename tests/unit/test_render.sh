@@ -13,6 +13,8 @@ source "$PNM_LIB_DIR/output.sh"
 source "$PNM_LIB_DIR/config.sh"
 # shellcheck source=../../lib/render.sh
 source "$PNM_LIB_DIR/render.sh"
+# shellcheck source=../../lib/check.sh
+source "$PNM_LIB_DIR/check.sh"
 # shellcheck source=../testlib.sh
 source "$TEST_ROOT/testlib.sh"
 
@@ -124,6 +126,90 @@ test_applied_config_record_distinguishes_unknown_confirmed_and_changed() {
     assert_eq changed "$status"
 }
 
+test_xray_renderer_accepts_caller_local_array_names() (
+    local temp_dir
+    local -A node=() reality=()
+    temp_dir="$(mktemp -d)"
+    trap 'rm -rf -- "$temp_dir"' EXIT
+    load_render_fixtures || return 1
+    pnm_load_node_config node && pnm_load_reality_secret reality || return 1
+    pnm_render_xray_config NODE REALITY >"$temp_dir/expected.json" || return 1
+    run_capture pnm_render_xray_config node reality
+    assert_eq 0 "$RUN_RC" || return 1
+    [[ -z "$RUN_ERROR" ]] || return 1
+    printf '%s\n' "$RUN_OUTPUT" >"$temp_dir/runtime.json"
+    cmp -s "$temp_dir/expected.json" "$temp_dir/runtime.json" || return 1
+    PNM_XRAY_CONFIG="$temp_dir/runtime.json"
+    run_capture pnm_xray_config_matches_node node reality
+    assert_eq 0 "$RUN_RC" && [[ -z "$RUN_ERROR" ]]
+)
+
+test_hysteria_renderer_accepts_caller_local_array_names() (
+    local temp_dir
+    local -A node=() hysteria=()
+    temp_dir="$(mktemp -d)"
+    trap 'rm -rf -- "$temp_dir"' EXIT
+    load_render_fixtures || return 1
+    pnm_load_node_config node && pnm_load_hysteria_secret hysteria || return 1
+    pnm_render_hysteria_config NODE HYSTERIA >"$temp_dir/expected.yaml" || return 1
+    run_capture pnm_render_hysteria_config node hysteria
+    assert_eq 0 "$RUN_RC" || return 1
+    [[ -z "$RUN_ERROR" ]] || return 1
+    printf '%s\n' "$RUN_OUTPUT" >"$temp_dir/runtime.yaml"
+    cmp -s "$temp_dir/expected.yaml" "$temp_dir/runtime.yaml" || return 1
+    run_capture pnm_hysteria_config_validate_candidate "$temp_dir/runtime.yaml" node hysteria
+    assert_eq 0 "$RUN_RC" && [[ -z "$RUN_ERROR" ]]
+)
+
+test_reality_secret_renderer_accepts_caller_local_array_name() (
+    local expected
+    local -A reality=()
+    load_render_fixtures || return 1
+    pnm_load_reality_secret reality || return 1
+    expected="$(pnm_render_reality_secret_config REALITY)" || return 1
+    run_capture pnm_render_reality_secret_config reality
+    assert_eq 0 "$RUN_RC" && [[ -z "$RUN_ERROR" && "$RUN_OUTPUT" == "$expected" ]]
+)
+
+test_hysteria_secret_renderer_accepts_caller_local_array_name() (
+    local expected
+    local -A hysteria=()
+    load_render_fixtures || return 1
+    pnm_load_hysteria_secret hysteria || return 1
+    expected="$(pnm_render_hysteria_secret_config HYSTERIA)" || return 1
+    run_capture pnm_render_hysteria_secret_config hysteria
+    assert_eq 0 "$RUN_RC" && [[ -z "$RUN_ERROR" && "$RUN_OUTPUT" == "$expected" ]]
+)
+
+test_deployment_health_uses_real_renderer_with_local_secrets() (
+    local temp_dir core
+    temp_dir="$(mktemp -d)"
+    trap 'rm -rf -- "$temp_dir"' EXIT
+    load_render_fixtures || return 1
+    PNM_XRAY_CONFIG="$temp_dir/xray.json"
+    PNM_HY2_CONFIG="$temp_dir/hysteria.yaml"
+    pnm_render_xray_config NODE REALITY >"$PNM_XRAY_CONFIG" || return 1
+    pnm_render_hysteria_config NODE HYSTERIA >"$PNM_HY2_CONFIG" || return 1
+    # Only environment observations are isolated. Keep the actual health ->
+    # compare/validate -> renderer chain that failed during real installation.
+    pnm_check_add() { PNM_CHECK_IDS+=("$1"); PNM_CHECK_STATUSES+=("$2"); }
+    pnm_check_xray() { pnm_check_add xray OK fixture; }
+    pnm_check_hysteria() { pnm_check_add hysteria2 OK fixture; }
+    pnm_check_file_metadata() { pnm_check_add "$1" OK fixture; }
+    pnm_check_hysteria_tls() { pnm_check_add hysteria_tls OK fixture; }
+    pnm_check_hysteria_tls_permissions() { pnm_check_add hysteria_tls_permissions OK fixture; }
+    for core in xray hysteria2; do
+        run_capture pnm_check_deploy_core_health "$core"
+        assert_eq 0 "$RUN_RC" || return 1
+        [[ -z "$RUN_ERROR" ]] || return 1
+    done
+)
+
+run_test 'Xray render and comparison resolve caller-local node/reality arrays' test_xray_renderer_accepts_caller_local_array_names
+run_test 'HY2 render and validation resolve caller-local node/hysteria arrays' test_hysteria_renderer_accepts_caller_local_array_names
+run_test 'REALITY secret renderer resolves caller-local reality array without diagnostics' test_reality_secret_renderer_accepts_caller_local_array_name
+run_test 'HY2 secret renderer resolves caller-local hysteria array without diagnostics' test_hysteria_secret_renderer_accepts_caller_local_array_name
+run_test 'deployment health validates real configs through caller-local secret arrays' test_deployment_health_uses_real_renderer_with_local_secrets
 run_test 'Xray renderer produces valid JSON' test_xray_render_is_valid_json
 run_test 'Xray renderer keeps REALITY target and SNI independent' test_xray_renderer_keeps_reality_target_and_sni_independent
 run_test 'runtime Xray parser exposes public REALITY values only' test_runtime_xray_config_exposes_only_public_reality_values

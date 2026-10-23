@@ -1,8 +1,8 @@
 # PNM Current Tasks
 
-**Last reconciled:** 2026-10-23 (Debian WSL default checks pass 354 tests, isolated systemd stand-ins 8/8, real Core/URI positive and refusal checks 10/10; managed-account/lifecycle, reboot and external acceptance remain open)
+**Last reconciled:** 2026-10-24 (default checks pass 359 tests; isolated real CLI installation/account checks 8/8; integrated lifecycle/recovery, reboot and external acceptance remain open)
 
-**Current increment baseline:** branch `dev`, HEAD `ac2e455`, VERSION `0.16.0-rc.1`.
+**Current increment baseline:** branch `dev`, parent HEAD `cc2bc54`, VERSION `0.16.0-rc.1`.
 
 This page is a status snapshot, not a test report. Status must be refreshed from current source, test output, or host evidence before it is changed. Historical Phase 2 analysis is preserved in [PHASE2_GAP_ANALYSIS.md](PHASE2_GAP_ANALYSIS.md).
 
@@ -992,10 +992,41 @@ marker and all namespace/UID/root/PID1/machine-ID guards. Private boot scripts
 compile and were reviewed before execution. Earlier failed assumptions were not
 counted as success; details and source reference are in the plan.
 
-Next is actual PNM managed-account/installation/lifecycle testing inside this
-verified disposable guest. No PNM deployment has run there yet. A private container
-is now available locally; VM/kernel reboot and independent external clients remain
-unavailable and cannot be inferred from this boot result.
+Subsequent actual PNM installation evidence is recorded below. A private container
+is available locally; VM/kernel reboot and independent external clients remain
+unavailable and cannot be inferred from its boot or installation result.
+
+## Actual installation and renderer scope repair — 2026-10-24
+
+Actual offline-cache CLI installation first reproduced circular Bash namerefs:
+the health gate's local reality/hysteria arrays collide with renderer reference
+names. Only the two Core and two Secret renderer reference names are now private
+to their functions. Rendered bytes, validation and transaction gates are preserved.
+The five new regression cases first fail against original source; corrected source
+passes 13/13 focused tests and `make check` (31 suites / 359 tests, exit 0), plus
+syntax/security/ShellCheck. The failed original guest has no remaining managed
+accounts/binaries/configs/units, retains PNM_CONFIGURED=no and records completed
+rollback; those are persisted observations after shutdown, not live recovery proof.
+
+Fresh `/var/tmp/pnm-install-guest.zh1menk9` passes **8/8** actual CLI checks:
+init/validate, nonmutating preview, both-Core installation/commit, distinct actual
+NSS accounts and process UIDs, bounded privileges, configuration/invocation applied
+bindings, production link readiness and certificate DER pin, and Core health.
+The parent records approved live cgroup boundaries, nspawn exit 0, unchanged host
+account/package databases, not-found scope and no remaining fixture mounts.
+No production functions are overridden; pinned bytes use PNM's verified asset
+cache. Raw output is protected because it contains credentials and share links.
+The source hashes, private scripts and reports are retained in the fixture; a
+reusable opt-in repository entry is still pending. No time-sync check was collected.
+
+The preceding fixed-source guest `gswqfozh` starts Xray but fails health with a
+minimal PATH lacking `/usr/local/bin`; the health function invokes bare `xray`
+despite having an absolute managed binary path. A fresh guest with normal root
+PATH alone passes. Next repair that command resolution with a focused regression,
+then repeat minimal-PATH installation before repeat-install and lifecycle cases.
+See the [renderer repair plan](superpowers/plans/2026-10-24-renderer-scope.md).
+These are local private-guest installation checks, not integrated update/restore,
+network acquisition, traffic, reboot, deployed-source or external acceptance.
 
 ## Verification already reported (historical host evidence)
 

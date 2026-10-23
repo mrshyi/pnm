@@ -19,8 +19,10 @@ pnm_yaml_scalar() {
 pnm_render_xray_config() {
     local node_name="${1:?node config array required}"
     local reality_name="${2:?reality secret array required}"
-    local -n node="$node_name"
-    local -n reality="$reality_name"
+    # Caller-local arrays may themselves be named node/reality. A same-name
+    # nameref would hide them under Bash dynamic scope during post-health.
+    local -n _pnm_xray_node="$node_name"
+    local -n _pnm_xray_reality="$reality_name"
 
     pnm_validate_node_config "$node_name" || return "$PNM_EXIT_CONFIG"
     pnm_validate_reality_secret_config "$reality_name" || return "$PNM_EXIT_CONFIG"
@@ -30,10 +32,10 @@ pnm_render_xray_config() {
   "inbounds": [
     {
       "listen": "0.0.0.0",
-      "port": ${node[XRAY_PORT]},
+      "port": ${_pnm_xray_node[XRAY_PORT]},
       "protocol": "vless",
       "settings": {
-        "clients": [{"id": $(pnm_json_string "${reality[XRAY_UUID]}"), "flow": "xtls-rprx-vision"}],
+        "clients": [{"id": $(pnm_json_string "${_pnm_xray_reality[XRAY_UUID]}"), "flow": "xtls-rprx-vision"}],
         "decryption": "none"
       },
       "streamSettings": {
@@ -41,11 +43,11 @@ pnm_render_xray_config() {
         "security": "reality",
         "realitySettings": {
           "show": false,
-          "dest": $(pnm_json_string "${node[XRAY_TARGET]}"),
+          "dest": $(pnm_json_string "${_pnm_xray_node[XRAY_TARGET]}"),
           "xver": 0,
-          "serverNames": [$(pnm_json_string "${node[XRAY_SERVER_NAME]}")],
-          "privateKey": $(pnm_json_string "${reality[XRAY_REALITY_PRIVATE_KEY]}"),
-          "shortIds": [$(pnm_json_string "${reality[XRAY_REALITY_SHORT_ID]}")]
+          "serverNames": [$(pnm_json_string "${_pnm_xray_node[XRAY_SERVER_NAME]}")],
+          "privateKey": $(pnm_json_string "${_pnm_xray_reality[XRAY_REALITY_PRIVATE_KEY]}"),
+          "shortIds": [$(pnm_json_string "${_pnm_xray_reality[XRAY_REALITY_SHORT_ID]}")]
         }
       }
     }
@@ -191,23 +193,23 @@ PY
 pnm_render_hysteria_config() {
     local node_name="${1:?node config array required}"
     local hysteria_name="${2:?hysteria secret array required}"
-    local -n node="$node_name"
-    local -n hysteria="$hysteria_name"
+    local -n _pnm_hy2_node="$node_name"
+    local -n _pnm_hy2_secret="$hysteria_name"
 
     pnm_validate_node_config "$node_name" || return "$PNM_EXIT_CONFIG"
     pnm_validate_hysteria_secret_config "$hysteria_name" || return "$PNM_EXIT_CONFIG"
     cat <<EOF
-listen: :${node[HY2_PORT]}
+listen: :${_pnm_hy2_node[HY2_PORT]}
 tls:
-  cert: $(pnm_yaml_scalar "${hysteria[HY2_TLS_CERT_PATH]}")
-  key: $(pnm_yaml_scalar "${hysteria[HY2_TLS_KEY_PATH]}")
+  cert: $(pnm_yaml_scalar "${_pnm_hy2_secret[HY2_TLS_CERT_PATH]}")
+  key: $(pnm_yaml_scalar "${_pnm_hy2_secret[HY2_TLS_KEY_PATH]}")
 auth:
   type: password
-  password: $(pnm_yaml_scalar "${hysteria[HY2_AUTH_PASSWORD]}")
+  password: $(pnm_yaml_scalar "${_pnm_hy2_secret[HY2_AUTH_PASSWORD]}")
 masquerade:
   type: proxy
   proxy:
-    url: $(pnm_yaml_scalar "https://${node[XRAY_SERVER_NAME]}")
+    url: $(pnm_yaml_scalar "https://${_pnm_hy2_node[XRAY_SERVER_NAME]}")
 EOF
 }
 
@@ -515,25 +517,25 @@ pnm_node_core_link_status() {
 
 pnm_render_reality_secret_config() {
     local reality_name="${1:?reality secret array required}"
-    local -n reality="$reality_name"
+    local -n _pnm_reality_secret="$reality_name"
 
     pnm_validate_reality_secret_config "$reality_name" || return "$PNM_EXIT_CONFIG"
     printf 'SCHEMA_VERSION=1\nXRAY_UUID=%s\nXRAY_REALITY_PRIVATE_KEY=%s\nXRAY_REALITY_SHORT_ID=%s\n' \
-        "${reality[XRAY_UUID]}" \
-        "${reality[XRAY_REALITY_PRIVATE_KEY]}" \
-        "${reality[XRAY_REALITY_SHORT_ID]}"
+        "${_pnm_reality_secret[XRAY_UUID]}" \
+        "${_pnm_reality_secret[XRAY_REALITY_PRIVATE_KEY]}" \
+        "${_pnm_reality_secret[XRAY_REALITY_SHORT_ID]}"
 }
 
 pnm_render_hysteria_secret_config() {
     local hysteria_name="${1:?hysteria secret array required}"
-    local -n hysteria="$hysteria_name"
+    local -n _pnm_hy2_secret_config="$hysteria_name"
 
     pnm_validate_hysteria_secret_config "$hysteria_name" || return "$PNM_EXIT_CONFIG"
     printf 'SCHEMA_VERSION=1\nHY2_AUTH_PASSWORD=%s\nHY2_TLS_CERT_PATH=%s\nHY2_TLS_KEY_PATH=%s\nHY2_TLS_PIN_SHA256=%s\n' \
-        "${hysteria[HY2_AUTH_PASSWORD]}" \
-        "${hysteria[HY2_TLS_CERT_PATH]}" \
-        "${hysteria[HY2_TLS_KEY_PATH]}" \
-        "${hysteria[HY2_TLS_PIN_SHA256]}"
+        "${_pnm_hy2_secret_config[HY2_AUTH_PASSWORD]}" \
+        "${_pnm_hy2_secret_config[HY2_TLS_CERT_PATH]}" \
+        "${_pnm_hy2_secret_config[HY2_TLS_KEY_PATH]}" \
+        "${_pnm_hy2_secret_config[HY2_TLS_PIN_SHA256]}"
 }
 
 pnm_render_write_file() {

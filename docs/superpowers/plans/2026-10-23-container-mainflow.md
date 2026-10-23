@@ -118,3 +118,16 @@ the exact `systemd-nspawn` marker at `/run/host/container-manager`; none of the
 namespace/UID/PID1/root/machine-ID guards are relaxed. The successful boot is a
 usable local guest for subsequent PNM tests, not evidence that PNM installation
 or recovery has run, and not VM/kernel reboot or external client acceptance.
+
+First-install slice: reuse `pnm_host_apply_prepare_asset`'s existing verified
+cache under guest `/var/lib/pnm/assets`, populated from the already pinned Core
+bytes. No downloader or production function override is needed. Copy current
+tracked CLI/library/adapter source and VERSION into the private guest. After
+fresh boot identity/cgroup checks and a host-side scope confirmation, the guest
+worker may run noninteractive node init/validate, preview, apply, account/service
+and applied/link checks. Preserve actual guest systemd/NSS/filesystem behavior.
+Only protected generated logs may contain CLI output; summaries must omit keys,
+passwords and links. Repeat-install refusal and per-Core independence follow
+as separate verified increments. This is offline-cache integration, not network
+download or external connectivity evidence. Keep a clean pre-install rootfs
+snapshot and protected failure evidence; do not reset an uncertain guest state.
