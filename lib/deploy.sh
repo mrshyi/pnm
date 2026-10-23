@@ -187,6 +187,8 @@ pnm_deploy_mark_configured() {
         return $?
     fi
     pnm_tx_begin install-state || return $?
+    # Rollbacks run in reverse registration order: files before directories.
+    pnm_tx_add_rollback pnm_tx_restore_directories || { pnm_tx_close; return "$PNM_EXIT_SOFTWARE"; }
     pnm_tx_add_rollback pnm_tx_restore_written_files || { pnm_tx_close; return "$PNM_EXIT_SOFTWARE"; }
     if pnm_deploy_stage_configured; then :; else
         rc=$?; pnm_tx_rollback || rc="$PNM_EXIT_SOFTWARE"; pnm_tx_close || true; return "$rc"

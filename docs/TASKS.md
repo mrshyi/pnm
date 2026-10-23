@@ -1,8 +1,8 @@
 # PNM Current Tasks
 
-**Last reconciled:** 2026-10-23 (shared compensation verifies actual service state; Debian WSL `make check` passes 341 tests and isolated systemd harness passes 8/8; real Core/production acceptance remains open)
+**Last reconciled:** 2026-10-23 (Core/legacy state directories participate in recovery; Debian WSL `make check` passes 348 tests and isolated systemd harness passes 8/8; real Core/production acceptance remains open)
 
-**Current increment baseline:** branch `dev`, HEAD `e48b1dd`, VERSION `0.16.0-rc.1`.
+**Current increment baseline:** branch `dev`, HEAD `99481cb`, VERSION `0.16.0-rc.1`.
 
 This page is a status snapshot, not a test report. Status must be refreshed from current source, test output, or host evidence before it is changed. Historical Phase 2 analysis is preserved in [PHASE2_GAP_ANALYSIS.md](PHASE2_GAP_ANALYSIS.md).
 
@@ -790,6 +790,43 @@ are not-found/inactive after cleanup, without runtime files or enable links.
 `.check.log`, `.lifecycle.log`, `.lifecycle-nobody.log`, `.systemd.log`, `.lint.log`.
 The injected ineffective controls are mocks; the real systemd suite verifies
 compatibility with normal fixture recovery, not actual Core startup or reboot.
+
+## Core state-directory resources participate in recovery — 2026-10-23
+
+Root cause: standalone applied publication normalized state-directory permissions
+without directory receipts; update also created/normalized its previous-state
+directory before transaction begin. Failed operations could leave new directories
+or changed permissions and fail to report foreign directory contents/metadata.
+Five regressions failed before correction (**28 passed / 5 failed**).
+
+Publication now uses the existing directory preparation facility for these paths.
+Update preparation occurs after begin and rollback registration; its failures keep
+the original error. Restart/config/update callbacks restore files, service and
+applied state first, then reverse directory changes. New empty paths are removed;
+foreign contents or directory drift stop recovery instead of being overwritten.
+The Core focused suite passed **33/33** and apply/CLI **14/14** before final review.
+
+Shared-caller review found the legacy install-state branch also needed directory
+compensation. Its two regressions reproduced **33 passed / 2 failed**. It now
+registers directory recovery before file recovery so reverse execution restores
+files first. The primary deployment callback already performs that ordering.
+Independent static review accepted the Core and legacy changes.
+
+The first full run in `/var/tmp/pnm-core-directories-final` was interrupted by
+server restart/Hangup and is not passing evidence. Final source is frozen in
+`/var/tmp/pnm-core-directories-final-v2`: `make check` **exit 0, 31 suites /
+348 passed / 0 failed**; actual nobody evidence **35/35, exit 0**. Existing
+isolated systemd **8/8, exit 0** and syntax,
+security scan/ShellCheck (including explicit evidence/integration scripts) pass.
+The evidence test's SC1090 annotation documents its trusted checkout function
+aliases/sources; production ShellCheck diagnostics remain enabled.
+Final logs use `.check.log`, `.systemd.log`, `.lint.log`, `.evidence-nobody.log`
+under that prefix; red/initial green logs share `/var/tmp/pnm-core-directories`.
+Both final exact units
+`pnm-accept-f91670d0-1196-4604-a0b5-5c960a9fa1ae-{xray,hy2}.service` are
+not-found/inactive after cleanup, with no runtime files or enable links remaining.
+Directory fault injection uses real files and metadata with mocked services/NSS;
+the systemd suite uses separate nobody/sleep units, not actual Core/TLS/reboot/L3.
 
 ## Verification already reported (historical host evidence)
 

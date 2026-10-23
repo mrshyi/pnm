@@ -64,7 +64,8 @@ pnm_core_restart_step() {
 pnm_core_restart_restore() {
     pnm_tx_restore_written_files || return "$PNM_EXIT_SOFTWARE"
     pnm_core_lifecycle_restore || return "$PNM_EXIT_SOFTWARE"
-    pnm_core_recover_applied
+    pnm_core_recover_applied || return $?
+    pnm_tx_restore_directories
 }
 
 # Only carry forward evidence confirmed before this operation. A lifecycle
@@ -164,7 +165,8 @@ pnm_core_restore_config() {
         pnm_systemctl stop "$PNM_CORE_UNIT" || rc="$PNM_EXIT_SOFTWARE"
     fi
     ((rc == 0)) || return "$rc"
-    pnm_core_recover_applied
+    pnm_core_recover_applied || return $?
+    pnm_tx_restore_directories
 }
 
 pnm_core_apply_rollback() {
@@ -196,13 +198,8 @@ pnm_core_record_applied_config() {
     esac
     invocation="$(pnm_systemd_show_value "$unit" InvocationID 2>/dev/null)" || return "$PNM_EXIT_UNAVAILABLE"
     [[ "$invocation" =~ ^[a-fA-F0-9]{32}$ ]] || return "$PNM_EXIT_UNAVAILABLE"
-    if [[ "${PNM_TX_OPERATION:-}" == deployment || "${PNM_TX_OPERATION:-}" == core-restore ]]; then
-        pnm_tx_prepare_directory "$PNM_STATE_DIR/cores" 0700 || return $?
-        pnm_tx_prepare_directory "$record_dir" 0700 || return $?
-    else
-        pnm_mkdir_mode 0700 "$PNM_STATE_DIR/cores" || return "$PNM_EXIT_CANTCREAT"
-        pnm_mkdir_mode 0700 "$record_dir" || return "$PNM_EXIT_CANTCREAT"
-    fi
+    pnm_tx_prepare_directory "$PNM_STATE_DIR/cores" 0700 || return $?
+    pnm_tx_prepare_directory "$record_dir" 0700 || return $?
     printf 'SCHEMA_VERSION=1\nCORE=%s\nCONFIG_SHA256=%s\nSERVICE_INVOCATION_ID=%s\n' \
         "$core" "$digest" "${invocation,,}" >"$staged" || return "$PNM_EXIT_CANTCREAT"
     chmod 0600 -- "$staged" || { rm -f -- "$staged"; return "$PNM_EXIT_NOPERM"; }
@@ -472,7 +469,6 @@ pnm_core_update_locked() {
         pnm_tls_validate_pair "${PNM_UPDATE_SECRET[HY2_TLS_CERT_PATH]}" "${PNM_UPDATE_SECRET[HY2_TLS_KEY_PATH]}" || return "$PNM_EXIT_CONFIG"
     fi
     previous_dir="$PNM_STATE_DIR/cores/$PNM_CORE_ID"
-    pnm_mkdir_mode 0700 "$previous_dir" || return "$PNM_EXIT_CANTCREAT"
     previous_file="$previous_dir/previous"
     previous_meta="$previous_dir/previous.env"
     metadata_stage="$PNM_CORE_STAGE/previous.env"
@@ -480,6 +476,10 @@ pnm_core_update_locked() {
     pnm_tx_begin "core-update-$PNM_CORE_ID" || return $?
     pnm_core_capture_applied || { rc=$?; pnm_tx_close; return "$rc"; }
     pnm_tx_add_rollback pnm_core_update_rollback || { pnm_tx_close; return "$PNM_EXIT_SOFTWARE"; }
+    pnm_tx_prepare_directory "$PNM_STATE_DIR/cores" 0700 &&
+        pnm_tx_prepare_directory "$previous_dir" 0700 || {
+        rc=$?; pnm_core_update_abort update 'previous state directory preparation' "$rc"; return "$rc";
+    }
     pnm_tx_write_file "$staged" "$PNM_CORE_BINARY" core_binary 0755 required || {
         rc=$?; pnm_core_update_abort update 'binary publication' "$rc"; return "$rc";
     }
@@ -524,7 +524,8 @@ pnm_core_update_rollback() {
     active="$(pnm_systemd_active_state "$PNM_CORE_UNIT")" || return "$PNM_EXIT_SOFTWARE"
     enabled="$(pnm_systemd_enabled_state "$PNM_CORE_UNIT")" || return "$PNM_EXIT_SOFTWARE"
     [[ "$active" == active && "$enabled" == "$PNM_LIFECYCLE_PRE_ENABLED" ]] || return "$PNM_EXIT_SOFTWARE"
-    pnm_core_recover_applied
+    pnm_core_recover_applied || return $?
+    pnm_tx_restore_directories
 }
 
 pnm_core_publish_previous_state() {

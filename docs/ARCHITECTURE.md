@@ -2,7 +2,15 @@
 
 This document describes the source baseline plus safety/G-02, persisted-port, lifecycle-evidence and update/restore-input changes through 2026-10-23. It is not a production deployment attestation. Verify behavior against source and tests when changing it.
 
-**Increment baseline:** branch `dev`, HEAD `e48b1dd`, `VERSION` `0.16.0-rc.1` (checked 2026-10-23).
+**Increment baseline:** branch `dev`, HEAD `99481cb`, `VERSION` `0.16.0-rc.1` (checked 2026-10-23).
+
+Applied publication uses existing directory receipts for standalone Core paths as
+well as deployment/restore. Update prepares its previous-state destination after
+transaction begin and callback registration. Core compensation restores files,
+service policy and prior applied binding before reversing directory changes;
+legacy install-state registers file recovery before directory recovery in execution
+order. New directories are removed only when empty and still owned by the receipt;
+foreign contents, metadata or identity drift retain recovery-required.
 
 Shared lifecycle compensation validates its captured baseline before service
 controls, then re-queries actual active/enabled state after daemon-reload.

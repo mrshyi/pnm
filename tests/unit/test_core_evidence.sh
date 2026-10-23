@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Dynamic sources load or rename trusted functions from this checkout.
+# shellcheck disable=SC1090
 set -Eeuo pipefail
 
 TEST_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
@@ -22,6 +24,7 @@ source <(declare -f pnm_tx_write_file | sed '1s/pnm_tx_write_file/pnm_test_real_
 source <(declare -f pnm_tx_begin | sed '1s/pnm_tx_begin/pnm_test_real_tx_begin/')
 source <(declare -f pnm_tx_close | sed '1s/pnm_tx_close/pnm_test_real_tx_close/')
 source <(declare -f pnm_tx_commit | sed '1s/pnm_tx_commit/pnm_test_real_tx_commit/')
+source <(declare -f pnm_tx_prepare_directory | sed '1s/pnm_tx_prepare_directory/pnm_test_real_prepare_directory/')
 
 suite_root="$(mktemp -d)"
 trap 'rm -rf -- "$suite_root"' EXIT
@@ -714,6 +717,166 @@ test_repeated_config_apply_keeps_new_candidate_evidence() {
     done
 }
 
+test_core_failures_restore_original_state_directory_metadata() {
+    local core operation parent_attributes core_attributes
+    for core in xray hysteria2; do
+        for operation in apply_config restart update rollback; do
+            prepare_apply_evidence_fixture
+            chmod 0751 "$PNM_STATE_DIR/cores" "$PNM_STATE_DIR/cores/$core"
+            parent_attributes="$(stat -c '%a:%u:%g' "$PNM_STATE_DIR/cores")"
+            core_attributes="$(stat -c '%a:%u:%g' "$PNM_STATE_DIR/cores/$core")"
+            pnm_tx_commit() { return 73; }
+            run_capture "pnm_core_$operation" "$core"
+            assert_eq 73 "$RUN_RC" || return 1
+            assert_eq "$parent_attributes" "$(stat -c '%a:%u:%g' "$PNM_STATE_DIR/cores")" || return 1
+            assert_eq "$core_attributes" "$(stat -c '%a:%u:%g' "$PNM_STATE_DIR/cores/$core")" || return 1
+            assert_eq 0 "$PNM_TX_RECOVERY_REQUIRED" || return 1
+            assert_eq confirmed "$(pnm_core_applied_config_status "$core" "$PNM_CORE_CONFIG")" || return 1
+            assert_peer_untouched "$core" || return 1
+        done
+    done
+}
+
+test_core_failures_remove_new_empty_state_directories() {
+    local core operation parent_attributes
+    for core in xray hysteria2; do
+        for operation in apply_config update; do
+            prepare_apply_evidence_fixture
+            rm -r -- "$PNM_STATE_DIR/cores/$core"
+            chmod 0751 "$PNM_STATE_DIR/cores"
+            parent_attributes="$(stat -c '%a:%u:%g' "$PNM_STATE_DIR/cores")"
+            pnm_tx_commit() { return 73; }
+            run_capture "pnm_core_$operation" "$core"
+            assert_eq 73 "$RUN_RC" || return 1
+            [[ ! -e "$PNM_STATE_DIR/cores/$core" ]] || return 1
+            assert_eq "$parent_attributes" "$(stat -c '%a:%u:%g' "$PNM_STATE_DIR/cores")" || return 1
+            assert_eq 0 "$PNM_TX_RECOVERY_REQUIRED" || return 1
+            assert_peer_untouched "$core" || return 1
+        done
+    done
+}
+
+test_core_failures_preserve_foreign_state_directory_contents() {
+    local core operation
+    for core in xray hysteria2; do
+        for operation in apply_config update; do
+            prepare_apply_evidence_fixture
+            rm -r -- "$PNM_STATE_DIR/cores/$core"
+            pnm_tx_commit() {
+                printf 'foreign\n' >"$PNM_STATE_DIR/cores/$PNM_CORE_ID/foreign"
+                return 73
+            }
+            run_capture "pnm_core_$operation" "$core"
+            assert_eq 73 "$RUN_RC" || return 1
+            assert_eq foreign "$(<"$PNM_STATE_DIR/cores/$core/foreign")" || return 1
+            assert_eq 1 "$PNM_TX_RECOVERY_REQUIRED" || return 1
+            assert_peer_untouched "$core" || return 1
+        done
+    done
+}
+
+test_core_failures_preserve_external_state_directory_metadata() {
+    local core operation
+    for core in xray hysteria2; do
+        for operation in apply_config restart update rollback; do
+            prepare_apply_evidence_fixture
+            pnm_tx_commit() {
+                chmod 0750 "$PNM_STATE_DIR/cores/$PNM_CORE_ID"
+                return 73
+            }
+            run_capture "pnm_core_$operation" "$core"
+            assert_eq 73 "$RUN_RC" || return 1
+            assert_eq 750 "$(stat -c %a "$PNM_STATE_DIR/cores/$core")" || return 1
+            assert_eq 1 "$PNM_TX_RECOVERY_REQUIRED" || return 1
+            assert_peer_untouched "$core" || return 1
+        done
+    done
+}
+
+test_partial_core_directory_preparation_failure_recovers_metadata() {
+    local core operation parent_attributes core_attributes
+    for core in xray hysteria2; do
+        for operation in apply_config restart update rollback; do
+            prepare_apply_evidence_fixture
+            chmod 0751 "$PNM_STATE_DIR/cores" "$PNM_STATE_DIR/cores/$core"
+            parent_attributes="$(stat -c '%a:%u:%g' "$PNM_STATE_DIR/cores")"
+            core_attributes="$(stat -c '%a:%u:%g' "$PNM_STATE_DIR/cores/$core")"
+            pnm_tx_prepare_directory() {
+                pnm_test_real_prepare_directory "$@" || return $?
+                [[ "$1" != "$PNM_STATE_DIR/cores/$PNM_CORE_ID" ]] || return 73
+            }
+            run_capture "pnm_core_$operation" "$core"
+            assert_eq 73 "$RUN_RC" || return 1
+            assert_eq "$parent_attributes" "$(stat -c '%a:%u:%g' "$PNM_STATE_DIR/cores")" || return 1
+            assert_eq "$core_attributes" "$(stat -c '%a:%u:%g' "$PNM_STATE_DIR/cores/$core")" || return 1
+            assert_eq 0 "$PNM_TX_RECOVERY_REQUIRED" || return 1
+            assert_peer_untouched "$core" || return 1
+        done
+    done
+}
+
+test_legacy_install_state_recovers_directory_baselines() {
+    local state original core
+    source "$PNM_LIB_DIR/deploy.sh"
+    for state in existing missing; do
+        prepare_apply_evidence_fixture
+        sed -i 's/^PNM_CONFIGURED=yes$/PNM_CONFIGURED=no/' "$PNM_CONFIG_DIR/node.conf"
+        original="$(pnm_tx_file_sha256 "$PNM_CONFIG_DIR/node.conf")"
+        if [[ "$state" == existing ]]; then
+            chmod 0751 "$PNM_STATE_DIR/cores" "$PNM_STATE_DIR/cores/xray" "$PNM_STATE_DIR/cores/hysteria2"
+        else
+            rm -r -- "$PNM_STATE_DIR/cores"
+        fi
+        pnm_tx_commit() { return 73; }
+        run_capture pnm_deploy_mark_configured
+        assert_eq 73 "$RUN_RC" || return 1
+        assert_eq "$original" "$(pnm_tx_file_sha256 "$PNM_CONFIG_DIR/node.conf")" || return 1
+        if [[ "$state" == existing ]]; then
+            for core in '' /xray /hysteria2; do
+                assert_eq 751 "$(stat -c %a "$PNM_STATE_DIR/cores$core")" || return 1
+            done
+        else
+            [[ ! -e "$PNM_STATE_DIR/cores" ]] || return 1
+        fi
+        assert_eq 0 "$PNM_TX_RECOVERY_REQUIRED" || return 1
+        assert_eq 0 "${fixture_restarts[xray.service]}" || return 1
+        assert_eq 0 "${fixture_restarts[hysteria-server.service]}" || return 1
+    done
+}
+
+test_legacy_install_state_preserves_foreign_directory_changes() {
+    local change
+    source "$PNM_LIB_DIR/deploy.sh"
+    for change in contents metadata; do
+        prepare_apply_evidence_fixture
+        sed -i 's/^PNM_CONFIGURED=yes$/PNM_CONFIGURED=no/' "$PNM_CONFIG_DIR/node.conf"
+        [[ "$change" != contents ]] || rm -r -- "$PNM_STATE_DIR/cores"
+        pnm_tx_commit() {
+            if [[ "$change" == contents ]]; then
+                printf 'foreign\n' >"$PNM_STATE_DIR/cores/xray/foreign"
+            else
+                chmod 0750 "$PNM_STATE_DIR/cores/xray"
+            fi
+            return 73
+        }
+        run_capture pnm_deploy_mark_configured
+        assert_eq 73 "$RUN_RC" || return 1
+        assert_eq 1 "$PNM_TX_RECOVERY_REQUIRED" || return 1
+        if [[ "$change" == contents ]]; then
+            assert_eq foreign "$(<"$PNM_STATE_DIR/cores/xray/foreign")" || return 1
+        else
+            assert_eq 750 "$(stat -c %a "$PNM_STATE_DIR/cores/xray")" || return 1
+        fi
+    done
+}
+
+run_test 'legacy install-state recovers existing and missing directories' test_legacy_install_state_recovers_directory_baselines
+run_test 'legacy install-state retains foreign directory changes' test_legacy_install_state_preserves_foreign_directory_changes
+run_test 'partial Core directory preparation recovers metadata' test_partial_core_directory_preparation_failure_recovers_metadata
+run_test 'Core failures restore state directory metadata' test_core_failures_restore_original_state_directory_metadata
+run_test 'Core failures remove only new empty state directories' test_core_failures_remove_new_empty_state_directories
+run_test 'Core failures preserve foreign new state directory contents' test_core_failures_preserve_foreign_state_directory_contents
+run_test 'Core failures retain external state directory metadata' test_core_failures_preserve_external_state_directory_metadata
 run_test 'failed config apply rebinds previously confirmed evidence' test_config_apply_failures_recover_confirmed_evidence
 run_test 'failed config apply preserves missing stale and damaged evidence' test_config_apply_does_not_certify_unconfirmed_prior_evidence
 run_test 'failed config apply retains external applied edits and uncertainty' test_config_apply_retains_external_applied_edits

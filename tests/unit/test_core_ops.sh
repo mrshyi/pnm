@@ -92,6 +92,8 @@ pnm_systemd_unit_healthy() {
     if ((PNM_TEST_APPLY_HEALTH_FAIL == 1 && PNM_TEST_APPLY_HEALTH_CHECKS == 1)); then return 1; fi
 }
 pnm_tx_begin() { PNM_TX_ACTIVE=1; }
+pnm_tx_prepare_directory() { pnm_mkdir_mode "$2" "$1"; }
+pnm_tx_restore_directories() { return 0; }
 pnm_tx_add_rollback() { PNM_TEST_APPLY_ROLLBACK="$1"; }
 pnm_tx_write_file() {
     if [[ "$2" == "$PNM_XRAY_CONFIG" ]]; then
