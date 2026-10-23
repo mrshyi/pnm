@@ -2,13 +2,13 @@
 
 **Last reconciled:** 2026-10-24 (default363 tests; actual guest main-flow14/14, failure/retry16/16 and distinct-version update scenario22/22 pass; broader fault/reboot/external acceptance remain open)
 
-**Current increment baseline:** branch `dev`, parent HEAD `d6b89d1`, VERSION `0.16.0-rc.1`.
+**Current increment baseline:** branch `dev`, parent HEAD `fdac8a0`, VERSION `0.16.0-rc.1`.
 
 This page is a status snapshot, not a test report. Status must be refreshed from current source, test output, or host evidence before it is changed. Historical Phase 2 analysis is preserved in [PHASE2_GAP_ANALYSIS.md](PHASE2_GAP_ANALYSIS.md).
 
 ## Active phase
 
-**Phase 3 — existing defect fixes and acceptance.** Phase 4 has not started. Local evidence now includes actual managed-account installation, independent Core restart/apply and trusted backup/restore in a private Debian guest, plus the earlier real Core/local-client positive/refusal checks. Integrated update/fault recovery, reboot and external clients remain open. The user has authorized consecutive local stages and commits, and confirmed Debian WSL is the only available test environment.
+**Phase 3 — existing defect fixes and acceptance.** Phase 4 has not started. Local evidence includes actual managed-account installation, independent restart/apply, trusted backup/restore, late-deadline compensation/retry and distinct-version Core update/rollback in a private Debian guest, plus earlier real Core/local-client checks. Broader update/restore fault recovery, reboot and external clients remain open. The user has authorized consecutive local stages and commits, and confirmed Debian WSL is the only available test environment.
 
 Current review artifacts (2026-10-22):
 
@@ -92,7 +92,7 @@ not close G-02 or prove systemd recovery, reboot or public client connectivity.
 |---|---|---|---|
 | G-01 — runtime/config/link state | BLOCKED for production acceptance | Current `lib/node.sh` source prints an HY2 runtime row. Prior production output reportedly omitted it despite the same VERSION; deployed executable/source identity has not been verified in this session. | On an authorized host, perform read-only path/version/source-hash comparison; do not apply or upgrade as diagnosis. |
 | G-02 — complete deployment rollback | Actual guest late-deadline rollback/retry PASS / broader failure matrix open | Real dual-Core post-health precedes a cause-qualified deadline failure; live services/accounts/resources/metadata and commit state compensate, then installation and lifecycle retry pass. | Continue interruption, other failure points, concurrent commands and independent VM reboot matrix; do not infer production readiness. |
-| G-03 — Core update transaction | PARTIAL local/stand-in PASS / integrated Core acceptance open | Publication, preparation locks, metadata drift and compensation have local tests; isolated systemd callbacks preserve disabled baselines. Real Core traffic is separate evidence, not a managed Core update test. | Run the integrated binary/metadata/service/concurrent-command/interruption matrix in a disposable VM. |
+| G-03 — Core update transaction | Actual guest distinct-version update/rollback and checksum refusal PASS / broader failure matrix open | Both official Cores change real versions, retain paired previous state, rollback/swap forward and preserve peer resources/applied/previous metadata. Actual curl uses a private HTTPS transport fixture. | Extend restart/publication/commit failure and concurrent/interruption matrix; upstream acquisition and VM reboot remain separate. |
 | G-04 — backup/restore safety | Actual private-guest trusted round trip PASS / failure matrix open | Real CLI restores resource bytes/metadata and both Core applied bindings; trusted archive checksum is retained separately. Default input/compensation checks pass. | Accept interruption, injected restore failure, concurrent commands and reboot separately. |
 | G-05 — dependency preflight | Actual guest missing-TLS-tool and repeat refusal PASS / remaining tools mocked | A private PATH hides only openssl: real CLI refuses for that cause before transaction/resource/account mutation. Repeat-install also preserves both running Cores. | Extend remaining dependency classes and supported distributions separately. |
 | G-06 — HY2 TLS permissions | Actual private-guest account/TLS loading PASS | Real hysteria NSS identity runs the official Core with no effective capabilities and NoNewPrivs; CLI TLS access checks, certificate pin and listener pass. Prior mapped-account local traffic is separate evidence. | Extend reuse/failure cases and external client acceptance; do not infer external reachability. |
@@ -1151,14 +1151,46 @@ not-found and no fixture mounts remain. The separate uncommitted test increment
 retains source hashes and protected evidence; upstream network/PKI, broader fault
 recovery, reboot and external clients remain unaccepted.
 
+## Actual distinct-version Core update/rollback — 2026-10-24
+
+The explicit `core-update` scenario in the existing guest entry passes **22/22**
+in `/var/tmp/pnm-install-guest.2t13z9ae`, Make exit0. It installs official Xray
+v26.9.30 and HY2 v2.12.3, runs the original14 lifecycle cases, then each Core's
+wrong-checksum refusal, update to v26.10.21/v2.13.0, rollback and swap forward.
+Both binary bytes and actual version/invocation change; confirmed applied/link
+state survives. Peer comparisons include runtime resources and previous binary/
+metadata. A checksum rejection must fetch the frozen asset yet begin no write
+transaction, preventing a generic78 from masquerading as the intended refusal.
+
+Official GitHub release API sizes/digests are frozen in
+`tests/integration/previous_core_versions.json`. WSL download/resume timed out;
+Windows curl acquired both assets, verified there and again in the Linux private
+cache. Partial files remain unexecuted/unpublished. A private lo HTTPS CONNECT
+fixture serves only checked current bytes to real curl, using CA/proxy settings
+only in CLI env. Real TLS, hash, version, staging, publication, service and applied
+logic execute; upstream DNS/PKI/download is explicitly outside this fixture result.
+No production function is replaced or managed production pin changed.
+
+Seven offline guards pass, including bounded headers, incomplete CONNECT/TLS,
+wrong target/path and CA-verified positive transport in an isolated network NS.
+Own sockets, total connection lifetime/count and thread retirement are bounded.
+Five Python implementation files compile, the existing real-Core refusal guard
+and syntax/security/ShellCheck pass. Independent review found no blocking issue.
+The preceding full default run remains **31/363**, without a redundant rerun.
+Final host evidence: nspawn0, no interruption, host databases unchanged, scope
+not-found and no fixture mounts. Source hashes and private raw reports remain.
+Broader fault recovery, custom-port integration, concurrency, reboot and external
+acceptance remain open. Next exercise T-04's existing configurable ports and
+review the remaining hard-coded health assumptions against actual behavior.
+
 ## Verification already reported (historical host evidence)
 
 A prior user-provided `proxy-tokyo` read-only report stated that PNM 0.16.0-rc.1, both Core services/listeners, `pnm check`, and selected permissions were healthy, and that public client connections had succeeded. This report is historical and was not independently refreshed in this documentation task. It does not close the local failure-injection gaps above or prove the current installed source matches this HEAD.
 
 ## Immediate next steps
 
-Next exercise actual distinct-version Core update/rollback in a fresh native
-guest. Successful main flow and late-deadline rollback cannot replace
+Next exercise configured ports and remaining fault cases in fresh native guests.
+Successful main flow, update/rollback and late-deadline compensation cannot replace
 the following VM/reboot, deployed-host and external-client prerequisites.
 
 1. Confirm deployed PNM source identity for G-01 using read-only checks.

@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Offline regression for host-side clone file writes and explicit opt-in."""
 import ast
+import importlib.util
+import io
 import json
 import os
 from pathlib import Path
@@ -16,6 +18,86 @@ DRIVER=Path(__file__).with_name('test_guest_mainflow.py')
 
 
 class GuestGuardTests(unittest.TestCase):
+    def test_asset_headers_have_line_count_and_total_bounds(self):
+        spec=importlib.util.spec_from_file_location('pnm_asset_guard',DRIVER.with_name('guest_update_cases.py'))
+        module=importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        request=module.AssetRequest.__new__(module.AssetRequest)
+        self.assertEqual(request.headers(io.BytesIO(b'GET /expected HTTP/1.1\r\nHost: github.com\r\n\r\n')),
+                         b'GET /expected HTTP/1.1')
+        for malformed in (b'x'*8193+b'\r\n\r\n',
+                          b'GET / HTTP/1.1\r\n'+b'X: 1\r\n'*101+b'\r\n',
+                          b'GET / HTTP/1.1\r\n'+(b'X: '+b'x'*8000+b'\r\n')*9+b'\r\n',
+                          b'GET / HTTP/1.1\r\nHost: incomplete'):
+            with self.assertRaises(RuntimeError):
+                request.headers(io.BytesIO(malformed))
+
+    @unittest.skipUnless(sys.platform=='linux' and os.geteuid()==0,'private Linux network namespace')
+    def test_asset_fixture_rejects_unexpected_requests_and_retires_incomplete_io(self):
+        # The child proves its network namespace differs before raising lo.
+        # No socket or interface is created/changed in the host namespace.
+        script='''import os,socket,ssl,subprocess,sys,tempfile,threading,time
+from pathlib import Path
+assert os.stat('/proc/self/ns/net').st_ino!=int(sys.argv[2])
+subprocess.run(['ip','link','set','lo','up'],check=True,capture_output=True)
+sys.path.insert(0,sys.argv[1])
+from guest_update_cases import AssetServer
+with tempfile.TemporaryDirectory(prefix='pnm-asset-guard.') as directory:
+    cert=Path(directory)/'fixture.crt'
+    key=Path(directory)/'fixture.key'
+    subprocess.run(['openssl','req','-x509','-newkey','rsa:2048','-nodes','-days','1',
+        '-subj','/CN=github.com','-addext','subjectAltName=DNS:github.com',
+        '-keyout',str(key),'-out',str(cert)],check=True,capture_output=True,timeout=10)
+    context=ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    context.load_cert_chain(str(cert),str(key))
+    client_context=ssl.create_default_context(cafile=str(cert))
+    for kind in ('incomplete-connect','incomplete-tls','wrong-connect','wrong-path','positive'):
+        server=AssetServer({'/expected':b'fixture'},context)
+        worker=threading.Thread(target=server.serve_forever)
+        worker.start()
+        client=socket.create_connection(server.server_address,timeout=2)
+        try:
+            if kind=='incomplete-connect':
+                client.sendall(b'CONNECT github.com:443 HTTP/1.1\\r\\nHost:')
+            elif kind=='wrong-connect':
+                client.sendall(b'CONNECT example.invalid:443 HTTP/1.1\\r\\n\\r\\n')
+                try: client.recv(1024)
+                except ConnectionResetError: pass
+            else:
+                client.sendall(b'CONNECT github.com:443 HTTP/1.1\\r\\n\\r\\n')
+                assert b'200 Connection Established' in client.recv(1024)
+                if kind in ('wrong-path','positive'):
+                    client=client_context.wrap_socket(client,server_hostname='github.com')
+                    path=b'/expected' if kind=='positive' else b'/forbidden'
+                    client.sendall(b'GET '+path+b' HTTP/1.1\\r\\nHost: github.com\\r\\n\\r\\n')
+                    response=b''
+                    while True:
+                        chunk=client.recv(1024)
+                        if not chunk: break
+                        response+=chunk
+                        assert len(response)<2048
+                    if kind=='positive': assert response.endswith(b'fixture') and b'Content-Length: 7' in response
+                    else: assert response==b''
+            deadline=time.monotonic()+2
+            while not server.request_threads and time.monotonic()<deadline: time.sleep(0.01)
+            assert server.request_threads
+        finally:
+            start=time.monotonic()
+            server.shutdown()
+            server.server_close()
+            worker.join(timeout=2)
+            client.close()
+            assert time.monotonic()-start<4
+        assert not worker.is_alive() and not any(t.is_alive() for t in server.request_threads)
+        assert not server.connections
+        if kind=='positive': assert server.requests==['/expected'] and not server.errors
+        else: assert not server.requests and server.errors
+'''
+        result=subprocess.run(['unshare','--net',sys.executable,'-B','-c',script,
+                               str(DRIVER.parent),str(os.stat('/proc/self/ns/net').st_ino)],
+                              capture_output=True,timeout=25)
+        self.assertEqual(result.returncode,0,result.stderr.decode(errors='replace'))
+
     @unittest.skipUnless(sys.platform=='linux','Linux process groups')
     def test_cli_timeout_retires_pipe_holding_descendant(self):
         tree=ast.parse(DRIVER.with_name('guest_mainflow_cases.py').read_text())

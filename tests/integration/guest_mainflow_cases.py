@@ -180,7 +180,7 @@ try:
     check(fields('/etc/pnm/node.conf')['PNM_CONFIGURED']=='no','preview committed node state')
     passed.append('installation preview leaves accounts and runtime resources absent')
     scenario=Path('/opt/pnm-test-scenario').read_text().strip()
-    check(scenario in ('lifecycle','deployment-failure'),'unknown guest scenario')
+    check(scenario in ('lifecycle','deployment-failure','core-update'),'unknown guest scenario')
     if scenario=='deployment-failure':
         stage='actual dependency refusal and late deployment compensation'
         deployment_failure_cases()
@@ -330,6 +330,10 @@ try:
     final_checks={item['id']:item['status'] for item in json.loads(call('check-restored',['--json','check'],accepted=(0,1,2)).stdout)['checks']}
     check(not [k for k,v in final_checks.items() if v in ('FAIL','UNKNOWN') and k!='time_sync'],'restored diagnostics not healthy')
     passed.append('protected trusted backup restores all resources and real applied bindings')
+    if scenario=='core-update':
+        stage='actual distinct-version Core update and rollback'
+        from guest_update_cases import run_updates
+        run_updates(logs,env,call,core_state,binding,links_ready,passed)
     result={'passed':True,'checks':passed,'clock_diagnostic':checks.get('time_sync'),'uids_distinct':True}
 except Exception as error:
     result={'passed':False,'checks':passed,'stage':stage,'error_class':type(error).__name__}

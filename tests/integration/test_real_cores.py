@@ -44,12 +44,12 @@ def require(condition: bool, label: str) -> None:
         raise CheckFailed(label)
 
 
-def verified_assets(cache: Path) -> dict[str, bytes]:
+def verified_assets(cache: Path, *, manifest_path: Path | None = None) -> dict[str, bytes]:
     require(cache.is_absolute() and cache == cache.resolve(), "asset cache must be canonical")
     info = cache.stat()
     require(stat.S_ISDIR(info.st_mode) and info.st_uid == 0 and stat.S_IMODE(info.st_mode) == 0o700,
             "asset cache must be root-owned mode 0700")
-    manifest = json.loads(Path(__file__).with_name("real_core_versions.json").read_text())
+    manifest = json.loads((manifest_path or Path(__file__).with_name("real_core_versions.json")).read_text())
     result: dict[str, bytes] = {}
     for core in ("xray", "hysteria2"):
         asset = manifest[core]

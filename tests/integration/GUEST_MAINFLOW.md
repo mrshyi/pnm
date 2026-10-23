@@ -34,6 +34,23 @@ no applied or commit promotion, and completed rollback receipts. Only its owned
 delay drop-in is removed before retrying the original 14-case main flow. The
 default scenario remains `lifecycle`; no production function is replaced.
 
+For distinct-version testing, set `PNM_GUEST_SCENARIO=core-update` and
+`PNM_PREVIOUS_CORE_ASSETS=/var/tmp/pnm-update-core-assets`. That separately
+acquired mode-0700 root-owned cache must match `previous_core_versions.json`:
+Xray v26.9.30 and HY2 v2.12.3. The existing asset verifier checks both old and
+current pairs. The clone initially installs the old pair, then explicitly approves
+the current pair only in its own versions.conf. It runs each real Core through
+checksum refusal, different-version update, rollback and rollback swap forward,
+checking resource/version/invocation/applied state and the peer's previous-state
+metadata as well as its runtime resources. Final links/health must be ready.
+
+This scenario uses real curl/TLS/checksum/staging with a private lo HTTPS CONNECT
+fixture that serves only the two checked release assets. Its CA/proxy settings
+exist only in CLI process env; host trust/network is unchanged. Only github.com
+and the exact release paths are accepted. Headers, connection count, total request
+duration and thread/socket retirement are bounded. This transport substitution
+does not establish upstream DNS/PKI/download behavior or external clients.
+
 Each invocation creates a new private `/var/tmp/pnm-install-guest.*` clone and
 unique native scope, rotates only that clone's machine ID, copies current PNM
 source and checked asset bytes, and compiles the guest scripts before boot.
@@ -61,11 +78,16 @@ configuration and backups can contain secrets; do not print or publish them.
 Successful shutdown must leave the transient scope not-found, no fixture mounts,
 and unchanged host account/package databases. Fixtures are retained for review;
 there is no automatic recursive cleanup. Time-sync checks are not collected by
-the current PNM check dispatcher. VM/kernel reboot, update versions, injected
-failure recovery, deployed-source identity and external clients remain separate.
+the current PNM check dispatcher. Distinct versions and the one deadline-failure
+case require their named scenarios above. VM/kernel reboot, other injected
+failure positions, deployed-source identity and external clients remain separate.
 
-`test_guest_mainflow_guard.py` runs five offline checks before boot: explicit
+`test_guest_mainflow_guard.py` runs seven offline checks before boot: explicit
 opt-in, enabled assertions, protected regular-file/link behavior, nonblocking
-FIFO rejection, and retirement of a PIPE-holding descendant on command timeout.
+FIFO rejection, retirement of a PIPE-holding descendant on command timeout,
+asset header limits, and isolated-network asset/TLS positive/refusal/cleanup.
+The latter proves a distinct network namespace before raising only that child's
+lo; no host socket/interface is created or changed. It covers incomplete CONNECT/
+TLS, wrong target/path, and a CA-verified fixed response with complete retirement.
 Each CLI call owns a new session; bounded TERM/KILL retires that command group
 on timeout, while its Core services remain under the guest systemd manager.

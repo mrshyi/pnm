@@ -14,8 +14,11 @@ parser=argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--baseline',type=Path,required=True,help='private verified boot fixture parent')
 parser.add_argument('--nspawn',type=Path,required=True,help='trusted native systemd-nspawn executable')
 parser.add_argument('--asset-cache',type=Path,required=True,help='verified pinned Core asset cache')
-parser.add_argument('--scenario',choices=('lifecycle','deployment-failure'),default='lifecycle')
+parser.add_argument('--scenario',choices=('lifecycle','deployment-failure','core-update'),default='lifecycle')
+parser.add_argument('--previous-asset-cache',type=Path)
 options=parser.parse_args()
+if options.scenario=='core-update' and options.previous_asset_cache is None:
+    parser.error('core-update requires --previous-asset-cache')
 for location in (options.baseline,options.nspawn):
     assert location.is_absolute() and location==location.resolve(), 'canonical trusted paths required'
     info=location.stat()
@@ -42,6 +45,12 @@ sys.path.insert(0,str(repo/'tests/integration'))
 from test_real_cores import verified_assets
 assets=verified_assets(options.asset_cache)
 manifest=json.loads((repo/'tests/integration/real_core_versions.json').read_text())
+current_assets=assets
+target_manifest=manifest
+if options.scenario=='core-update':
+    previous_manifest=repo/'tests/integration/previous_core_versions.json'
+    assets=verified_assets(options.previous_asset_cache,manifest_path=previous_manifest)
+    manifest=json.loads(previous_manifest.read_text())
 source=options.baseline/'rootfs'
 assert source.is_dir() and source==source.resolve(), 'canonical rootfs required'
 assert json.loads((options.baseline/'boot-result.json').read_text())['guest']['passed'] is True
@@ -90,6 +99,15 @@ for core,extension in (('xray','zip'),('hysteria2','bin')):
     path.chmod(0o600)
 write_clone_file(root/'opt/pnm-test-versions.json',json.dumps(manifest))
 write_clone_file(root/'opt/pnm-test-scenario',options.scenario)
+if options.scenario=='core-update':
+    update_assets=root/'opt/pnm-update-assets'
+    assert not update_assets.exists() and not update_assets.is_symlink()
+    update_assets.mkdir(mode=0o700)
+    for core in ('xray','hysteria2'):
+        path=update_assets/target_manifest[core]['filename']
+        path.write_bytes(current_assets[core])
+        path.chmod(0o600)
+    write_clone_file(root/'opt/pnm-update-targets.json',json.dumps(target_manifest))
 prefix=[str(options.nspawn),'--directory='+str(root),'--machine=placeholder','--settings=no','--register=no','--link-journal=no','--private-network','--private-users=pick','--private-users-ownership=auto','--resolv-conf=off','--timezone=off','--console=pipe']
 machine='pnm-install-'+uuid.uuid4().hex[:18]
 prefix=[('--directory='+str(root)) if s.startswith('--directory=') else ('--machine='+machine) if s.startswith('--machine=') else s for s in prefix]
@@ -108,6 +126,12 @@ for name,target in (('guest_mainflow_cases.py','pnm-install-cases.py'),
     destination.chmod(0o700)
     import py_compile
     py_compile.compile(str(destination),cfile=str(base/(name+'.pyc')),doraise=True)
+if options.scenario=='core-update':
+    destination=root/'opt/guest_update_cases.py'
+    assert not destination.exists() and not destination.is_symlink()
+    shutil.copyfile(repo/'tests/integration/guest_update_cases.py',destination)
+    destination.chmod(0o700)
+    py_compile.compile(str(destination),cfile=str(base/'guest_update_cases.pyc'),doraise=True)
 unit=root/'etc/systemd/system/pnm-boot-probe.service'
 assert unit.is_file() and not unit.is_symlink()
 assert 'ExecStart=/usr/bin/python3 /opt/pnm-boot-worker.py' in unit.read_text(), 'dedicated boot fixture unit required'

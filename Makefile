@@ -18,7 +18,7 @@ test-real-cores:
 # Explicit opt-in; clones a separately prepared and verified private boot fixture.
 test-guest-mainflow:
 	python3 -B tests/integration/test_guest_mainflow_guard.py
-	PNM_RUN_GUEST_TESTS=1 python3 -B tests/integration/test_guest_mainflow.py --baseline "$(PNM_GUEST_BASELINE)" --nspawn "$(PNM_NSPAWN)" --asset-cache "$(PNM_REAL_CORE_ASSETS)" --scenario "$(PNM_GUEST_SCENARIO)"
+	PNM_RUN_GUEST_TESTS=1 python3 -B tests/integration/test_guest_mainflow.py --baseline "$(PNM_GUEST_BASELINE)" --nspawn "$(PNM_NSPAWN)" --asset-cache "$(PNM_REAL_CORE_ASSETS)" --scenario "$(PNM_GUEST_SCENARIO)" $(if $(PNM_PREVIOUS_CORE_ASSETS),--previous-asset-cache "$(PNM_PREVIOUS_CORE_ASSETS)")
 
 syntax:
 	@find bin lib adapters tests -type f \( -name '*.sh' -o -path 'bin/pnm' \) | sort | while read -r file; do bash -n "$$file"; done

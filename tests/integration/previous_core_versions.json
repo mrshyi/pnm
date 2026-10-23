@@ -1,0 +1,19 @@
+{
+  "scope": "isolated update integration only; not production approval",
+  "xray": {
+    "version": "v26.9.30",
+    "filename": "xray-v26.9.30.zip",
+    "sha256": "f851110beaff16e78d643f0ccfd9524b4a44dfd59bae3e34bb52bba378f7690e",
+    "size": 21512389,
+    "url": "https://github.com/XTLS/Xray-core/releases/download/v26.9.30/Xray-linux-64.zip",
+    "release": "https://github.com/XTLS/Xray-core/releases/tag/v26.9.30"
+  },
+  "hysteria2": {
+    "version": "v2.12.3",
+    "filename": "hysteria-v2.12.3",
+    "sha256": "8c7a68a906998b747a0db87586e364f995fbfddb95693ae6e2fdb68a6e920d3e",
+    "size": 23003298,
+    "url": "https://github.com/HyNetworks/hysteria/releases/download/app/v2.12.3/hysteria-linux-amd64",
+    "release": "https://github.com/HyNetworks/hysteria/releases/tag/app/v2.12.3"
+  }
+}
