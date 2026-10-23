@@ -34,6 +34,12 @@ no applied or commit promotion, and completed rollback receipts. Only its owned
 delay drop-in is removed before retrying the original 14-case main flow. The
 default scenario remains `lifecycle`; no production function is replaced.
 
+`PNM_GUEST_SCENARIO=configured-ports` uses TCP10443/UDP18443, occupies unrelated
+default443/8443 listeners in the private guest, and first checks that conflicts
+on the actual selected ports refuse before any managed write. It then runs the
+real installation/lifecycle/restore, verifies actual listeners and URI ports,
+and requires both unrelated default sockets to remain untouched.
+
 For distinct-version testing, set `PNM_GUEST_SCENARIO=core-update` and
 `PNM_PREVIOUS_CORE_ASSETS=/var/tmp/pnm-update-core-assets`. That separately
 acquired mode-0700 root-owned cache must match `previous_core_versions.json`:

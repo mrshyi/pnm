@@ -2,7 +2,7 @@
 
 **Last reconciled:** 2026-10-24 (default370 tests; guest main-flow14/14, failure/retry16/16, distinct-version update22/22 and custom-port16/16 pass; broader fault/reboot/external acceptance remain open)
 
-**Current increment baseline:** branch `dev`, parent HEAD `dfd864d`, VERSION `0.16.0-rc.1`.
+**Current increment baseline:** branch `dev`, parent HEAD `f756e43`, VERSION `0.16.0-rc.1`.
 
 This page is a status snapshot, not a test report. Status must be refreshed from current source, test output, or host evidence before it is changed. Historical Phase 2 analysis is preserved in [PHASE2_GAP_ANALYSIS.md](PHASE2_GAP_ANALYSIS.md).
 
@@ -1208,8 +1208,10 @@ and actual install/listeners/URI/lifecycle/restore follow selected ports. Parent
 evidence records nspawn0, no interruption, unchanged host databases, not-found
 scope and no fixture mounts. The helper recovery cases are focused filesystem/
 observations tests; this native scenario does not itself run recovery against a
-preexisting active custom-port baseline. Test-harness packaging is a separate
-increment; broader failure/concurrency/reboot/external acceptance remains open.
+preexisting active custom-port baseline. The reusable `configured-ports` scenario
+is packaged separately in the existing Make entry; default scenarios retain443/
+8443 and all cases now verify actual listener/URI port agreement. Broader failure/
+concurrency/reboot/external acceptance remains open.
 
 ## Verification already reported (historical host evidence)
 

@@ -1,6 +1,6 @@
 from pathlib import Path
 from datetime import datetime
-import hashlib,json,os,pwd,grp,re,secrets,signal,subprocess,sys
+import hashlib,json,os,pwd,grp,re,secrets,signal,socket,subprocess,sys
 from urllib.parse import urlsplit,parse_qs
 mapping=[int(x) for x in Path('/proc/self/uid_map').read_text().split()]
 if sys.flags.optimize:
@@ -16,6 +16,8 @@ os.umask(0o077)
 passed=[]
 stage='initial managed-resource baseline'
 result={}
+ports={'xray':443,'hysteria2':8443}
+default_sockets=[]
 env={'PATH':'/usr/sbin:/usr/bin:/sbin:/bin','LANG':'C.UTF-8','TZ':'UTC'}
 def check(condition,label):
     if not condition:
@@ -165,12 +167,23 @@ def deployment_failure_cases() -> None:
 try:
     absent()
     passed.append('fresh guest has no managed accounts or resources')
+    scenario=Path('/opt/pnm-test-scenario').read_text().strip()
+    check(scenario in ('lifecycle','deployment-failure','core-update','configured-ports'),'unknown guest scenario')
+    if scenario=='configured-ports':
+        ports={'xray':10443,'hysteria2':18443}
+        for kind,port in ((socket.SOCK_STREAM,443),(socket.SOCK_DGRAM,8443)):
+            fixture=socket.socket(socket.AF_INET,kind)
+            default_sockets.append(fixture)
+            fixture.bind(('127.0.0.1',port))
+            if kind==socket.SOCK_STREAM:
+                fixture.listen(1)
     stage='node init and validate'
     pins=json.loads(Path('/opt/pnm-test-versions.json').read_text())
     call('node-init',['node','init','--region','test','--address','203.0.113.10','--timezone','UTC',
         '--server-name','www.cloudflare.com','--target','www.cloudflare.com:443','--hy2-server-name','guest.invalid',
         '--xray-version',pins['xray']['version'],'--xray-sha256',pins['xray']['sha256'],
-        '--hy2-version',pins['hysteria2']['version'],'--hy2-sha256',pins['hysteria2']['sha256']])
+        '--hy2-version',pins['hysteria2']['version'],'--hy2-sha256',pins['hysteria2']['sha256'],
+        '--xray-port',str(ports['xray']),'--hy2-port',str(ports['hysteria2'])])
     call('node-validate',['node','validate'])
     check(fields('/etc/pnm/node.conf')['PNM_CONFIGURED']=='no','node configured before apply')
     passed.append('actual CLI initializes and validates an uncommitted node')
@@ -179,14 +192,30 @@ try:
     absent()
     check(fields('/etc/pnm/node.conf')['PNM_CONFIGURED']=='no','preview committed node state')
     passed.append('installation preview leaves accounts and runtime resources absent')
-    scenario=Path('/opt/pnm-test-scenario').read_text().strip()
-    check(scenario in ('lifecycle','deployment-failure','core-update'),'unknown guest scenario')
+    if scenario=='configured-ports':
+        stage='configured-port conflict refusal'
+        baseline_paths=('/etc/pnm/node.conf','/etc/pnm/versions.conf','/etc/passwd','/etc/group','/etc/shadow','/etc/gshadow')
+        baseline={p:fingerprint(p) for p in baseline_paths}
+        transactions=set(Path('/var/lib/pnm/transactions').iterdir())
+        with socket.socket(socket.AF_INET,socket.SOCK_STREAM) as tcp, socket.socket(socket.AF_INET,socket.SOCK_DGRAM) as udp:
+            tcp.bind(('127.0.0.1',ports['xray']))
+            tcp.listen(1)
+            udp.bind(('127.0.0.1',ports['hysteria2']))
+            refusal=call('configured-port-conflict',['install','--apply','--yes'],accepted=(2,))
+        check(b'Required TCP/10443 is already in use' in refusal.stdout and b'Required UDP/18443 is already in use' in refusal.stdout,'port refusal has another cause')
+        absent()
+        check(baseline=={p:fingerprint(p) for p in baseline_paths},'port conflict changed configuration or identities')
+        check(transactions==set(Path('/var/lib/pnm/transactions').iterdir()),'port conflict began publication')
+        passed.append('configured port conflicts refuse before managed writes')
     if scenario=='deployment-failure':
         stage='actual dependency refusal and late deployment compensation'
         deployment_failure_cases()
     stage='installation apply'
     call('install-apply',['install','--apply','--yes'])
     check(fields('/etc/pnm/node.conf')['PNM_CONFIGURED']=='yes','successful install lacks committed node state')
+    for protocol,port in (('tcp',ports['xray']),('udp',ports['hysteria2'])):
+        observed=subprocess.check_output(['ss','-H','-lnt' if protocol=='tcp' else '-lnu'],text=True,timeout=10)
+        check(any(re.search(r':'+str(port)+r'\b',line) for line in observed.splitlines()),'actual configured Core listener is absent')
     passed.append('real installation applies both Cores and commits node state')
     stage='actual account and process identity'
     users={}
@@ -215,6 +244,7 @@ try:
     links=json.loads(call('node-links',['--json','node','links','--address','203.0.113.10']).stdout)
     check(links['xray_status']=='ready' and links['hysteria2_status']=='ready','real link readiness gate failed')
     check(links['xray_vless_reality'].startswith('vless://'),'REALITY link missing')
+    check(urlsplit(links['xray_vless_reality']).port==ports['xray'] and urlsplit(links['hysteria2']).port==ports['hysteria2'],'client URI port differs from configured listener')
     pin=parse_qs(urlsplit(links['hysteria2']).query)['pinSHA256'][0]
     secret=fields('/etc/pnm/secrets/hysteria.env')
     der=subprocess.check_output(['openssl','x509','-in',secret['HY2_TLS_CERT_PATH'],'-outform','DER'],timeout=10)
@@ -334,12 +364,18 @@ try:
         stage='actual distinct-version Core update and rollback'
         from guest_update_cases import run_updates
         run_updates(logs,env,call,core_state,binding,links_ready,passed)
+    if scenario=='configured-ports':
+        check(len(default_sockets)==2 and all(fixture.fileno()>=0 and fixture.getsockname()==('127.0.0.1',port)
+              for fixture,port in zip(default_sockets,(443,8443))), 'unrelated default listeners changed')
+        passed.append('unrelated default listeners survive the complete custom-port lifecycle')
     result={'passed':True,'checks':passed,'clock_diagnostic':checks.get('time_sync'),'uids_distinct':True}
 except Exception as error:
     result={'passed':False,'checks':passed,'stage':stage,'error_class':type(error).__name__}
     if isinstance(error,RuntimeError):
         result['reason']=str(error)
 finally:
+    for fixture in default_sockets:
+        fixture.close()
     path=Path('/var/tmp/pnm-install-result.json')
     with path.open('x') as stream:
         json.dump(result,stream)

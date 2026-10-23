@@ -14,7 +14,7 @@ parser=argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--baseline',type=Path,required=True,help='private verified boot fixture parent')
 parser.add_argument('--nspawn',type=Path,required=True,help='trusted native systemd-nspawn executable')
 parser.add_argument('--asset-cache',type=Path,required=True,help='verified pinned Core asset cache')
-parser.add_argument('--scenario',choices=('lifecycle','deployment-failure','core-update'),default='lifecycle')
+parser.add_argument('--scenario',choices=('lifecycle','deployment-failure','core-update','configured-ports'),default='lifecycle')
 parser.add_argument('--previous-asset-cache',type=Path)
 options=parser.parse_args()
 if options.scenario=='core-update' and options.previous_asset_cache is None:
