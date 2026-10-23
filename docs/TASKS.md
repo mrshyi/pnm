@@ -4,6 +4,15 @@
 
 **Current increment baseline:** branch `dev`, parent HEAD `2d60bf9`, VERSION `0.16.0-rc.1`.
 
+**Current execution blocker:** production restore repair committed as `3c30512`.
+The host subsequently returned EROFS when the interrupted update-failure guest
+driver tried to save `boot-result.json`, then a new WSL invocation failed with
+`Wsl/Service/CreateInstance/E_FAIL`. Reusable harness changes remain uncommitted.
+Restore stable writable Debian WSL before rerunning checks or starting guests;
+also recheck the interrupted `771npvcc` scope/mount cleanup because its final
+report could not be persisted and the follow-up query did not complete. No host
+remount, disk repair, WSL restart or retained-fixture deletion was performed.
+
 This page is a status snapshot, not a test report. Status must be refreshed from current source, test output, or host evidence before it is changed. Historical Phase 2 analysis is preserved in [PHASE2_GAP_ANALYSIS.md](PHASE2_GAP_ANALYSIS.md).
 
 ## Active phase
