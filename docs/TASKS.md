@@ -1,8 +1,8 @@
 # PNM Current Tasks
 
-**Last reconciled:** 2026-10-24 (default checks pass 361 tests; isolated real CLI installation/account checks 8/8 with minimal PATH; integrated lifecycle/recovery, reboot and external acceptance remain open)
+**Last reconciled:** 2026-10-24 (default checks pass 362 tests; actual guest install, repeat refusal, per-Core restart/apply pass; restore times out and remains open)
 
-**Current increment baseline:** branch `dev`, parent HEAD `a664d7d`, VERSION `0.16.0-rc.1`.
+**Current increment baseline:** branch `dev`, parent HEAD `1b804e7`, VERSION `0.16.0-rc.1`.
 
 This page is a status snapshot, not a test report. Status must be refreshed from current source, test output, or host evidence before it is changed. Historical Phase 2 analysis is preserved in [PHASE2_GAP_ANALYSIS.md](PHASE2_GAP_ANALYSIS.md).
 
@@ -1046,6 +1046,34 @@ not-found scope and no remaining fixture mounts pass. Offline-cache, time-sync,
 traffic and external/reboot evidence boundaries remain as above. Next exercise
 repeat-install refusal, per-Core restart/apply independence and trusted backup/
 restore using actual NSS/systemd in a fresh clone.
+
+## Xray apply candidate format — 2026-10-24
+
+Actual changed-config apply uncovered an extensionless temporary `config` file:
+Xray v26.10.21's auto loader cannot select its format. In `pos73g_w`, the same
+candidate bytes return 23 without a suffix (Failed to get format) and 0 as JSON.
+Only the Xray branch now names its staged candidate `config.json`; HY2 staging,
+validation and transaction/recovery behavior are unchanged. The focused format
+regression fails before repair (14 pass / 1 fail), then all 15 pass. Frozen
+`/var/tmp/pnm-candidate-green.9ryuw8sq` passes syntax/security/ShellCheck and
+`make check`: **31 suites / 362 tests, exit 0**. Independent review found no
+blocking issue.
+
+Actual guest `fewv_gnd` passes 13 checks through repeat-install refusal, both
+independent restarts and both changed-config apply paths. Each operation checks
+actual processes/invocations, resource bytes/metadata, applied binding and peer
+preservation. Xray changes only XRAY_TARGET because HY2 masquerade shares the
+SNI field. The later restore does not complete within the test deadlines and
+records RECOVERY_REQUIRED with original rc143. No complete lifecycle or restore
+pass is claimed. The test reports failure/NoGuestReport; final nspawn exit is 0,
+host databases are unchanged, scope is not-found and no fixture mount remains.
+
+The reusable opt-in guest harness remains an uncommitted next increment. Its
+offline write/opt-in guards pass 4/4, including a reproduced/fixed FIFO stall.
+Separate real parent TERM (`jd22oheh`) and HUP (`gcmpr795`) probes each fail the
+interrupted run and retire their owned guest/scope without host database change
+or fixture mounts. Next diagnose restore and bound CLI descendant cleanup on
+timeout before committing the harness. No production apply or release occurred.
 
 ## Verification already reported (historical host evidence)
 

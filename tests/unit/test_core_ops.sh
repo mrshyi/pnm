@@ -64,6 +64,11 @@ if [[ "${1-}" == x25519 ]]; then
     printf 'PrivateKey: fixture-private\nPassword (PublicKey): AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n'
     exit 0
 fi
+if [[ "${PNM_TEST_REQUIRE_XRAY_FORMAT:-0}" == 1 && "${1-}" == run ]]; then
+    # Match the real Core's auto-format contract: an unrecognised filename
+    # cannot be validated as JSON merely because its contents are JSON.
+    [[ "$#" == 4 && "$2" == -test && "$3" == -config && "$4" == *.json ]] || exit 23
+fi
 [[ "${PNM_TEST_REJECT_XRAY_CONFIG:-0}" != 1 ]]
 EOF
     chmod 0755 -- "$PNM_XRAY_BIN"
@@ -128,6 +133,16 @@ test_apply_close_failure_is_not_reported_as_success() {
     pnm_test_apply_cleanup
     return "$failed"
 }
+
+test_xray_apply_supports_core_auto_format() (
+    pnm_test_apply_setup || return 1
+    trap pnm_test_apply_cleanup EXIT
+    export PNM_TEST_REQUIRE_XRAY_FORMAT=1
+    run_capture pnm_core_apply_config xray
+    assert_eq 0 "$RUN_RC" || return 1
+    assert_eq 1 "$PNM_TEST_APPLY_RESTARTS" || return 1
+    assert_contains "$RUN_OUTPUT" 'configuration applied'
+)
 
 test_xray_apply_validation_failure_preserves_runtime_config() {
     local original rc
@@ -347,6 +362,7 @@ run_test 'dry-run blocks mutating core commands' test_dry_run_cannot_mutate_a_co
 run_test 'core command help is available' test_core_command_help
 run_test 'configuration close failure suppresses success and releases the outer lock' test_apply_close_failure_is_not_reported_as_success
 run_test 'invalid Xray candidate leaves current runtime config untouched' test_xray_apply_validation_failure_preserves_runtime_config
+run_test 'Xray apply candidates support the Core auto-format loader' test_xray_apply_supports_core_auto_format
 run_test 'Xray restart failure restores previous config and service' test_xray_apply_restart_failure_restores_previous_config_and_service
 run_test 'Xray health-check failure restores previous config and service' test_xray_apply_health_failure_restores_previous_config_and_service
 run_test 'repeated Xray apply produces stable runtime config' test_xray_apply_is_stable_when_repeated

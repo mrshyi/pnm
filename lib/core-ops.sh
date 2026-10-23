@@ -240,6 +240,7 @@ pnm_core_apply_config_locked() {
     pnm_make_temp_dir stage || return $?
     config="$stage/config"
     if [[ "$core" == xray ]]; then
+        config="$stage/config.json"
         pnm_render_xray_config "$node_name" "$secret_name" >"$config" || return $?
         if ! pnm_capture validation_output "$PNM_XRAY_BIN" run -test -config "$config"; then
             pnm_error 'Generated Xray configuration failed `xray run -test`; the current runtime config was not changed.'
