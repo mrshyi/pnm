@@ -108,7 +108,14 @@ Core、TLS 加载、账户创建、重启或外部客户端验收。
 启用链接残留。环境、命令和日志见 [TASKS.md](TASKS.md)。该结果补充真实
 systemd 下的替身服务生命周期证据；上述真实 Core/TLS/reboot/L3 边界不变。
 
-环境、命令退出码、31 套件/327 项结果及日志路径统一记录在 [TASKS.md](TASKS.md)。L1 的系统服务、账户操作和监听使用 mock，文件系统、权限、摘要和密码学工具真实执行；非 root 诊断、TLS 可读性探测、归档身份/解析、备份/暂存清理、准备锁、未决事务门禁及恢复调度兼容性另用真实 nobody UID 验证。独立事务新增真实子进程 INT/TERM/SIGKILL/异常退出及终结凭据窗口回归；restore 调度的 TERM 用例仍使用模拟服务，不算真实 systemd 验收。
+后续补偿策略修复的最终副本 `/var/tmp/pnm-recovery-policy-final`：默认
+`make check` **退出 0，31 套件/331 项通过**；ShellCheck（含显式集成脚本检查）
+退出 0；真实 systemd 替身测试 **7/7**，新增配置/更新补偿对 active/disabled
+基线的恢复检查。真实 nobody 的准备/补偿 **11/11**、生命周期证据 **23/23**
+均退出 0。最终测试单元清理后为 not-found/inactive，无 unit/enable-link 残留。
+这仍不是完整 Core 配置应用、TLS 加载、账户创建、reboot 或 L3 验收。
+
+环境、命令退出码、31 套件/331 项结果及日志路径统一记录在 [TASKS.md](TASKS.md)。默认 L1 的系统服务、账户操作和监听使用 mock，文件系统、权限、摘要和密码学工具真实执行；非 root 诊断、TLS 可读性探测、归档身份/解析、备份/暂存清理、准备锁、未决事务门禁及恢复调度兼容性另用真实 nobody UID 验证。独立事务新增真实子进程 INT/TERM/SIGKILL/异常退出及终结凭据窗口回归；restore 调度的 TERM 用例仍使用模拟服务，不算真实 systemd 验收。上述显式 systemd 入口单独记录。
 
 | 本地覆盖 | 实际断言 | 仍需补充 |
 |---|---|---|

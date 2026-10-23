@@ -105,6 +105,59 @@ test_config_recovery_preserves_original_numeric_metadata() {
     assert_eq "$original_attributes" "$(stat -c '%a:%u:%g' "$PNM_CORE_CONFIG")"
 }
 
+test_config_recovery_accepts_active_disabled_baseline() {
+    prepare_fixture
+    pnm_core_resolve xray || return 1
+    PNM_LIFECYCLE_PRE_ACTIVE=active PNM_LIFECYCLE_PRE_ENABLED=disabled
+    pnm_systemd_active_state() { printf 'active\n'; }
+    pnm_systemd_enabled_state() { printf 'disabled\n'; }
+    pnm_systemd_unit_healthy() { return 1; } # Installation policy rejects disabled.
+    printf 'original\n' >"$PNM_CORE_CONFIG"
+    printf 'candidate\n' >"$fixture_root/candidate"
+    pnm_tx_begin core-config-xray || return 1
+    pnm_tx_add_rollback pnm_core_restore_config || return 1
+    pnm_tx_write_file "$fixture_root/candidate" "$PNM_CORE_CONFIG" config 0640 required || return 1
+    pnm_tx_rollback || return 1
+    pnm_tx_close || return 1
+    assert_eq original "$(<"$PNM_CORE_CONFIG")" || return 1
+    assert_eq 0 "$PNM_TX_RECOVERY_REQUIRED"
+}
+
+test_compensation_rejects_inexact_runtime_policy() {
+    local callback observed_active observed_enabled
+    prepare_fixture
+    pnm_core_resolve xray || return 1
+    PNM_LIFECYCLE_PRE_ACTIVE=active PNM_LIFECYCLE_PRE_ENABLED=disabled
+    pnm_tx_restore_written_files() { return 0; }
+    pnm_systemd_active_state() { printf '%s\n' "$observed_active"; }
+    pnm_systemd_enabled_state() { printf '%s\n' "$observed_enabled"; }
+    for callback in pnm_core_restore_config pnm_core_update_rollback; do
+        for observed_active in active inactive unknown; do
+            for observed_enabled in enabled disabled unknown; do
+                [[ "$observed_active:$observed_enabled" != active:disabled ]] || continue
+                run_capture "$callback"
+                assert_eq 70 "$RUN_RC" "$callback must reject an inexact baseline" || return 1
+            done
+        done
+    done
+}
+
+test_compensation_rejects_failed_observations_with_valid_output() {
+    local callback failed_query
+    prepare_fixture
+    pnm_core_resolve xray || return 1
+    PNM_LIFECYCLE_PRE_ACTIVE=active PNM_LIFECYCLE_PRE_ENABLED=disabled
+    pnm_tx_restore_written_files() { return 0; }
+    pnm_systemd_active_state() { printf 'active\n'; [[ "$failed_query" != active ]]; }
+    pnm_systemd_enabled_state() { printf 'disabled\n'; [[ "$failed_query" != enabled ]]; }
+    for callback in pnm_core_restore_config pnm_core_update_rollback; do
+        for failed_query in active enabled; do
+            run_capture "$callback"
+            assert_eq 70 "$RUN_RC" "$callback must retain failed observation status" || return 1
+        done
+    done
+}
+
 test_preparation_retains_the_callers_lock_level() {
     local operation
     for operation in restart apply uninstall lifecycle; do
@@ -177,4 +230,7 @@ run_test 'remaining Core preparation excludes independent writers' test_preparat
 run_test 'remaining Core writers refuse contention before preparation' test_contention_precedes_all_preparation
 run_test 'remaining Core writers refuse pending recovery before preparation' test_pending_recovery_precedes_all_preparation
 run_test 'configuration compensation preserves original numeric metadata' test_config_recovery_preserves_original_numeric_metadata
+run_test 'configuration compensation accepts an active disabled baseline' test_config_recovery_accepts_active_disabled_baseline
+run_test 'compensation rejects inactive unknown or changed enable policy' test_compensation_rejects_inexact_runtime_policy
+run_test 'compensation rejects failed queries even with matching stdout' test_compensation_rejects_failed_observations_with_valid_output
 finish_tests

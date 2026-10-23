@@ -2,7 +2,13 @@
 
 This document describes the source baseline plus safety/G-02, persisted-port, lifecycle-evidence and update/restore-input changes through 2026-10-23. It is not a production deployment attestation. Verify behavior against source and tests when changing it.
 
-**Increment baseline:** branch `dev`, HEAD `6b98456bd571902f973a1aa89430f3a1fc887d5a`, `VERSION` `0.16.0-rc.1` (checked 2026-10-23).
+**Increment baseline:** branch `dev`, HEAD `bd937ee`, `VERSION` `0.16.0-rc.1` (checked 2026-10-23).
+
+Configuration and binary update/rollback compensation verify an active service
+against its captured enable policy, accepting an originally disabled service
+without enabling it. Failed state queries, unknown state and policy drift remain
+recovery errors. Forward health checks still require enabled. Update compensation
+continues to refresh only previously confirmed applied evidence after recovery.
 
 Restart, configuration apply, uninstall and standalone lifecycle now share the same preparation-through-close exclusive lock as update/rollback/restore/backup. The existing helper lives in common code for lifecycle reuse; nested backup/transactions preserve the caller's lock level. Argument/root/confirmation checks precede this boundary. Configuration compensation restores snapshot ownership/mode without normalizing them afterwards. Success paths explicitly propagate close failures, including lifecycle dry-run bookkeeping; uninstall preparation preserves its primary failure across directory cleanup and retains staging when close fails.
 

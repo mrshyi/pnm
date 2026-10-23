@@ -152,11 +152,14 @@ pnm_core_fix_owner() {
 }
 
 pnm_core_restore_config() {
-    local rc=0
+    local rc=0 active enabled
     pnm_tx_restore_written_files || return "$PNM_EXIT_SOFTWARE"
     if [[ "$PNM_LIFECYCLE_PRE_ACTIVE" == active ]]; then
         pnm_systemctl restart "$PNM_CORE_UNIT" || rc="$PNM_EXIT_SOFTWARE"
-        pnm_systemd_unit_healthy "$PNM_CORE_UNIT" || rc="$PNM_EXIT_SOFTWARE"
+        # Compensation verifies the original policy; a disabled baseline is valid.
+        active="$(pnm_systemd_active_state "$PNM_CORE_UNIT")" &&
+            enabled="$(pnm_systemd_enabled_state "$PNM_CORE_UNIT")" &&
+            [[ "$active" == active && "$enabled" == "$PNM_LIFECYCLE_PRE_ENABLED" ]] || rc="$PNM_EXIT_SOFTWARE"
     else
         pnm_systemctl stop "$PNM_CORE_UNIT" || rc="$PNM_EXIT_SOFTWARE"
     fi
@@ -510,9 +513,12 @@ pnm_core_update_locked() {
 }
 
 pnm_core_update_rollback() {
+    local active enabled
     pnm_tx_restore_written_files || return "$PNM_EXIT_SOFTWARE"
     pnm_systemctl restart "$PNM_CORE_UNIT" || return "$PNM_EXIT_SOFTWARE"
-    pnm_systemd_unit_healthy "$PNM_CORE_UNIT" || return "$PNM_EXIT_SOFTWARE"
+    active="$(pnm_systemd_active_state "$PNM_CORE_UNIT")" || return "$PNM_EXIT_SOFTWARE"
+    enabled="$(pnm_systemd_enabled_state "$PNM_CORE_UNIT")" || return "$PNM_EXIT_SOFTWARE"
+    [[ "$active" == active && "$enabled" == "$PNM_LIFECYCLE_PRE_ENABLED" ]] || return "$PNM_EXIT_SOFTWARE"
     pnm_core_recover_applied
 }
 

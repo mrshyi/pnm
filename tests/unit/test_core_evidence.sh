@@ -49,7 +49,7 @@ prepare_evidence_fixture() {
     declare -gA fixture_invocations=([xray.service]=0123456789abcdef0123456789abcdef [hysteria-server.service]=0123456789abcdef0123456789abcdef)
     declare -gA fixture_restarts=([xray.service]=0 [hysteria-server.service]=0)
     declare -gA fixture_active=([xray.service]=active [hysteria-server.service]=active)
-    fixture_health_failures=0 fixture_edit_record=0 fixture_edit_config=0
+    fixture_health_failures=0 fixture_edit_record=0 fixture_edit_config=0 fixture_enabled=enabled
     pnm_test_record_applied_config xray "$PNM_XRAY_CONFIG"
     pnm_test_record_applied_config hysteria2 "$PNM_HY2_CONFIG"
     local core
@@ -65,7 +65,7 @@ prepare_evidence_fixture() {
 pnm_require_root() { return 0; }
 pnm_make_temp_dir() { local created_stage; created_stage="$(mktemp -d "$fixture_root/stage.XXXXXXXX")" || return $?; printf -v "$1" '%s' "$created_stage"; }
 pnm_systemd_active_state() { printf '%s\n' "${fixture_active[$1]}"; }
-pnm_systemd_enabled_state() { printf 'enabled\n'; }
+pnm_systemd_enabled_state() { printf '%s\n' "$fixture_enabled"; }
 pnm_systemd_daemon_reload() { return 0; }
 pnm_systemd_show_value() { printf '%s\n' "${fixture_invocations[$1]}"; }
 pnm_systemctl() {
@@ -86,6 +86,7 @@ pnm_systemctl() {
 source <(declare -f pnm_systemctl | sed '1s/pnm_systemctl/pnm_test_real_systemctl/')
 pnm_systemd_unit_healthy() {
     [[ "${fixture_active[$1]}" == active ]] || return 1
+    [[ "$fixture_enabled" == enabled ]] || return 1
     if ((fixture_health_failures > 0)); then
         ((fixture_health_failures -= 1))
         return 1
@@ -167,6 +168,25 @@ test_health_failure_recovers_confirmed_evidence() {
             if "pnm_core_$operation" "$core"; then rc=0; else rc=$?; fi
             [[ "$rc" != 0 ]] || return 1
             ((fixture_restarts[$PNM_CORE_UNIT] > 0)) || return 1
+            assert_eq confirmed "$(pnm_core_applied_config_status "$core" "$PNM_CORE_CONFIG")" || return 1
+            assert_eq 1.2.3 "$(pnm_binary_version_number "$PNM_CORE_BINARY" xray)" || return 1
+            assert_peer_untouched "$core" || return 1
+            assert_eq 0 "$PNM_LOCK_DEPTH" || return 1
+        done
+    done
+}
+
+test_active_disabled_failure_recovers_original_policy() {
+    local core operation
+    for core in xray hysteria2; do
+        for operation in restart update rollback; do
+            prepare_evidence_fixture
+            fixture_enabled=disabled
+            run_capture "pnm_core_$operation" "$core"
+            assert_eq 78 "$RUN_RC" || return 1
+            assert_eq active "${fixture_active[$PNM_CORE_UNIT]}" || return 1
+            assert_eq disabled "$fixture_enabled" || return 1
+            assert_eq 0 "$PNM_TX_RECOVERY_REQUIRED" "$operation must accept the original disabled baseline" || return 1
             assert_eq confirmed "$(pnm_core_applied_config_status "$core" "$PNM_CORE_CONFIG")" || return 1
             assert_eq 1.2.3 "$(pnm_binary_version_number "$PNM_CORE_BINARY" xray)" || return 1
             assert_peer_untouched "$core" || return 1
@@ -569,6 +589,7 @@ run_test 'restart retains confirmed evidence for each Core' test_restart_keeps_c
 run_test 'update and rollback retain confirmed evidence for each Core' test_update_and_rollback_keep_confirmed_evidence
 run_test 'lifecycle commands retain missing changed and damaged evidence' test_missing_evidence_is_not_promoted
 run_test 'health failure recovers prior confirmed evidence and binary' test_health_failure_recovers_confirmed_evidence
+run_test 'active disabled failures recover the original policy without uncertainty' test_active_disabled_failure_recovers_original_policy
 run_test 'applied write failure recovers prior confirmed evidence and binary' test_applied_write_failure_recovers_original_state
 run_test 'commit failure recovers prior confirmed evidence and binary' test_commit_failure_recovers_confirmed_evidence
 run_test 'inactive baseline recovery retains its original evidence and stopped service' test_inactive_baseline_recovers_without_certifying_a_stopped_service

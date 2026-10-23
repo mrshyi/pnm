@@ -182,10 +182,41 @@ test_real_term_recovery() {
     flock -n "$PNM_LOCK_FILE" true
 }
 
+test_real_config_compensation_preserves_disabled_policy() {
+    pnm_systemctl start xray.service && pnm_systemctl disable xray.service || return 1
+    pnm_core_resolve xray || return 1
+    pnm_core_lifecycle_snapshot xray || return 1
+    printf 'candidate\n' >"$fixture_root/candidate"
+    pnm_tx_begin core-config-xray || return 1
+    pnm_tx_add_rollback pnm_core_restore_config || return 1
+    pnm_tx_write_file "$fixture_root/candidate" "$PNM_XRAY_CONFIG" core_config 0640 required || return 1
+    pnm_tx_rollback || return 1
+    pnm_tx_close || return 1
+    assert_eq '{}' "$(<"$PNM_XRAY_CONFIG")" || return 1
+    assert_service_policy xray.service active disabled
+}
+
+test_real_update_compensation_preserves_disabled_policy() {
+    local PNM_CORE_PRIOR_CONFIG_HASH='' PNM_CORE_PRIOR_APPLIED_HASH='' PNM_CORE_PRIOR_APPLIED_ATTRIBUTES=''
+    pnm_systemctl start xray.service && pnm_systemctl disable xray.service || return 1
+    pnm_core_resolve xray || return 1
+    pnm_core_lifecycle_snapshot xray || return 1
+    seed_applied_fixture xray "$PNM_XRAY_CONFIG" xray.service || return 1
+    pnm_tx_begin core-update-xray || return 1
+    pnm_core_capture_applied || return 1
+    pnm_tx_add_rollback pnm_core_update_rollback || return 1
+    pnm_tx_rollback || return 1
+    pnm_tx_close || return 1
+    assert_service_policy xray.service active disabled || return 1
+    assert_eq confirmed "$(pnm_core_applied_config_status xray "$PNM_XRAY_CONFIG")"
+}
+
 create_test_units
 run_test 'real systemd activates both isolated nobody fixtures' test_real_activation
 run_test 'real restart changes its invocation and preserves the peer' test_real_restart_retains_peer_and_binds_applied_invocation
 run_test 'real lifecycle failure restores inactive and disabled' test_real_inactive_disabled_recovery
 run_test 'real lifecycle failure preserves active but disabled' test_real_active_disabled_recovery
 run_test 'TERM compensates real isolated lifecycle state and releases its lock' test_real_term_recovery
+run_test 'real config compensation accepts the original disabled policy' test_real_config_compensation_preserves_disabled_policy
+run_test 'real update compensation refreshes evidence with disabled policy' test_real_update_compensation_preserves_disabled_policy
 finish_tests

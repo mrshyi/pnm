@@ -80,6 +80,8 @@ pnm_core_lifecycle_snapshot() {
     PNM_LIFECYCLE_PRE_ACTIVE=active
     PNM_LIFECYCLE_PRE_ENABLED=enabled
 }
+pnm_systemd_active_state() { printf 'active\n'; }
+pnm_systemd_enabled_state() { printf 'enabled\n'; }
 pnm_core_fix_owner() { return 0; }
 pnm_systemctl() {
     ((PNM_TEST_APPLY_RESTARTS += 1))

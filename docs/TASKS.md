@@ -1,14 +1,14 @@
 # PNM Current Tasks
 
-**Last reconciled:** 2026-10-23 (isolated Debian WSL systemd harness passes 5/5; prior `make check` passes 327 tests; real Core/production acceptance remains open)
+**Last reconciled:** 2026-10-23 (Core compensation preserves disabled policy; Debian WSL `make check` passes 331 tests and isolated systemd harness passes 7/7; real Core/production acceptance remains open)
 
-**Current increment baseline:** branch `dev`, HEAD `ee88135`, VERSION `0.16.0-rc.1`.
+**Current increment baseline:** branch `dev`, HEAD `bd937ee`, VERSION `0.16.0-rc.1`.
 
 This page is a status snapshot, not a test report. Status must be refreshed from current source, test output, or host evidence before it is changed. Historical Phase 2 analysis is preserved in [PHASE2_GAP_ANALYSIS.md](PHASE2_GAP_ANALYSIS.md).
 
 ## Active phase
 
-**Phase 3 — existing defect fixes and acceptance.** Phase 4 has not started. G-02, A-03/A-04, G-03/G-04 recovery, backup/input safety and G-06 access have local evidence in committed increments. The current continuation handles catchable standalone transaction exits; real systemd, reboot and client acceptance remain open. The user has authorized consecutive local stages and commits, and confirmed Debian WSL is the only available test environment.
+**Phase 3 — existing defect fixes and acceptance.** Phase 4 has not started. G-02, A-03/A-04, G-03/G-04 recovery, backup/input safety and G-06 access have local evidence in committed increments. The current continuation verifies compensation policy against real systemd stand-in services; actual Core, reboot and client acceptance remain open. The user has authorized consecutive local stages and commits, and confirmed Debian WSL is the only available test environment.
 
 Current review artifacts (2026-10-22):
 
@@ -697,6 +697,40 @@ The earlier HCS failure is historical, not the current blocker. This adds real
 systemd stand-in lifecycle evidence only; it does not establish actual Core
 configuration loading, TLS, provisioning, reboot, listener or external traffic.
 
+## Core compensation preserves disabled policy — 2026-10-23
+
+Root cause: config and binary update/rollback compensation reused install health,
+which requires enabled. A service originally active but disabled was restored
+correctly yet marked recovery-required; binary recovery also stopped before
+refreshing its prior confirmed applied InvocationID. Before the repair, preparation
+tests reported **8 passed / 1 failed**, evidence tests **22 passed / 1 failed**, and
+the extended actual systemd fixture **5 passed / 2 failed**.
+
+The two callbacks now require successful state queries, active runtime and the
+captured original enable policy. They do not enable a disabled service. Forward
+health policy is unchanged. A further regression reproduced the matching-stdout
+but failed-query edge (**10 passed / 1 failed**); explicit assignment/error checks
+retain failure instead of accepting output alone. Unknown/inactive states and
+changed enable policy also remain recovery errors. Independent source review
+accepted both corrections.
+
+Final frozen copy `/var/tmp/pnm-recovery-policy-final`: focused preparation
+**11/11** and real systemd fixture **7/7** passed. The two added systemd cases run
+actual config/update compensation callbacks and file transactions against the
+isolated sleep services; only the update case tests refreshed applied binding.
+They do not establish complete config-apply applied recovery or actual Core load.
+`make check` **exit 0, 31 suites / 331 passed / 0 failed**, including syntax and
+security scan. `make shellcheck` plus explicit integration-script ShellCheck
+**exit 0**. Real nobody preparation **11/11** and evidence **23/23**, both **exit 0**.
+The final two exact test units (`pnm-accept-e2dc3807-5ee3-41cf-8490-7302ad90b629-`
+plus `xray.service` / `hy2.service`) are both not-found/inactive after cleanup;
+no runtime unit file or enable-link remains. The earlier red-run private fixture
+`/var/tmp/pnm-systemd.QI0Hf1Lk` is intentionally retained as mode-0700 evidence;
+its two services were also removed. No real Core or production service changed.
+Logs use `/var/tmp/pnm-recovery-policy-final` with `.preparation.log`, `.systemd.log`,
+`.check.log`, `.lint.log`, `.preparation-nobody.log` and `.evidence-nobody.log`.
+Red/initial green logs share `/var/tmp/pnm-recovery-policy`.
+
 ## Verification already reported (historical host evidence)
 
 A prior user-provided `proxy-tokyo` read-only report stated that PNM 0.16.0-rc.1, both Core services/listeners, `pnm check`, and selected permissions were healthy, and that public client connections had succeeded. This report is historical and was not independently refreshed in this documentation task. It does not close the local failure-injection gaps above or prove the current installed source matches this HEAD.
@@ -706,8 +740,14 @@ A prior user-provided `proxy-tokyo` read-only report stated that PNM 0.16.0-rc.1
 1. Confirm deployed PNM source identity for G-01 using read-only checks.
 2. Accept the repaired A-03/A-04 paths in a disposable systemd VM, including explicit commands versus reboot/external restart; do not treat local results as completed Phase 3 acceptance.
 3. Use a disposable Debian 13 systemd VM for real lifecycle/recovery acceptance. The local WSL environment already provides Bash, make, ShellCheck, Python, ripgrep, zip/unzip, flock and OpenSSL for source and mock tests.
-4. Isolated WSL systemd lifecycle checks now pass 5/5. Accept real service-account/TLS/Core/reboot/client behavior separately; preserve these evidence boundaries.
+4. Isolated WSL systemd lifecycle checks now pass 7/7, including config/update callbacks with disabled baseline. Accept real service-account/TLS/Core/reboot/client behavior separately; preserve these evidence boundaries.
 5. Reassess Phase 3 completion. Do not start Phase 4 automatically.
+
+Remaining acceptance needs external prerequisites: an authorized deployed source
+identity for G-01, a disposable target for actual Core/account/TLS loading and
+reboot/fault injection, and external clients for dual-protocol traffic. Only Debian
+WSL is currently available. The stand-in service results do not close these items;
+Phase 3 remains incomplete and release work has not started.
 
 ## Boundaries
 
