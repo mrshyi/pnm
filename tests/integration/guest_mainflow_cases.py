@@ -1,4 +1,5 @@
 from pathlib import Path
+from datetime import datetime
 import hashlib,json,os,pwd,grp,re,secrets,signal,subprocess,sys
 from urllib.parse import urlsplit,parse_qs
 mapping=[int(x) for x in Path('/proc/self/uid_map').read_text().split()]
@@ -57,10 +58,110 @@ def absent():
         try:
             pwd.getpwnam(name)
         except KeyError:
-            continue
-        raise RuntimeError('unexpected preexisting managed identity')
+            pass
+        else:
+            raise RuntimeError('unexpected preexisting managed identity')
+        try:
+            grp.getgrnam(name)
+        except KeyError:
+            pass
+        else:
+            raise RuntimeError('unexpected preexisting managed group')
     for name in ('/usr/local/bin/xray','/usr/local/bin/hysteria','/usr/local/etc/xray/config.json','/etc/hysteria/config.yaml','/etc/systemd/system/xray.service','/etc/systemd/system/hysteria-server.service'):
         check(not Path(name).exists() and not Path(name).is_symlink(),'unexpected managed resource')
+def fingerprint(path: str | Path) -> tuple[str,int,int,int]:
+    p=Path(path)
+    st=p.stat()
+    return (hashlib.sha256(p.read_bytes()).hexdigest(),st.st_mode,st.st_uid,st.st_gid)
+
+def deployment_failure_cases() -> None:
+    # Filter command discovery only within this guest process. No package or
+    # system executable is removed, replaced or mocked.
+    baseline_paths=('/etc/pnm/node.conf','/etc/pnm/versions.conf','/etc/passwd','/etc/group','/etc/shadow','/etc/gshadow')
+    baseline={p:fingerprint(p) for p in baseline_paths}
+    transactions=Path('/var/lib/pnm/transactions')
+    before_transactions=set(transactions.iterdir())
+    filtered=logs/'without-openssl'
+    filtered.mkdir(mode=0o700)
+    for folder in ('/usr/sbin','/usr/bin','/sbin','/bin'):
+        for program in Path(folder).iterdir():
+            link=filtered/program.name
+            if program.name!='openssl' and program.is_file() and os.access(program,os.X_OK) and not link.exists():
+                link.symlink_to(program)
+    original_path=env['PATH']
+    env['PATH']=str(filtered)
+    try:
+        refusal=call('missing-openssl',['install','--apply','--yes'],accepted=(2,))
+    finally:
+        env['PATH']=original_path
+    check(b'TLS tools are unavailable' in refusal.stdout and b'openssl' in refusal.stdout,'preflight refusal has a different cause')
+    absent()
+    check(baseline=={p:fingerprint(p) for p in baseline_paths},'missing dependency changed configuration or identities')
+    check(before_transactions==set(transactions.iterdir()),'missing dependency began a write transaction')
+    passed.append('missing TLS dependency refuses before managed resource mutation')
+
+    # A real unit start delay crosses the supported 30-second commit window.
+    # This changes only a uniquely owned drop-in inside this disposable guest.
+    delay_dir=Path('/etc/systemd/system/xray.service.d')
+    check(not delay_dir.exists() and not delay_dir.is_symlink(),'unexpected delay directory')
+    delay_dir.mkdir(mode=0o755)
+    delay=delay_dir/'pnm-test-delay.conf'
+    delay.write_text('[Service]\nExecStartPre=/bin/sleep 35\n')
+    delay_policy=fingerprint(delay)
+    subprocess.run(['systemctl','daemon-reload'],check=True,timeout=15,capture_output=True)
+    directories=('/etc/pnm','/etc/pnm/secrets','/usr/local/etc/xray','/etc/hysteria','/etc/hysteria/tls','/usr/local/bin','/etc/systemd/system')
+    def directory_state(path: str) -> tuple[int,int,int,int,int] | None:
+        p=Path(path)
+        if not p.exists():
+            return None
+        st=p.stat()
+        return st.st_mode,st.st_uid,st.st_gid,st.st_dev,st.st_ino
+    directory_baseline={p:directory_state(p) for p in directories}
+    env['PNM_APPLY_GATE_COMMIT_WINDOW_SECONDS']='30'
+    try:
+        call('deadline-install',['install','--apply','--yes'],accepted=(77,))
+    finally:
+        del env['PNM_APPLY_GATE_COMMIT_WINDOW_SECONDS']
+    absent()
+    check(baseline=={p:fingerprint(p) for p in baseline_paths},'rollback changed baseline configuration or identities')
+    check(directory_baseline=={p:directory_state(p) for p in directories},'rollback did not restore directory identity or metadata')
+    check(fingerprint(delay)==delay_policy,'rollback changed the preexisting delay drop-in')
+    for unit in ('xray.service','hysteria-server.service'):
+        check(show(unit,'LoadState')=='not-found' and show(unit,'ActiveState')=='inactive' and show(unit,'MainPID')=='0','rollback left a managed service or process')
+    for protocol,port in (('tcp',443),('udp',8443)):
+        sockets=subprocess.check_output(['ss','-H','-lnt' if protocol=='tcp' else '-lnu'],text=True,timeout=10)
+        check(not any(re.search(r':'+str(port)+r'\b',line) for line in sockets.splitlines()),'rollback left a managed listener')
+    for core in ('xray','hysteria2'):
+        check(not Path('/var/lib/pnm/cores/'+core+'/applied.env').exists(),'rollback retained applied promotion')
+    created=set(transactions.iterdir())-before_transactions
+    check(len(created)==1,'unexpected deployment transaction count')
+    transaction=created.pop()
+    events=[line.split('\t')[1] for line in (transaction/'journal.tsv').read_text().splitlines()]
+    check('ROLLBACK_COMPLETE' in events and events[-1]=='ROLLED_BACK' and 'RECOVERY_REQUIRED' not in events,'deployment compensation is incomplete')
+    check(not (transaction/'commit.env').exists(),'failed deployment has a commit marker')
+    deployments=list(Path('/var/lib/pnm/deployments').iterdir())
+    check(len(deployments)==1,'unexpected deployment receipt count')
+    journal=(deployments[0]/'journal.tsv').read_text()
+    check('\tPHASE_DONE\tpost-health\n' in journal,'failure did not follow actual dual-Core post-health')
+    apply_receipts=list(Path('/var/lib/pnm/apply').iterdir())
+    check(len(apply_receipts)==1,'unexpected apply receipt count')
+    receipt=apply_receipts[0]
+    metadata=fields(receipt/'metadata.env')
+    deadline=int(metadata['COMMIT_DEADLINE_EPOCH'])
+    check(deadline-int(metadata['CREATED_EPOCH'])==30,'commit window differs from fixture')
+    audit=[line.split('\t') for line in (receipt/'journal.tsv').read_text().splitlines()]
+    names=[row[1] for row in audit]
+    failures=[row for row in audit if row[1]=='APPLY_FAILED']
+    check(len(failures)==1 and failures[0][2]=='rc=77','apply failure cause differs from fixture')
+    check(names.index('APPLY_DONE')<names.index('HEALTH_CHECK')<names.index('APPLY_FAILED') and 'COMMIT' not in names,'apply failed before the deadline gate')
+    check(int(datetime.fromisoformat(failures[0][0].replace('Z','+00:00')).timestamp())>deadline,'apply failed before the recorded deadline')
+    check(not (receipt/'commit.env').exists(),'failed apply receipt has a commit pointer')
+    check(fields('/etc/pnm/node.conf')['PNM_CONFIGURED']=='no','rollback left node committed')
+    delay.unlink()
+    delay_dir.rmdir()
+    subprocess.run(['systemctl','daemon-reload'],check=True,timeout=15,capture_output=True)
+    passed.append('late deployment deadline restores live services resources accounts and commit state')
+
 try:
     absent()
     passed.append('fresh guest has no managed accounts or resources')
@@ -78,6 +179,11 @@ try:
     absent()
     check(fields('/etc/pnm/node.conf')['PNM_CONFIGURED']=='no','preview committed node state')
     passed.append('installation preview leaves accounts and runtime resources absent')
+    scenario=Path('/opt/pnm-test-scenario').read_text().strip()
+    check(scenario in ('lifecycle','deployment-failure'),'unknown guest scenario')
+    if scenario=='deployment-failure':
+        stage='actual dependency refusal and late deployment compensation'
+        deployment_failure_cases()
     stage='installation apply'
     call('install-apply',['install','--apply','--yes'])
     check(fields('/etc/pnm/node.conf')['PNM_CONFIGURED']=='yes','successful install lacks committed node state')
@@ -128,10 +234,6 @@ try:
       'hysteria2':('/usr/local/bin/hysteria','/etc/hysteria/config.yaml','/etc/pnm/secrets/hysteria.env','/etc/hysteria/tls/server.crt','/etc/hysteria/tls/server.key','/etc/systemd/system/hysteria-server.service')}
     units={'xray':'xray.service','hysteria2':'hysteria-server.service'}
     configs={'xray':'/usr/local/etc/xray/config.json','hysteria2':'/etc/hysteria/config.yaml'}
-    def fingerprint(path):
-        p=Path(path)
-        st=p.stat()
-        return (hashlib.sha256(p.read_bytes()).hexdigest(),st.st_mode,st.st_uid,st.st_gid)
     def core_state(core):
         unit=units[core]
         return {'invocation':show(unit,'InvocationID'),'pid':show(unit,'MainPID'),

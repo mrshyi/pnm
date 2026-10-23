@@ -14,6 +14,7 @@ parser=argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--baseline',type=Path,required=True,help='private verified boot fixture parent')
 parser.add_argument('--nspawn',type=Path,required=True,help='trusted native systemd-nspawn executable')
 parser.add_argument('--asset-cache',type=Path,required=True,help='verified pinned Core asset cache')
+parser.add_argument('--scenario',choices=('lifecycle','deployment-failure'),default='lifecycle')
 options=parser.parse_args()
 for location in (options.baseline,options.nspawn):
     assert location.is_absolute() and location==location.resolve(), 'canonical trusted paths required'
@@ -88,6 +89,7 @@ for core,extension in (('xray','zip'),('hysteria2','bin')):
     path.write_bytes(assets[core])
     path.chmod(0o600)
 write_clone_file(root/'opt/pnm-test-versions.json',json.dumps(manifest))
+write_clone_file(root/'opt/pnm-test-scenario',options.scenario)
 prefix=[str(options.nspawn),'--directory='+str(root),'--machine=placeholder','--settings=no','--register=no','--link-journal=no','--private-network','--private-users=pick','--private-users-ownership=auto','--resolv-conf=off','--timezone=off','--console=pipe']
 machine='pnm-install-'+uuid.uuid4().hex[:18]
 prefix=[('--directory='+str(root)) if s.startswith('--directory=') else ('--machine='+machine) if s.startswith('--machine=') else s for s in prefix]

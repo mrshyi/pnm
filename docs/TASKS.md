@@ -1,8 +1,8 @@
 # PNM Current Tasks
 
-**Last reconciled:** 2026-10-24 (default checks pass 362 tests; actual guest main-flow 14/14 and offline harness guards 5/5 pass; fault recovery, reboot and external acceptance remain open)
+**Last reconciled:** 2026-10-24 (default 362 tests; actual guest main-flow 14/14 and deployment-failure/retry 16/16 pass; broader fault, update, reboot and external acceptance remain open)
 
-**Current increment baseline:** branch `dev`, parent HEAD `4ed029e`, VERSION `0.16.0-rc.1`.
+**Current increment baseline:** branch `dev`, parent HEAD `719b003`, VERSION `0.16.0-rc.1`.
 
 This page is a status snapshot, not a test report. Status must be refreshed from current source, test output, or host evidence before it is changed. Historical Phase 2 analysis is preserved in [PHASE2_GAP_ANALYSIS.md](PHASE2_GAP_ANALYSIS.md).
 
@@ -91,10 +91,10 @@ not close G-02 or prove systemd recovery, reboot or public client connectivity.
 | Item | Current status | Evidence / blocker | Next action |
 |---|---|---|---|
 | G-01 — runtime/config/link state | BLOCKED for production acceptance | Current `lib/node.sh` source prints an HY2 runtime row. Prior production output reportedly omitted it despite the same VERSION; deployed executable/source identity has not been verified in this session. | On an authorized host, perform read-only path/version/source-hash comparison; do not apply or upgrade as diagnosis. |
-| G-02 — complete deployment rollback | IMPLEMENTED / local filesystem and mock checks PASS; systemd acceptance open | One deployment transaction now spans resources, lifecycle, applied/node state and final outer checks; durable marker and unresolved-deployment guards are tested. | Run the disposable-systemd/interrupt/reboot matrix in [the acceptance plan](ACCEPTANCE_PLAN.md); do not infer production readiness. |
+| G-02 — complete deployment rollback | Actual guest late-deadline rollback/retry PASS / broader failure matrix open | Real dual-Core post-health precedes a cause-qualified deadline failure; live services/accounts/resources/metadata and commit state compensate, then installation and lifecycle retry pass. | Continue interruption, other failure points, concurrent commands and independent VM reboot matrix; do not infer production readiness. |
 | G-03 — Core update transaction | PARTIAL local/stand-in PASS / integrated Core acceptance open | Publication, preparation locks, metadata drift and compensation have local tests; isolated systemd callbacks preserve disabled baselines. Real Core traffic is separate evidence, not a managed Core update test. | Run the integrated binary/metadata/service/concurrent-command/interruption matrix in a disposable VM. |
 | G-04 — backup/restore safety | Actual private-guest trusted round trip PASS / failure matrix open | Real CLI restores resource bytes/metadata and both Core applied bindings; trusted archive checksum is retained separately. Default input/compensation checks pass. | Accept interruption, injected restore failure, concurrent commands and reboot separately. |
-| G-05 — dependency preflight | MOCK TESTS PASS / systemd acceptance open | Debian 13 WSL preflight suite passes 14/14, including configured ports, invalid-node refusal, repeat-install refusal and missing-tool checks. Mock results do not prove real systemd install ordering. | Verify missing tools before managed-resource mutation in a disposable systemd VM. |
+| G-05 — dependency preflight | Actual guest missing-TLS-tool and repeat refusal PASS / remaining tools mocked | A private PATH hides only openssl: real CLI refuses for that cause before transaction/resource/account mutation. Repeat-install also preserves both running Cores. | Extend remaining dependency classes and supported distributions separately. |
 | G-06 — HY2 TLS permissions | Actual private-guest account/TLS loading PASS | Real hysteria NSS identity runs the official Core with no effective capabilities and NoNewPrivs; CLI TLS access checks, certificate pin and listener pass. Prior mapped-account local traffic is separate evidence. | Extend reuse/failure cases and external client acceptance; do not infer external reachability. |
 
 ## G-02 deployment transaction — working-tree implementation
@@ -1103,14 +1103,38 @@ Commands, prerequisites, deadlines and evidence boundaries are documented in
 time-sync check, new-version update, injected failure recovery, kernel reboot,
 deployed-source identity or external traffic is established by the 14-case result.
 
+## Actual deployment deadline failure and retry — 2026-10-24
+
+The existing opt-in harness now offers `PNM_GUEST_SCENARIO=deployment-failure`.
+Fresh `/var/tmp/pnm-install-guest.vh5luh5b` exits 0: **16/16** checks pass, including
+missing-openssl refusal and late deployment compensation, followed by the original
+14 installation/lifecycle/restore checks after retry. No production code changed.
+Only the private guest PATH hides a tool; its actual executable/package remains.
+The refusal cause, unchanged desired/NSS bytes and no new transaction are checked.
+
+A guest-owned Xray startup delay crosses the existing 30-second commit window.
+The test requires real dual-Core post-health completion, APPLY_DONE/HEALTH_CHECK
+before APPLY_FAILED rc77, metadata window30, failure timestamp beyond its deadline,
+and no durable commit/pointer. This qualifies the cause beyond a generic rc77.
+Live rollback verifies absent Core processes/listeners/units/accounts/groups and
+applied promotion, original node/version/NSS bytes and directory identity/metadata,
+unchanged preexisting drop-in and completed rollback without RECOVERY_REQUIRED.
+Only that exact owned delay is removed before the successful retry.
+
+Final host evidence confirms nspawn exit0, no interruption, unchanged account/
+package databases, not-found scope and no fixture mounts. Protected raw reports
+and copied-source hashes remain in the fixture. This closes one real late-failure
+case, not all interruption/concurrency/failure positions, a new-version update,
+kernel reboot or external acceptance. The default suite remains the prior31/362.
+
 ## Verification already reported (historical host evidence)
 
 A prior user-provided `proxy-tokyo` read-only report stated that PNM 0.16.0-rc.1, both Core services/listeners, `pnm check`, and selected permissions were healthy, and that public client connections had succeeded. This report is historical and was not independently refreshed in this documentation task. It does not close the local failure-injection gaps above or prove the current installed source matches this HEAD.
 
 ## Immediate next steps
 
-Next run late-deployment rollback and missing-dependency cases in a fresh native
-guest. The successful 14-case main flow cannot replace
+Next exercise actual distinct-version Core update/rollback in a fresh native
+guest. Successful main flow and late-deadline rollback cannot replace
 the following VM/reboot, deployed-host and external-client prerequisites.
 
 1. Confirm deployed PNM source identity for G-01 using read-only checks.

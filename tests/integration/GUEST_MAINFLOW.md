@@ -25,6 +25,15 @@ make test-guest-mainflow \
   PNM_REAL_CORE_ASSETS=/var/tmp/pnm-realcore-discovery
 ```
 
+Set `PNM_GUEST_SCENARIO=deployment-failure` on the same command for the failure
+and retry scenario. It first hides openssl only from a private test PATH and
+requires refusal before managed writes. A guest-only Xray startup delay then
+crosses the supported 30-second deployment commit window, after real dual-Core
+post-health. It requires exit77, complete live/resource/account/directory rollback,
+no applied or commit promotion, and completed rollback receipts. Only its owned
+delay drop-in is removed before retrying the original 14-case main flow. The
+default scenario remains `lifecycle`; no production function is replaced.
+
 Each invocation creates a new private `/var/tmp/pnm-install-guest.*` clone and
 unique native scope, rotates only that clone's machine ID, copies current PNM
 source and checked asset bytes, and compiles the guest scripts before boot.
