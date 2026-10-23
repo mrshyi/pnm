@@ -17,12 +17,16 @@ import sys
 import tempfile
 import time
 import uuid
-from urllib.parse import parse_qs, unquote, urlsplit
+from urllib.parse import parse_qs, quote, unquote, urlencode, urlsplit
 import zipfile
 
 
 class CheckFailed(RuntimeError):
     """A safe diagnostic label, never raw Core output or configuration."""
+
+
+class UnitExited(CheckFailed):
+    """The candidate exec succeeded but its observed unit has already exited."""
 
 
 # The pinned Xray blocks private/documentation destinations by default. This
@@ -123,7 +127,8 @@ class Harness:
         require(result.returncode == 0, "systemd observation failed")
         return result.stdout.decode().strip()
 
-    def start(self, label: str, args: list[str], *, join: str | None = None) -> str:
+    def start(self, label: str, args: list[str], *, join: str | None = None,
+              environment: dict[str, str] | None = None) -> str:
         name = f"{self.prefix}-{len(self.units)}-{label}.service"
         require(self.value(name, "LoadState") == "not-found", "test unit collision")
         self.units[name] = args[0]  # Register intent before the manager can start it.
@@ -135,12 +140,17 @@ class Harness:
         if join:
             require(join in self.units and self.value(join, "ActiveState") == "active", "join target inactive")
             properties.append(f"JoinsNamespaceOf={join}")
+        if environment:
+            properties.extend(f"Environment={key}={value}" for key, value in environment.items())
         command = ["systemd-run", "--quiet", "--collect", "--no-ask-password",
                    "--service-type=exec", f"--unit={name}"]
         command.extend(f"--property={item}" for item in properties)
         require(run(command + ["--"] + args).returncode == 0, "test unit exec failed")
         time.sleep(0.2)
-        require(self.value(name, "ActiveState") == "active", "test unit did not stay active")
+        state = self.value(name, "ActiveState")
+        if state in ("inactive", "failed"):
+            raise UnitExited("test unit exited after exec")
+        require(state == "active", "test unit did not stay active")
         pid = int(self.value(name, "MainPID"))
         status = Path(f"/proc/{pid}/status").read_text()
         require(f"Uid:\t{self.uid}\t{self.uid}\t{self.uid}\t{self.uid}" in status,
@@ -188,6 +198,54 @@ class Harness:
                 return
             time.sleep(0.25)
         raise CheckFailed("local protocol transfer failed")
+
+    def require_cause(self, log: Path, cause: str) -> None:
+        for _ in range(30):
+            if log.exists() and cause in log.read_text():
+                return
+            time.sleep(0.1)
+        raise CheckFailed("expected refusal cause was not observed")
+
+    def reject_xray(self, fd: int, unit: str, config: dict, label: str,
+                    cause: str, log_name: str, marker: str, *, trust: Path | None = None) -> None:
+        config["inbounds"][0]["port"] = 31812 + int(label == "bad-reality")
+        port = config["inbounds"][0]["port"]
+        path = self.write(f"{label}.json", json.dumps(config))
+        require(run(self.offline + [str(self.xray), "run", "-test", "-config", str(path)]).returncode == 0,
+                "negative Xray candidate failed configuration validation")
+        # Trust only in this candidate's process: otherwise an untrusted fixture
+        # fallback certificate would hide the more precise REALITY refusal.
+        name = self.start(label, [str(self.xray), "run", "-config", str(path)], join=unit,
+                          environment={"SSL_CERT_FILE": str(trust)} if trust else None)
+        require(not self.probe(fd, port, marker), "invalid Xray credentials transferred data")
+        self.require_cause(self.root / "logs" / log_name, cause)
+        # Invalid REALITY clients retain a fallback spider connection. Retire the
+        # candidate before rechecking our single-connection fixture TLS endpoint.
+        self.stop_owned(name, self.units[name])
+        self.wait_probe(fd, 31810, marker)
+        self.check(f"{label} refused with its expected cause; valid Xray transfers after candidate cleanup")
+
+    def reject_hy2(self, fd: int, unit: str, uri: str, label: str, cause: str, marker: str) -> None:
+        path = self.write(f"{label}.yaml", f"server: {json.dumps(uri)}\n"
+                          "socks5:\n  listen: 127.0.0.1:31812\n")
+        name = f"{self.prefix}-{len(self.units)}-{label}.service"
+        try:
+            self.start(label, [str(self.hy2), "client", "-c", str(path)], join=unit)
+        except UnitExited:
+            # Early exit alone is insufficient: require the exact protocol/TLS
+            # cause below, a stopped owned candidate and a live positive control.
+            pass
+        self.require_cause(self.root / "logs" / f"{label}.log", cause)
+        require(name in self.units and self.value(name, "ActiveState") in ("failed", "inactive"),
+                "rejected HY2 candidate remains active")
+        if label == "bad-auth":
+            # PNM's production masquerade is an HTTPS reverse proxy. In this
+            # interface-less namespace its .invalid target returns 502 on auth
+            # refusal; corroborate that path, rather than accepting any failure.
+            self.require_cause(self.root / "logs/hy2.log", "HTTP reverse proxy error")
+            self.require_cause(self.root / "logs/hy2.log", "pnm-accept.invalid")
+        self.wait_probe(fd, 31811, marker)
+        self.check(f"{label} refused with its expected cause; valid HY2 URI still transfers")
 
     def exercise(self) -> None:
         self.stage = "actual versions"
@@ -269,6 +327,20 @@ class Harness:
             self.start(f"{core}-client", args, join=unit)
             self.wait_probe(fd, port, marker)
             self.check(f"{core} transfers through its real local client")
+            if core == "xray":
+                self.stage = "VLESS UUID refusal"
+                denied = json.loads(json.dumps(config))
+                denied_id = str(uuid.uuid4())
+                denied["outbounds"][0]["settings"]["vnext"][0]["users"][0]["id"] = denied_id
+                self.reject_xray(fd, unit, denied, "bad-vless", f"invalid request user id: {denied_id}",
+                                 "xray.log", marker)
+                self.stage = "REALITY short ID refusal"
+                denied = json.loads(json.dumps(config))
+                wrong_short_id = ("0" if short_id[0] != "0" else "1") + short_id[1:]
+                denied["outbounds"][0]["streamSettings"]["realitySettings"]["shortId"] = wrong_short_id
+                self.reject_xray(fd, unit, denied, "bad-reality",
+                                 "REALITY: received real certificate (potential MITM or redirection)",
+                                 "bad-reality.log", marker, trust=cert)
             if core == "hysteria2":
                 self.stage = "PNM share-link pin"
                 uri = json.loads((self.root / "hy2-link.json").read_text())["hysteria2"]
@@ -290,21 +362,34 @@ class Harness:
                         raise CheckFailed("PNM share pin rejected: certificate fingerprint mismatch") from error
                     raise
                 self.check("PNM share-link pin transfers through the official HY2 client")
+                self.stage = "HY2 certificate pin refusal"
+                wrong_query = {name: values[0] for name, values in query.items()}
+                wrong_query["pinSHA256"] = ("0" if query["pinSHA256"][0][0] != "0" else "1") + query["pinSHA256"][0][1:]
+                self.reject_hy2(fd, unit, link._replace(query=urlencode(wrong_query)).geturl(), "bad-pin",
+                                "no certificate matches the pinned hash", marker)
+                self.stage = "HY2 authentication refusal"
+                wrong_auth = link._replace(netloc=f"{quote(password + '_invalid', safe='')}@{link.hostname}:{link.port}")
+                self.reject_hy2(fd, unit, wrong_auth.geturl(), "bad-auth",
+                                "authentication error, HTTP status code: 502", marker)
+
+    def stop_owned(self, name: str, binary: str) -> None:
+        require(self.units.get(name) == binary, "unregistered test unit refused")
+        if self.value(name, "LoadState") != "not-found":
+            require(self.value(name, "Description") == name and self.value(name, "User") == str(self.uid)
+                    and self.value(name, "Transient") == "yes" and self.value(name, "PrivateNetwork") == "yes"
+                    and binary in self.value(name, "ExecStart"), "changed test unit retained")
+            require(run(["systemctl", "stop", name]).returncode == 0, "test unit stop failed")
+            for _ in range(20):
+                if self.value(name, "LoadState") == "not-found":
+                    break
+                time.sleep(0.1)
+            require(self.value(name, "LoadState") == "not-found", "test unit still loaded")
 
     def cleanup(self, success: bool) -> bool:
         okay = True
         for name, binary in reversed(self.units.items()):
             try:
-                if self.value(name, "LoadState") != "not-found":
-                    require(self.value(name, "Description") == name and self.value(name, "User") == str(self.uid)
-                            and self.value(name, "Transient") == "yes" and self.value(name, "PrivateNetwork") == "yes"
-                            and binary in self.value(name, "ExecStart"), "changed test unit retained")
-                    require(run(["systemctl", "stop", name]).returncode == 0, "test unit stop failed")
-                    for _ in range(20):
-                        if self.value(name, "LoadState") == "not-found":
-                            break
-                        time.sleep(0.1)
-                    require(self.value(name, "LoadState") == "not-found", "test unit still loaded")
+                self.stop_owned(name, binary)
                 print(f"# cleaned unit={name}", flush=True)
             except (CheckFailed, OSError, subprocess.SubprocessError):
                 okay = False

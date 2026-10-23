@@ -35,7 +35,7 @@ Stages:
 - [x] Implement an explicit opt-in real-Core test entry. Reuse production renderers,
   validate Xray config, then observe both real startup and HY2 TLS loading.
 - [x] Verify positive local client traffic through both Cores.
-- [ ] Follow with authentication/TLS rejection cases that verify valid candidates
+- [x] Follow with authentication/TLS rejection cases that verify valid candidates
   and the expected refusal cause, not arbitrary startup/connect failures.
   Preserve the external-client boundary.
 - [x] Run static checks and independent safety review before service execution;
@@ -86,3 +86,34 @@ production change, then passed 5/5 and 30/30. `pnm-pin-green-v2.real.log` passes
 no hand-mapped authentication/TLS fields. All eight test units were cleaned.
 Readiness is mapped solely in the URI fixture and independently tested startup
 is not full PNM managed-service readiness. The repair retains the internal schema.
+
+Rejection-stage design: mutate only VLESS UUID or REALITY short ID in a copy of
+the validated real client config; validate each with the real Xray before probing.
+Require the corresponding private server/client log cause, then repeat the correct
+client's transfer. For HY2, mutate only the URI pin or password, require respectively
+the exact fingerprint mismatch or authentication HTTP 502 plus server masquerade
+evidence, observe that the owned
+candidate has stopped, then repeat the working URI transfer. No arbitrary failed
+connection or invalid config counts as a refusal. All candidates remain in the
+same owned private namespace and use the existing guarded cleanup.
+The REALITY short-ID candidate trusts the fixture fallback certificate only via
+its own `SSL_CERT_FILE` environment. Host trust is untouched; this prevents an
+unknown-CA error from masking the explicit REALITY unverified-connection cause.
+After recording an Xray refusal, stop the owned negative client through the same
+ownership/stop guard as final cleanup before repeating the valid transfer. Invalid
+REALITY's fallback spider otherwise holds the single-connection openssl fixture
+endpoint; the first run showed queued valid requests released only on candidate
+cleanup. This tests refusal and subsequent recovery, not concurrent DoS resistance.
+The production HY2 proxy masquerade targets the fixture's `.invalid` TLS name.
+Official server source routes rejected authentication to that proxy; in the private
+namespace it produces 502, not a default 404. Require both the client's typed auth
+error and the server's reverse-proxy error for that target, then repeat the valid
+URI. The earlier strict 404 expectation failed and was not counted as acceptance.
+
+Final rejection-stage evidence: `/var/tmp/pnm-rejection-final.real.log` passes
+**10/10**, including all four refusals and subsequent valid transfers. The offline
+guard covers four safety failures and passes before the real run; syntax/security/
+ShellCheck/Python compilation pass. All twelve owned units and the success fixture
+were cleaned. The available WSL plan is complete; actual managed-account/lifecycle,
+disposable-VM reboot/fault injection, deployed-source identity and external-client
+acceptance remain open in TASKS. Phase 3 and release readiness are not complete.

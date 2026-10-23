@@ -1,14 +1,14 @@
 # PNM Current Tasks
 
-**Last reconciled:** 2026-10-23 (Debian WSL default checks pass 354 tests, isolated systemd stand-ins 8/8, real Core/PNM HY2 URI traffic 6/6; rejection cases and production acceptance remain open)
+**Last reconciled:** 2026-10-23 (Debian WSL default checks pass 354 tests, isolated systemd stand-ins 8/8, real Core/URI positive and refusal checks 10/10; managed-account/lifecycle, reboot and external acceptance remain open)
 
-**Current increment baseline:** branch `dev`, HEAD `b658013`, VERSION `0.16.0-rc.1`.
+**Current increment baseline:** branch `dev`, HEAD `93b6368`, VERSION `0.16.0-rc.1`.
 
 This page is a status snapshot, not a test report. Status must be refreshed from current source, test output, or host evidence before it is changed. Historical Phase 2 analysis is preserved in [PHASE2_GAP_ANALYSIS.md](PHASE2_GAP_ANALYSIS.md).
 
 ## Active phase
 
-**Phase 3 — existing defect fixes and acceptance.** Phase 4 has not started. G-02, A-03/A-04, G-03/G-04 recovery, backup/input safety and G-06 access have local evidence in committed increments. Compensation has isolated systemd stand-in evidence, and real Core/local client traffic now passes, including the repaired HY2 URI pin. Rejection cases, actual account/lifecycle integration, reboot and external clients remain open. The user has authorized consecutive local stages and commits, and confirmed Debian WSL is the only available test environment.
+**Phase 3 — existing defect fixes and acceptance.** Phase 4 has not started. G-02, A-03/A-04, G-03/G-04 recovery, backup/input safety and G-06 access have local evidence in committed increments. Compensation has isolated systemd stand-in evidence; real Core/local client traffic, the repaired HY2 URI pin and cause-qualified refusal/recovery now pass. Actual account/lifecycle integration, reboot and external clients remain open. The user has authorized consecutive local stages and commits, and confirmed Debian WSL is the only available test environment.
 
 Current review artifacts (2026-10-22):
 
@@ -920,6 +920,39 @@ independently checks DER and unchanged persisted Secret, and the public source c
 allows real non-root traversal. Private fixture/evidence parents remain protected.
 Rejection cases and external/reboot/account acceptance remain open.
 
+## Real Core refusal and recovery evidence — 2026-10-23
+
+The frozen `/var/tmp/pnm-rejection-final` source passes opt-in
+`make test-real-cores`: **10/10**, with the sanitized result in
+`/var/tmp/pnm-rejection-final.real.log`. Syntax/security/ShellCheck and Python
+compilation exit 0. The preceding offline guard passes all four safety-failure
+subcases; it first failed against the former broad exception catch, then passed
+after only an observed post-exec candidate exit became tolerable. Manager, UID,
+privilege and namespace assertion failures cannot become refusal success.
+
+Real Xray validates both negative client configs before execution. A wrong VLESS
+UUID produces its exact server refusal; a wrong REALITY short ID produces the
+explicit unverified-connection cause with process-local fixture CA trust. Each
+candidate is retired through the same guarded ownership/stop path as final cleanup,
+then the correct client transfers again. The single-connection TLS fixture had
+blocked later handshakes while the invalid client's fallback spider was alive;
+the final result proves refusal and recovery after candidate exit, not concurrent
+DoS resistance. No production configuration or host trust is changed.
+
+HY2 rejects a wrong certificate pin with the exact mismatch cause, and a wrong
+password with a typed authentication HTTP 502 plus the configured masquerade's
+reverse-proxy error/fixture target evidence. The official server routes failed auth
+to masquerade; this isolated proxy target is unreachable, so 502 is specific to
+this fixture rather than a universal auth status. Both rejected clients exit and
+the valid full PNM URI transfers again after each. All **12 owned units** are
+not-found and the successful runtime fixture is removed.
+
+This stage changes only opt-in tests/Makefile/docs. The production/default-test
+baseline remains the prior **31 suites / 354 passing tests**; that full suite was
+not redundantly rerun for these isolated test additions. Actual managed accounts,
+integrated deployment/update/restore/recovery, reboot and external clients remain
+separate acceptance work. No disposable target or external client is available.
+
 ## Verification already reported (historical host evidence)
 
 A prior user-provided `proxy-tokyo` read-only report stated that PNM 0.16.0-rc.1, both Core services/listeners, `pnm check`, and selected permissions were healthy, and that public client connections had succeeded. This report is historical and was not independently refreshed in this documentation task. It does not close the local failure-injection gaps above or prove the current installed source matches this HEAD.
@@ -929,12 +962,13 @@ A prior user-provided `proxy-tokyo` read-only report stated that PNM 0.16.0-rc.1
 1. Confirm deployed PNM source identity for G-01 using read-only checks.
 2. Accept the repaired A-03/A-04 paths in a disposable systemd VM, including explicit commands versus reboot/external restart; do not treat local results as completed Phase 3 acceptance.
 3. Use a disposable Debian 13 systemd VM for real lifecycle/recovery acceptance. The local WSL environment already provides Bash, make, ShellCheck, Python, ripgrep, zip/unzip, flock and OpenSSL for source and mock tests.
-4. Isolated WSL systemd lifecycle checks now pass 8/8, including failed apply dispatch/applied recovery and config/update callbacks with disabled baseline. Accept real service-account/TLS/Core/reboot/client behavior separately.
+4. Isolated WSL systemd stand-ins pass 8/8 and real Core/TLS/local-client positive/refusal checks pass 10/10. Accept actual managed accounts and integrated PNM lifecycle/recovery, reboot and external clients separately.
 5. Reassess Phase 3 completion. Do not start Phase 4 automatically.
 
 Remaining acceptance needs external prerequisites: an authorized deployed source
-identity for G-01, a disposable target for actual Core/account/TLS loading and
-reboot/fault injection, and external clients for dual-protocol traffic. Only Debian
+identity for G-01, a disposable target for actual managed-account provisioning,
+integrated lifecycle/recovery and reboot/fault injection, and external clients for
+dual-protocol traffic. Only Debian
 WSL is currently available. The stand-in service results do not close these items;
 Phase 3 remains incomplete and release work has not started.
 
