@@ -35,6 +35,7 @@ source "$PROJECT_ROOT/lib/output.sh"
 source "$PROJECT_ROOT/lib/config.sh"
 source "$PROJECT_ROOT/lib/render.sh"
 source "$PROJECT_ROOT/lib/tls.sh"
+source "$PROJECT_ROOT/lib/check.sh"
 # shellcheck source=../../adapters/network.sh
 source "$PROJECT_ROOT/adapters/network.sh"
 # Keep the sourced library defaults from shadowing this script's fixture paths.
@@ -74,6 +75,55 @@ run_fake_pnm() {
         PNM_HY2_CONFIG="$CHECK_RUNTIME_DIR/hysteria-config.yaml" \
         "$PROJECT_ROOT/bin/pnm" "$@"
 }
+
+check_xray_binary_resolution() (
+    local competing="${1:?competing executable flag required}" temp_dir original_path expected_status
+    temp_dir="$(mktemp -d -- "$CHECK_RUNTIME_DIR/health.XXXXXXXX")"
+    mkdir -- "$temp_dir/path"
+    ln -s -- "$(command -v head)" "$temp_dir/path/head"
+    export PNM_XRAY_BIN="$temp_dir/managed-xray"
+    export PNM_XRAY_CONFIG="$CHECK_RUNTIME_DIR/xray-config.json"
+    export PNM_TEST_HEALTH_LOG="$temp_dir/managed.log"
+    export PNM_TEST_DECOY_LOG="$temp_dir/decoy.log"
+    cat >"$PNM_XRAY_BIN" <<'EOF'
+#!/bin/bash
+if [[ "$#" == 1 && "$1" == version ]]; then
+    printf 'version\n' >>"$PNM_TEST_HEALTH_LOG"
+    printf 'Xray 26.10.21\n'
+elif [[ "$#" == 4 && "$1" == run && "$2" == -test && "$3" == -config && "$4" == "$PNM_XRAY_CONFIG" ]]; then
+    printf 'config-test\n' >>"$PNM_TEST_HEALTH_LOG"
+else
+    exit 64
+fi
+EOF
+    chmod 0700 -- "$PNM_XRAY_BIN"
+    if [[ "$competing" == yes ]]; then
+        cat >"$temp_dir/path/xray" <<'EOF'
+#!/bin/bash
+printf 'unexpected invocation\n' >"$PNM_TEST_DECOY_LOG"
+exit 1
+EOF
+        chmod 0700 -- "$temp_dir/path/xray"
+    fi
+    # Isolate service/listener observations while preserving actual executable
+    # discovery, config-test invocation, capture and health result handling.
+    pnm_service_state_line() { printf 'loaded|active|enabled|running\n'; }
+    pnm_listener_present() { [[ "$1" == tcp && "$2" == 443 ]]; }
+    pnm_check_reset
+    PNM_CHECK_CONFIGURED=1
+    original_path="$PATH"
+    PATH="$temp_dir/path"
+    pnm_check_xray
+    PATH="$original_path"
+    expected_status=OK
+    ((EUID == 0)) || expected_status=UNKNOWN
+    assert_eq "$expected_status" "${PNM_CHECK_STATUSES[0]}" || return 1
+    assert_eq $'version\nconfig-test' "$(<"$PNM_TEST_HEALTH_LOG")" || return 1
+    [[ ! -e "$PNM_TEST_DECOY_LOG" ]]
+)
+
+test_xray_health_without_path_binary() { check_xray_binary_resolution no; }
+test_xray_health_ignores_competing_path_binary() { check_xray_binary_resolution yes; }
 
 test_passing_check_json() {
     PNM_FAKE_PROFILE=pass run_capture run_fake_pnm --json check
@@ -199,6 +249,8 @@ test_supported_platform_matrix() {
     done
 }
 
+run_test 'Xray health tests the managed binary when PATH has no xray' test_xray_health_without_path_binary
+run_test 'Xray health ignores a competing PATH executable' test_xray_health_ignores_competing_path_binary
 run_test 'fully healthy fixture returns PASS JSON' test_passing_check_json
 run_test 'FAIL takes exit-code precedence' test_failure_exit_precedence
 run_test 'quiet mode emits no stdout' test_quiet_has_no_stdout

@@ -195,7 +195,7 @@ pnm_check_xray() {
         pnm_check_add xray "$severity" 'Xray configuration is missing or unreadable' "$PNM_XRAY_CONFIG"
         return 0
     fi
-    if ! pnm_capture test_output xray run -test -config "$PNM_XRAY_CONFIG"; then
+    if ! pnm_capture test_output "$PNM_XRAY_BIN" run -test -config "$PNM_XRAY_CONFIG"; then
         pnm_check_add xray FAIL 'Xray configuration test failed' 'xray run -test returned non-zero'
         return 0
     fi

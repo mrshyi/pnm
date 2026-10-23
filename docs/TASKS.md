@@ -1,8 +1,8 @@
 # PNM Current Tasks
 
-**Last reconciled:** 2026-10-24 (default checks pass 359 tests; isolated real CLI installation/account checks 8/8; integrated lifecycle/recovery, reboot and external acceptance remain open)
+**Last reconciled:** 2026-10-24 (default checks pass 361 tests; isolated real CLI installation/account checks 8/8 with minimal PATH; integrated lifecycle/recovery, reboot and external acceptance remain open)
 
-**Current increment baseline:** branch `dev`, parent HEAD `cc2bc54`, VERSION `0.16.0-rc.1`.
+**Current increment baseline:** branch `dev`, parent HEAD `a664d7d`, VERSION `0.16.0-rc.1`.
 
 This page is a status snapshot, not a test report. Status must be refreshed from current source, test output, or host evidence before it is changed. Historical Phase 2 analysis is preserved in [PHASE2_GAP_ANALYSIS.md](PHASE2_GAP_ANALYSIS.md).
 
@@ -1027,6 +1027,25 @@ then repeat minimal-PATH installation before repeat-install and lifecycle cases.
 See the [renderer repair plan](superpowers/plans/2026-10-24-renderer-scope.md).
 These are local private-guest installation checks, not integrated update/restore,
 network acquisition, traffic, reboot, deployed-source or external acceptance.
+
+## Managed executable health repair — 2026-10-24
+
+The Xray health configuration test now invokes `PNM_XRAY_BIN`, matching version
+discovery and the configured managed Core. A missing PATH entry cannot cause a
+false config failure, and a competing PATH executable cannot substitute for the
+managed binary. Arguments, error propagation and strict health gates are unchanged.
+The two regressions fail before the fix (13 pass / 2 fail), then pass (15/15).
+Independent review found no blocking issue. Frozen source
+`/var/tmp/pnm-health-green.hni1ico0` passes syntax/security/ShellCheck and the full
+default suite: **31 suites / 361 tests, exit 0**.
+
+Fresh `/var/tmp/pnm-install-guest.i84_5clp/boot-result.json` records **8/8** actual
+installation/account/process/applied/link/health checks with the originally failing
+minimal PATH. Host boundary approval, nspawn exit 0, unchanged host databases,
+not-found scope and no remaining fixture mounts pass. Offline-cache, time-sync,
+traffic and external/reboot evidence boundaries remain as above. Next exercise
+repeat-install refusal, per-Core restart/apply independence and trusted backup/
+restore using actual NSS/systemd in a fresh clone.
 
 ## Verification already reported (historical host evidence)
 
