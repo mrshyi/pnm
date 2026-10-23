@@ -67,6 +67,25 @@ test_status_json() {
     python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["schema"] == "pnm.status.v1"' <<<"$RUN_OUTPUT"
 }
 
+test_update_cli_loads_approved_assets_before_preparation() (
+    local root core
+    if ((EUID != 0)); then
+        printf '# SKIP: real update CLI requires root\n'
+        return 0
+    fi
+    root="$(mktemp -d)"
+    trap 'rm -rf -- "$root"' EXIT
+    for core in xray hy2; do
+        run_capture env PNM_CONFIG_DIR="$TEST_ROOT/fixtures/config-valid" \
+            PNM_STATE_DIR="$root/state" PNM_LOCK_FILE="$root/lock" \
+            bash "$PROJECT_ROOT/bin/pnm" update "$core" --version v0.0.1
+        assert_eq 78 "$RUN_RC" || return 1
+        assert_contains "$RUN_ERROR" 'Requested version is not approved' || return 1
+        assert_not_contains "$RUN_ERROR" 'command not found' || return 1
+        [[ ! -e "$root/state/transactions" ]] || return 1
+    done
+)
+
 run_test 'help command' test_help
 run_test 'version command' test_version
 run_test 'unknown command returns usage' test_unknown_command
@@ -77,4 +96,5 @@ run_test 'installer exposes usage information' test_installer_help
 run_test 'non-TTY no-argument call does not block' test_non_tty_without_command
 run_test 'json and quiet are mutually exclusive' test_json_quiet_conflict
 run_test 'status emits valid JSON' test_status_json
+run_test 'actual update CLI loads approvals before Core preparation' test_update_cli_loads_approved_assets_before_preparation
 finish_tests

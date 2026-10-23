@@ -1,8 +1,8 @@
 # PNM Current Tasks
 
-**Last reconciled:** 2026-10-24 (default 362 tests; actual guest main-flow 14/14 and deployment-failure/retry 16/16 pass; broader fault, update, reboot and external acceptance remain open)
+**Last reconciled:** 2026-10-24 (default363 tests; actual guest main-flow14/14, failure/retry16/16 and distinct-version update scenario22/22 pass; broader fault/reboot/external acceptance remain open)
 
-**Current increment baseline:** branch `dev`, parent HEAD `719b003`, VERSION `0.16.0-rc.1`.
+**Current increment baseline:** branch `dev`, parent HEAD `d6b89d1`, VERSION `0.16.0-rc.1`.
 
 This page is a status snapshot, not a test report. Status must be refreshed from current source, test output, or host evidence before it is changed. Historical Phase 2 analysis is preserved in [PHASE2_GAP_ANALYSIS.md](PHASE2_GAP_ANALYSIS.md).
 
@@ -1126,6 +1126,30 @@ package databases, not-found scope and no fixture mounts. Protected raw reports
 and copied-source hashes remain in the fixture. This closes one real late-failure
 case, not all interruption/concurrency/failure positions, a new-version update,
 kernel reboot or external acceptance. The default suite remains the prior31/362.
+
+## CLI update asset dependency repair — 2026-10-24
+
+Actual update in guest `ut1_l8m2` exposed a missing CLI source dependency:
+`pnm_assets_load` exists in lib/assets.sh, but bin/pnm loaded only its adapter.
+Update returned78 before any request, which the cause-qualified checksum test
+correctly rejected. The entry now sources the existing library after its adapter;
+the removed broad assets command remains unavailable and no public route changes.
+Installer packaging already copies the complete lib directory.
+
+The actual CLI regression checks both Core names' unapproved-version refusal,
+correct reason and absence of a write transaction in private state/lock paths.
+It fails before repair (10 pass/1 fail), then passes11/11. Independent review
+found no blocking issue. Frozen `/var/tmp/pnm-cli-assets-green.fqpxumap` passes
+syntax/security/ShellCheck and `make check`: **31 suites/363 tests, exit0**.
+
+Fresh guest `2t13z9ae` passes the distinct-version scenario **22/22** after this
+repair, including the original14 on the older official pair and each Core's
+checksum refusal, update, rollback and swap forward. Private HTTPS substitutes
+asset transport only; actual curl/TLS/checksum/version/staging/publication/health
+and applied logic run. Host databases remain unchanged, nspawn exits0, scope is
+not-found and no fixture mounts remain. The separate uncommitted test increment
+retains source hashes and protected evidence; upstream network/PKI, broader fault
+recovery, reboot and external clients remain unaccepted.
 
 ## Verification already reported (historical host evidence)
 

@@ -43,6 +43,8 @@ source "$PNM_LIB_DIR/lifecycle.sh"
 source "$PNM_ADAPTER_DIR/network.sh"
 # shellcheck source=../adapters/assets.sh
 source "$PNM_ADAPTER_DIR/assets.sh"
+# shellcheck source=../lib/assets.sh
+source "$PNM_LIB_DIR/assets.sh"
 # shellcheck source=../lib/deploy.sh
 source "$PNM_LIB_DIR/deploy.sh"
 # shellcheck source=../lib/apply-gate.sh
