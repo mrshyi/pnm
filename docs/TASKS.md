@@ -1,14 +1,14 @@
 # PNM Current Tasks
 
-**Last reconciled:** 2026-10-24 (default checks pass 362 tests; actual guest install, repeat refusal, per-Core restart/apply pass; restore times out and remains open)
+**Last reconciled:** 2026-10-24 (default checks pass 362 tests; actual guest main-flow 14/14 and offline harness guards 5/5 pass; fault recovery, reboot and external acceptance remain open)
 
-**Current increment baseline:** branch `dev`, parent HEAD `1b804e7`, VERSION `0.16.0-rc.1`.
+**Current increment baseline:** branch `dev`, parent HEAD `4ed029e`, VERSION `0.16.0-rc.1`.
 
 This page is a status snapshot, not a test report. Status must be refreshed from current source, test output, or host evidence before it is changed. Historical Phase 2 analysis is preserved in [PHASE2_GAP_ANALYSIS.md](PHASE2_GAP_ANALYSIS.md).
 
 ## Active phase
 
-**Phase 3 — existing defect fixes and acceptance.** Phase 4 has not started. G-02, A-03/A-04, G-03/G-04 recovery, backup/input safety and G-06 access have local evidence in committed increments. Compensation has isolated systemd stand-in evidence; real Core/local client traffic, the repaired HY2 URI pin and cause-qualified refusal/recovery now pass. Actual account/lifecycle integration, reboot and external clients remain open. The user has authorized consecutive local stages and commits, and confirmed Debian WSL is the only available test environment.
+**Phase 3 — existing defect fixes and acceptance.** Phase 4 has not started. Local evidence now includes actual managed-account installation, independent Core restart/apply and trusted backup/restore in a private Debian guest, plus the earlier real Core/local-client positive/refusal checks. Integrated update/fault recovery, reboot and external clients remain open. The user has authorized consecutive local stages and commits, and confirmed Debian WSL is the only available test environment.
 
 Current review artifacts (2026-10-22):
 
@@ -16,7 +16,7 @@ Current review artifacts (2026-10-22):
 - [Deployment transaction design](DEPLOYMENT_TRANSACTION_DESIGN.md): accepted direction with a dated working-tree scope and remaining differences from the original proposal.
 - [Acceptance plan](ACCEPTANCE_PLAN.md): layered evidence and fault-injection matrix; not an executed test report.
 
-Source review confirms listener health gates, symmetric Core reporting, transactional publication/recovery, trusted-input policy and archive resource limits, unresolved-journal guards and HY2 TLS access checks. The latest production repair corrects HY2 client fingerprints while preserving stored configuration. The available WSL plan now has default regression, isolated systemd stand-in and real Core/URI positive/refusal evidence. The remaining work is actual managed-account and integrated lifecycle/recovery acceptance, disposable-target reboot/fault injection, deployed-source identity and external clients. Detailed chronological increments below retain their original evidence boundaries; the table and final next steps summarize current work.
+Source review confirms listener health gates, symmetric Core reporting, transactional publication/recovery, trusted-input policy and archive resource limits, unresolved-journal guards and HY2 TLS access checks. Actual guest testing additionally repaired renderer scope, managed health executable selection and Xray candidate format. The remaining work includes integrated update/fault recovery, reboot/fault injection, deployed-source identity and external clients. Detailed chronological increments below retain their original evidence boundaries; the table and final next steps summarize current work.
 
 ## Safety prerequisite slice — working-tree implementation
 
@@ -93,9 +93,9 @@ not close G-02 or prove systemd recovery, reboot or public client connectivity.
 | G-01 — runtime/config/link state | BLOCKED for production acceptance | Current `lib/node.sh` source prints an HY2 runtime row. Prior production output reportedly omitted it despite the same VERSION; deployed executable/source identity has not been verified in this session. | On an authorized host, perform read-only path/version/source-hash comparison; do not apply or upgrade as diagnosis. |
 | G-02 — complete deployment rollback | IMPLEMENTED / local filesystem and mock checks PASS; systemd acceptance open | One deployment transaction now spans resources, lifecycle, applied/node state and final outer checks; durable marker and unresolved-deployment guards are tested. | Run the disposable-systemd/interrupt/reboot matrix in [the acceptance plan](ACCEPTANCE_PLAN.md); do not infer production readiness. |
 | G-03 — Core update transaction | PARTIAL local/stand-in PASS / integrated Core acceptance open | Publication, preparation locks, metadata drift and compensation have local tests; isolated systemd callbacks preserve disabled baselines. Real Core traffic is separate evidence, not a managed Core update test. | Run the integrated binary/metadata/service/concurrent-command/interruption matrix in a disposable VM. |
-| G-04 — backup/restore safety | PARTIAL local/stand-in PASS / integrated Core acceptance open | Trusted-input policy requires independently verified provenance. Locked snapshots, archive budgets/file identity, staging cleanup and restore compensation are tested. Unresolved standalone guards are implemented and covered by the passing default suite. | Accept integrated restore with actual Core/accounts, interruption/reboot and concurrent commands in a disposable target. |
+| G-04 — backup/restore safety | Actual private-guest trusted round trip PASS / failure matrix open | Real CLI restores resource bytes/metadata and both Core applied bindings; trusted archive checksum is retained separately. Default input/compensation checks pass. | Accept interruption, injected restore failure, concurrent commands and reboot separately. |
 | G-05 — dependency preflight | MOCK TESTS PASS / systemd acceptance open | Debian 13 WSL preflight suite passes 14/14, including configured ports, invalid-node refusal, repeat-install refusal and missing-tool checks. Mock results do not prove real systemd install ordering. | Verify missing tools before managed-resource mutation in a disposable systemd VM. |
-| G-06 — HY2 TLS permissions | PARTIAL local DAC and real Core TLS PASS / managed-account integration open | Root/nobody DAC and failure probes pass. Official HY2 loads the fixture certificate/key and transfers under an unprivileged systemd sandbox; managed account names/NSS remain mapped. | Verify actual hysteria account provisioning/reuse and its managed-path permissions/sandbox in a disposable target. |
+| G-06 — HY2 TLS permissions | Actual private-guest account/TLS loading PASS | Real hysteria NSS identity runs the official Core with no effective capabilities and NoNewPrivs; CLI TLS access checks, certificate pin and listener pass. Prior mapped-account local traffic is separate evidence. | Extend reuse/failure cases and external client acceptance; do not infer external reachability. |
 
 ## G-02 deployment transaction — working-tree implementation
 
@@ -1075,20 +1075,48 @@ interrupted run and retire their owned guest/scope without host database change
 or fixture mounts. Next diagnose restore and bound CLI descendant cleanup on
 timeout before committing the harness. No production apply or release occurred.
 
+## Reusable actual guest main flow — 2026-10-24
+
+The restore interruption above was caused by the inherited boot-only test unit's
+**80-second** RuntimeMaxSec, not an established production restore hang. Only
+the fresh clone's dedicated test unit now has 390 seconds; guest cases retain a
+300-second cap and the independent host deadline remains 420. No production
+restore change was needed. CLI calls own separate sessions and retire their
+command group on timeout, preventing inherited PIPE fds from extending the wait.
+
+The repository's explicit `make test-guest-mainflow` now exits 0 in fresh guest
+`/var/tmp/pnm-install-guest._slfzj2u`: **14/14** installation/account/process,
+repeat-refusal, per-Core restart/apply/peer preservation and trusted backup/restore
+checks pass. Restoration verifies all archived resource bytes and metadata,
+both new actual invocations, refreshed applied bindings, links and final health.
+The final host report verifies live guest cgroup boundaries, normal nspawn exit 0,
+unchanged host account/package databases, not-found scope and no fixture mounts.
+Copied-source hashes and secret-bearing raw evidence remain in its private parent.
+
+The five offline safety guards pass; all four Python files compile. FIFO failure
+was reproduced before adding nonblocking open; real helper tests also cover links
+and the PIPE-holding descendant. Independent review found no blocking issue.
+The unchanged default production suite remains **31/362** from the preceding
+successful run; it was not redundantly rerun for this separate opt-in harness.
+Commands, prerequisites, deadlines and evidence boundaries are documented in
+[the guest test guide](../tests/integration/GUEST_MAINFLOW.md). No acquisition,
+time-sync check, new-version update, injected failure recovery, kernel reboot,
+deployed-source identity or external traffic is established by the 14-case result.
+
 ## Verification already reported (historical host evidence)
 
 A prior user-provided `proxy-tokyo` read-only report stated that PNM 0.16.0-rc.1, both Core services/listeners, `pnm check`, and selected permissions were healthy, and that public client connections had succeeded. This report is historical and was not independently refreshed in this documentation task. It does not close the local failure-injection gaps above or prove the current installed source matches this HEAD.
 
 ## Immediate next steps
 
-Next run scoped PNM account/installation/lifecycle cases in the verified native
-guest above. This can supplement local integration evidence; it cannot replace
+Next run late-deployment rollback and missing-dependency cases in a fresh native
+guest. The successful 14-case main flow cannot replace
 the following VM/reboot, deployed-host and external-client prerequisites.
 
 1. Confirm deployed PNM source identity for G-01 using read-only checks.
 2. Accept the repaired A-03/A-04 paths in a disposable systemd VM, including explicit commands versus reboot/external restart; do not treat local results as completed Phase 3 acceptance.
 3. Use a disposable Debian 13 systemd VM for real lifecycle/recovery acceptance. The local WSL environment already provides Bash, make, ShellCheck, Python, ripgrep, zip/unzip, flock and OpenSSL for source and mock tests.
-4. Isolated WSL systemd stand-ins pass 8/8 and real Core/TLS/local-client positive/refusal checks pass 10/10. Accept actual managed accounts and integrated PNM lifecycle/recovery, reboot and external clients separately.
+4. Isolated WSL stand-ins pass 8/8, real Core/local-client checks pass 10/10, and the actual private guest main flow passes 14/14. Continue new-version update, injected failure recovery, concurrency, reboot and external clients separately.
 5. Reassess Phase 3 completion. Do not start Phase 4 automatically.
 
 Local account/lifecycle acceptance can now continue in the verified Debian WSL
