@@ -2,7 +2,14 @@
 
 This document describes the source baseline plus safety/G-02, persisted-port, lifecycle-evidence and update/restore-input changes through 2026-10-23. It is not a production deployment attestation. Verify behavior against source and tests when changing it.
 
-**Increment baseline:** branch `dev`, HEAD `bd937ee`, `VERSION` `0.16.0-rc.1` (checked 2026-10-23).
+**Increment baseline:** branch `dev`, HEAD `bb323d8`, `VERSION` `0.16.0-rc.1` (checked 2026-10-23).
+
+Config apply captures previously confirmed applied evidence in local baseline
+fields before mutation. Failed apply rebinds it to the recovered invocation only
+after file/service verification. Unknown prior evidence is preserved; external
+content or metadata edits retain recovery-required. Applied publication in the
+two config transaction operations requires existing metadata receipts, without
+requiring the new candidate digest to equal the old configuration digest.
 
 Configuration and binary update/rollback compensation verify an active service
 against its captured enable policy, accepting an originally disabled service

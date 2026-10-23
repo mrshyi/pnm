@@ -211,6 +211,35 @@ test_real_update_compensation_preserves_disabled_policy() {
     assert_eq confirmed "$(pnm_core_applied_config_status xray "$PNM_XRAY_CONFIG")"
 }
 
+test_real_apply_failure_recovers_confirmed_invocation() {
+    local original peer temporary
+    pnm_init_runtime
+    PNM_CONFIG_DIR="$fixture_root/apply-config"
+    mkdir -m 0700 "$PNM_CONFIG_DIR"
+    cp -R "$TEST_ROOT/fixtures/config-secrets/." "$PNM_CONFIG_DIR/"
+    PNM_XRAY_BIN="$fixture_root/core-validation-stub"
+    printf '#!/usr/bin/env bash\nexit 0\n' >"$PNM_XRAY_BIN"
+    chmod 0700 "$PNM_XRAY_BIN"
+    pnm_node_xray_reality_public_key() { return 0; }
+    pnm_core_fix_owner() { return 0; }
+    pnm_systemd_unit_healthy() { return 78; } # Inject forward health failure.
+    pnm_systemctl enable xray.service && pnm_systemctl start xray.service || return 1
+    seed_applied_fixture xray "$PNM_XRAY_CONFIG" xray.service || return 1
+    original="$(pnm_tx_file_sha256 "$PNM_XRAY_CONFIG")"
+    peer="$(pnm_systemd_show_value hysteria-server.service InvocationID)"
+    run_capture pnm_core_apply_config xray
+    assert_eq 78 "$RUN_RC" || return 1
+    assert_eq "$original" "$(pnm_tx_file_sha256 "$PNM_XRAY_CONFIG")" || return 1
+    assert_eq confirmed "$(pnm_core_applied_config_status xray "$PNM_XRAY_CONFIG")" || return 1
+    assert_eq 0 "$PNM_TX_RECOVERY_REQUIRED" || return 1
+    assert_eq "$peer" "$(pnm_systemd_show_value hysteria-server.service InvocationID)" || return 1
+    assert_service_policy xray.service active enabled || return 1
+    pnm_cleanup || return 1
+    for temporary in "${PNM_CLEANUP_PATHS[@]}"; do
+        [[ ! -e "$temporary" && ! -L "$temporary" ]] || return 1
+    done
+}
+
 create_test_units
 run_test 'real systemd activates both isolated nobody fixtures' test_real_activation
 run_test 'real restart changes its invocation and preserves the peer' test_real_restart_retains_peer_and_binds_applied_invocation
@@ -219,4 +248,5 @@ run_test 'real lifecycle failure preserves active but disabled' test_real_active
 run_test 'TERM compensates real isolated lifecycle state and releases its lock' test_real_term_recovery
 run_test 'real config compensation accepts the original disabled policy' test_real_config_compensation_preserves_disabled_policy
 run_test 'real update compensation refreshes evidence with disabled policy' test_real_update_compensation_preserves_disabled_policy
+run_test 'real config apply failure rebinds confirmed applied InvocationID' test_real_apply_failure_recovers_confirmed_invocation
 finish_tests

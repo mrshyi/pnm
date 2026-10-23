@@ -21,6 +21,7 @@ source <(declare -f pnm_tx_manifest_append | sed '1s/pnm_tx_manifest_append/pnm_
 source <(declare -f pnm_tx_write_file | sed '1s/pnm_tx_write_file/pnm_test_real_write_file/')
 source <(declare -f pnm_tx_begin | sed '1s/pnm_tx_begin/pnm_test_real_tx_begin/')
 source <(declare -f pnm_tx_close | sed '1s/pnm_tx_close/pnm_test_real_tx_close/')
+source <(declare -f pnm_tx_commit | sed '1s/pnm_tx_commit/pnm_test_real_tx_commit/')
 
 suite_root="$(mktemp -d)"
 trap 'rm -rf -- "$suite_root"' EXIT
@@ -585,6 +586,139 @@ test_external_config_edit_is_not_confirmed() {
     assert_eq 1 "$PNM_TX_RECOVERY_REQUIRED"
 }
 
+prepare_apply_evidence_fixture() {
+    prepare_evidence_fixture
+    fixture_apply_fault=${1:-none} fixture_apply_injected=0
+    # Keep actual config rendering, transaction receipts and evidence checks.
+    # Only external identity/Core/TLS checks and fault injection are mapped.
+    pnm_node_xray_reality_public_key() { return 0; }
+    pnm_hysteria_tls_server_name() { return 0; }
+    pnm_tls_certificate_check() { printf 'OK|fixture\n'; }
+    pnm_hysteria_config_matches_node() { return 0; }
+    pnm_core_fix_owner() { return 0; }
+    pnm_systemctl() {
+        if [[ "$fixture_apply_fault:$fixture_apply_injected" == restart:0 ]]; then
+            fixture_apply_injected=1; return 69
+        fi
+        pnm_test_real_systemctl "$@"
+    }
+    pnm_core_record_applied_config() {
+        [[ "$fixture_apply_fault" != record ]] || return 73
+        pnm_test_real_record_applied_config "$@"
+    }
+    pnm_tx_commit() {
+        if [[ "$fixture_apply_fault" == record-metadata ]]; then
+            chmod 0640 "$PNM_STATE_DIR/cores/$PNM_CORE_ID/applied.env" || return 70
+            return 73
+        fi
+        if [[ "$fixture_apply_fault" == record-content ]]; then
+            printf '# external publication edit\n' >>"$PNM_STATE_DIR/cores/$PNM_CORE_ID/applied.env"
+            return 73
+        fi
+        [[ "$fixture_apply_fault" != commit ]] || return 73
+        pnm_test_real_tx_commit "$@"
+    }
+    [[ "$fixture_apply_fault" != health ]] || fixture_health_failures=1
+}
+
+test_config_apply_failures_recover_confirmed_evidence() {
+    local core fault original attributes expected
+    for core in xray hysteria2; do
+        for fault in restart health record commit; do
+            prepare_apply_evidence_fixture "$fault"
+            pnm_core_resolve "$core" || return 1
+            original="$(pnm_tx_file_sha256 "$PNM_CORE_CONFIG")"
+            attributes="$(stat -c '%a:%u:%g' "$PNM_CORE_CONFIG")"
+            case "$fault" in restart) expected=69 ;; health) expected=1 ;; *) expected=73 ;; esac
+            run_capture pnm_core_apply_config "$core"
+            assert_eq "$expected" "$RUN_RC" || return 1
+            assert_eq "$original" "$(pnm_tx_file_sha256 "$PNM_CORE_CONFIG")" || return 1
+            assert_eq "$attributes" "$(stat -c '%a:%u:%g' "$PNM_CORE_CONFIG")" || return 1
+            assert_eq confirmed "$(pnm_core_applied_config_status "$core" "$PNM_CORE_CONFIG")" || return 1
+            assert_eq 0 "$PNM_TX_RECOVERY_REQUIRED" || return 1
+            assert_eq 0 "$PNM_LOCK_DEPTH" || return 1
+            assert_peer_untouched "$core" || return 1
+        done
+    done
+}
+
+test_config_apply_does_not_certify_unconfirmed_prior_evidence() {
+    local core state record original
+    for core in xray hysteria2; do
+        for state in missing stale damaged; do
+            prepare_apply_evidence_fixture health
+            record="$PNM_STATE_DIR/cores/$core/applied.env"
+            case "$state" in
+                missing) rm "$record" ;;
+                stale) sed -i 's/SERVICE_INVOCATION_ID=.*/SERVICE_INVOCATION_ID=ffffffffffffffffffffffffffffffff/' "$record" ;;
+                damaged) printf 'SCHEMA_VERSION=invalid\n' >"$record" ;;
+            esac
+            original=MISSING
+            [[ ! -e "$record" ]] || original="$(pnm_tx_file_sha256 "$record")"
+            run_capture pnm_core_apply_config "$core"
+            assert_eq 1 "$RUN_RC" || return 1
+            if [[ "$original" == MISSING ]]; then
+                [[ ! -e "$record" ]] || return 1
+            else
+                assert_eq "$original" "$(pnm_tx_file_sha256 "$record")" || return 1
+            fi
+            [[ "$(pnm_core_applied_config_status "$core" "$PNM_CORE_CONFIG")" != confirmed ]] || return 1
+            assert_eq 0 "$PNM_TX_RECOVERY_REQUIRED" || return 1
+            assert_peer_untouched "$core" || return 1
+        done
+    done
+}
+
+test_config_apply_retains_external_applied_edits() {
+    local core
+    for core in xray hysteria2; do
+        prepare_apply_evidence_fixture health
+        fixture_edit_record=1
+        run_capture pnm_core_apply_config "$core"
+        assert_eq 1 "$RUN_RC" || return 1
+        assert_contains "$(<"$PNM_STATE_DIR/cores/$core/applied.env")" '# external edit' || return 1
+        assert_eq 1 "$PNM_TX_RECOVERY_REQUIRED" || return 1
+        assert_peer_untouched "$core" || return 1
+    done
+}
+
+test_config_apply_retains_post_publication_record_edits() {
+    local core fault record
+    for core in xray hysteria2; do
+        for fault in record-metadata record-content; do
+            prepare_apply_evidence_fixture "$fault"
+            record="$PNM_STATE_DIR/cores/$core/applied.env"
+            run_capture pnm_core_apply_config "$core"
+            assert_eq 73 "$RUN_RC" || return 1
+            assert_eq 1 "$PNM_TX_RECOVERY_REQUIRED" || return 1
+            if [[ "$fault" == record-metadata ]]; then
+                assert_eq 640 "$(stat -c %a "$record")" || return 1
+            else
+                assert_contains "$(<"$record")" '# external publication edit' || return 1
+            fi
+            assert_peer_untouched "$core" || return 1
+        done
+    done
+}
+
+test_repeated_config_apply_keeps_new_candidate_evidence() {
+    local core attempt
+    for core in xray hysteria2; do
+        prepare_apply_evidence_fixture
+        for attempt in 1 2; do
+            run_capture pnm_core_apply_config "$core"
+            assert_eq 0 "$RUN_RC" || return 1
+            assert_eq confirmed "$(pnm_core_applied_config_status "$core" "$PNM_CORE_CONFIG")" || return 1
+            assert_peer_untouched "$core" || return 1
+        done
+    done
+}
+
+run_test 'failed config apply rebinds previously confirmed evidence' test_config_apply_failures_recover_confirmed_evidence
+run_test 'failed config apply preserves missing stale and damaged evidence' test_config_apply_does_not_certify_unconfirmed_prior_evidence
+run_test 'failed config apply retains external applied edits and uncertainty' test_config_apply_retains_external_applied_edits
+run_test 'config apply retains post-publication record metadata and content edits' test_config_apply_retains_post_publication_record_edits
+run_test 'repeated config apply confirms each new candidate' test_repeated_config_apply_keeps_new_candidate_evidence
 run_test 'restart retains confirmed evidence for each Core' test_restart_keeps_confirmed_evidence
 run_test 'update and rollback retain confirmed evidence for each Core' test_update_and_rollback_keep_confirmed_evidence
 run_test 'lifecycle commands retain missing changed and damaged evidence' test_missing_evidence_is_not_promoted

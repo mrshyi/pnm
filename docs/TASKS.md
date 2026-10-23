@@ -1,8 +1,8 @@
 # PNM Current Tasks
 
-**Last reconciled:** 2026-10-23 (Core compensation preserves disabled policy; Debian WSL `make check` passes 331 tests and isolated systemd harness passes 7/7; real Core/production acceptance remains open)
+**Last reconciled:** 2026-10-23 (failed config apply recovers confirmed applied evidence; Debian WSL `make check` passes 336 tests and isolated systemd harness passes 8/8; real Core/production acceptance remains open)
 
-**Current increment baseline:** branch `dev`, HEAD `bd937ee`, VERSION `0.16.0-rc.1`.
+**Current increment baseline:** branch `dev`, HEAD `bb323d8`, VERSION `0.16.0-rc.1`.
 
 This page is a status snapshot, not a test report. Status must be refreshed from current source, test output, or host evidence before it is changed. Historical Phase 2 analysis is preserved in [PHASE2_GAP_ANALYSIS.md](PHASE2_GAP_ANALYSIS.md).
 
@@ -731,6 +731,41 @@ Logs use `/var/tmp/pnm-recovery-policy-final` with `.preparation.log`, `.systemd
 `.check.log`, `.lint.log`, `.preparation-nobody.log` and `.evidence-nobody.log`.
 Red/initial green logs share `/var/tmp/pnm-recovery-policy`.
 
+## Failed config apply retains confirmed evidence — 2026-10-23
+
+Root cause: config compensation restored the old files and restarted the service,
+but left its previously confirmed applied record bound to the old InvocationID.
+The first regressions reproduced confirmed becoming changed and an external old
+record edit not causing recovery-required: **25 passed / 2 failed**. Apply now
+captures the existing evidence in operation-local fields before mutation and uses
+the existing guarded recovery helper after successful service compensation.
+Missing/stale/damaged records are preserved; external edits stop recovery rather
+than being certified. The original operation error is retained.
+
+Independent review found applied publication did not require metadata receipts in
+config transactions. A commit failure after external chmod was reproduced
+(**27 passed / 1 failed**). The two exact config transaction operations now use
+the existing required metadata policy; no old digest constrains a new candidate.
+Post-publication content or mode edits remain untouched with recovery-required.
+
+Frozen copy `/var/tmp/pnm-config-applied-final`: `make check` **exit 0,
+31 suites / 336 passed / 0 failed**, including syntax/security scan; actual nobody
+evidence **28/28, exit 0**. New cases cover both cores, restart/health/record/commit
+failures, unknown prior evidence, external edits and repeated successful apply.
+Logs: `.check.log`, `.evidence-nobody.log` under that prefix.
+
+The final integration-only refinement initializes standard runtime cleanup and
+asserts registered staging paths are removed. Copy
+`/var/tmp/pnm-config-applied-systemd-final`: `make test-systemd` **8/8, exit 0**;
+`make syntax security-scan shellcheck` plus explicit integration ShellCheck
+**exit 0**. Logs: `.log` and `.lint.log`. The added case runs complete apply
+failure dispatch, real file compensation and actual InvocationID rebinding;
+Core validation/identity/ownership remain fixture stubs. Both final random units
+`pnm-accept-d05b6a7e-6971-4905-8c68-2663e983bbc0-{xray,hy2}.service` are
+not-found/inactive after cleanup, without runtime files or enable links. The
+initial eight-case run's units were separately checked removed as well.
+This is not real Core configuration loading, TLS or external-client acceptance.
+
 ## Verification already reported (historical host evidence)
 
 A prior user-provided `proxy-tokyo` read-only report stated that PNM 0.16.0-rc.1, both Core services/listeners, `pnm check`, and selected permissions were healthy, and that public client connections had succeeded. This report is historical and was not independently refreshed in this documentation task. It does not close the local failure-injection gaps above or prove the current installed source matches this HEAD.
@@ -740,7 +775,7 @@ A prior user-provided `proxy-tokyo` read-only report stated that PNM 0.16.0-rc.1
 1. Confirm deployed PNM source identity for G-01 using read-only checks.
 2. Accept the repaired A-03/A-04 paths in a disposable systemd VM, including explicit commands versus reboot/external restart; do not treat local results as completed Phase 3 acceptance.
 3. Use a disposable Debian 13 systemd VM for real lifecycle/recovery acceptance. The local WSL environment already provides Bash, make, ShellCheck, Python, ripgrep, zip/unzip, flock and OpenSSL for source and mock tests.
-4. Isolated WSL systemd lifecycle checks now pass 7/7, including config/update callbacks with disabled baseline. Accept real service-account/TLS/Core/reboot/client behavior separately; preserve these evidence boundaries.
+4. Isolated WSL systemd lifecycle checks now pass 8/8, including failed apply dispatch/applied recovery and config/update callbacks with disabled baseline. Accept real service-account/TLS/Core/reboot/client behavior separately.
 5. Reassess Phase 3 completion. Do not start Phase 4 automatically.
 
 Remaining acceptance needs external prerequisites: an authorized deployed source

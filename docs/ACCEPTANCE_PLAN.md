@@ -96,6 +96,13 @@ make release-check
 
 ## 6. 2026-10-23 本地执行及恢复检查边界
 
+最新配置应用证据恢复增量：默认 `make check` **退出 0，31 套件/336 项通过**，
+真实 nobody 生命周期证据 **28/28**，显式 systemd 替身测试 **8/8**，全部静态
+检查通过。新增完整 apply 故障调度的旧文件及 confirmed InvocationID 恢复，
+并验证外部 applied 内容/权限漂移保留、未知旧证据不认证。环境与分副本日志见
+[TASKS.md](TASKS.md)。实际 Core 校验、TLS 加载、账户创建、reboot 和 L3 仍未
+验收；以下较早增量的计数保留为历史记录。
+
 新增显式入口 `sudo make test-systemd`，使用随机命名、自有的 nobody/sleep
 测试单元验证生命周期，默认 `make check` 不执行。脚本语法、安全扫描及
 ShellCheck 已通过，并经独立静态复审。此次执行在进入 Bash 前因 WSL

@@ -163,7 +163,8 @@ pnm_core_restore_config() {
     else
         pnm_systemctl stop "$PNM_CORE_UNIT" || rc="$PNM_EXIT_SOFTWARE"
     fi
-    return "$rc"
+    ((rc == 0)) || return "$rc"
+    pnm_core_recover_applied
 }
 
 pnm_core_apply_rollback() {
@@ -205,7 +206,9 @@ pnm_core_record_applied_config() {
     printf 'SCHEMA_VERSION=1\nCORE=%s\nCONFIG_SHA256=%s\nSERVICE_INVOCATION_ID=%s\n' \
         "$core" "$digest" "${invocation,,}" >"$staged" || return "$PNM_EXIT_CANTCREAT"
     chmod 0600 -- "$staged" || { rm -f -- "$staged"; return "$PNM_EXIT_NOPERM"; }
-    [[ "${PNM_TX_OPERATION:-}" != core-restore ]] || metadata_policy=required
+    case "${PNM_TX_OPERATION:-}" in
+        core-restore | core-config-xray | core-config-hysteria2) metadata_policy=required ;;
+    esac
     if pnm_tx_write_file "$staged" "$record" "applied_$core" 0600 "$metadata_policy"; then
         :
     else
@@ -224,6 +227,7 @@ pnm_core_apply_config() {
 
 pnm_core_apply_config_locked() {
     local core=$1 rc stage config validation_output tls_check tls_status tls_detail
+    local PNM_CORE_PRIOR_CONFIG_HASH='' PNM_CORE_PRIOR_APPLIED_HASH='' PNM_CORE_PRIOR_APPLIED_ATTRIBUTES=''
     local node_name=PNM_CORE_NODE secret_name=PNM_CORE_SECRET
     local -A PNM_CORE_NODE=() PNM_CORE_SECRET=()
     pnm_core_resolve "$core" || return $?
@@ -277,6 +281,7 @@ pnm_core_apply_config_locked() {
     pnm_core_lifecycle_snapshot "$core" || return $?
     [[ "$PNM_LIFECYCLE_PRE_ACTIVE" == active ]] || return "$PNM_EXIT_CONFIG"
     pnm_tx_begin "core-config-$core" || return $?
+    pnm_core_capture_applied || { rc=$?; pnm_tx_close; return "$rc"; }
     pnm_tx_add_rollback pnm_core_restore_config || { pnm_tx_close; return "$PNM_EXIT_SOFTWARE"; }
     pnm_tx_write_file "$config" "$PNM_CORE_CONFIG" core_config "$([[ "$core" == xray ]] && printf 0640 || printf 0600)" || {
         rc=$?; pnm_core_apply_rollback || true; pnm_tx_close; return "$rc";
