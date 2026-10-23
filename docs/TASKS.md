@@ -1,8 +1,8 @@
 # PNM Current Tasks
 
-**Last reconciled:** 2026-10-23 (failed config apply recovers confirmed applied evidence; Debian WSL `make check` passes 336 tests and isolated systemd harness passes 8/8; real Core/production acceptance remains open)
+**Last reconciled:** 2026-10-23 (shared compensation verifies actual service state; Debian WSL `make check` passes 341 tests and isolated systemd harness passes 8/8; real Core/production acceptance remains open)
 
-**Current increment baseline:** branch `dev`, HEAD `bb323d8`, VERSION `0.16.0-rc.1`.
+**Current increment baseline:** branch `dev`, HEAD `e48b1dd`, VERSION `0.16.0-rc.1`.
 
 This page is a status snapshot, not a test report. Status must be refreshed from current source, test output, or host evidence before it is changed. Historical Phase 2 analysis is preserved in [PHASE2_GAP_ANALYSIS.md](PHASE2_GAP_ANALYSIS.md).
 
@@ -765,6 +765,31 @@ Core validation/identity/ownership remain fixture stubs. Both final random units
 not-found/inactive after cleanup, without runtime files or enable links. The
 initial eight-case run's units were separately checked removed as well.
 This is not real Core configuration loading, TLS or external-client acceptance.
+
+## Shared lifecycle compensation verifies actual state — 2026-10-23
+
+Root cause: shared lifecycle restore accepted successful control/daemon-reload
+commands without observing whether the captured service policy actually returned.
+No-effect success could therefore append ROLLBACK_COMPLETE despite an enabled or
+running service remaining different. Invalid baseline data also reached controls.
+The new regressions reproduced **4 passed / 4 failed** before source changes.
+
+The helper now validates the two baseline state domains before any I/O, retains
+command failures, and requires successful final active/enabled queries matching
+the baseline exactly. A failed query cannot be accepted solely for matching
+stdout. Existing rollback failure handling retains recovery-required instead of
+writing completion. Service control order and forward health policy are unchanged.
+
+Frozen copy `/var/tmp/pnm-lifecycle-verify-final`: root lifecycle **8/8**, actual
+nobody lifecycle **8/8**, existing isolated systemd **8/8**, all **exit 0**.
+Syntax, security scan and ShellCheck, including explicit unit/integration script
+checks, **exit 0**. Independent static review found no blocking issue. Both exact
+test units `pnm-accept-3338fc20-7adb-4c4d-8e92-f73bf8e40848-{xray,hy2}.service`
+are not-found/inactive after cleanup, without runtime files or enable links.
+`make check` **exit 0, 31 suites / 341 passed / 0 failed**. Logs under that prefix:
+`.check.log`, `.lifecycle.log`, `.lifecycle-nobody.log`, `.systemd.log`, `.lint.log`.
+The injected ineffective controls are mocks; the real systemd suite verifies
+compatibility with normal fixture recovery, not actual Core startup or reboot.
 
 ## Verification already reported (historical host evidence)
 

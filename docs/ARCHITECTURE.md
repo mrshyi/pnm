@@ -2,7 +2,12 @@
 
 This document describes the source baseline plus safety/G-02, persisted-port, lifecycle-evidence and update/restore-input changes through 2026-10-23. It is not a production deployment attestation. Verify behavior against source and tests when changing it.
 
-**Increment baseline:** branch `dev`, HEAD `bb323d8`, `VERSION` `0.16.0-rc.1` (checked 2026-10-23).
+**Increment baseline:** branch `dev`, HEAD `e48b1dd`, `VERSION` `0.16.0-rc.1` (checked 2026-10-23).
+
+Shared lifecycle compensation validates its captured baseline before service
+controls, then re-queries actual active/enabled state after daemon-reload.
+Successful commands alone cannot close recovery: both queries must succeed and
+match the original policy exactly, or the existing transaction remains uncertain.
 
 Config apply captures previously confirmed applied evidence in local baseline
 fields before mutation. Failed apply rebinds it to the recovered invocation only

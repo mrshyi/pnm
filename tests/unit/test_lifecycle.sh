@@ -41,6 +41,7 @@ set_state() {
     awk -F= -v wanted="$key" -v replacement="$value" '$1 == wanted {print wanted "=" replacement; found=1; next} {print} END {if (!found) print wanted "=" replacement}' "$state_file" >"$temp"
     mv -f -- "$temp" "$state_file"
 }
+[[ "${FAKE_NOOP_ACTION:-}" != "${1-}" ]] || exit 0
 case "${1-}" in
     show)
         case "${4-}" in
@@ -134,6 +135,100 @@ test_lifecycle_dry_run_does_not_mutate() {
     rm -rf -- "$temp_dir"
 }
 
+test_recovery_rejects_successful_controls_without_effect() {
+    local action temp_dir rc
+    for action in start stop enable disable; do
+        temp_dir="$(mktemp -d)"
+        prepare_lifecycle "$temp_dir"
+        PNM_LIFECYCLE_UNIT=xray.service
+        case "$action" in
+            start) PNM_LIFECYCLE_PRE_ACTIVE=active PNM_LIFECYCLE_PRE_ENABLED=disabled ;;
+            enable) PNM_LIFECYCLE_PRE_ACTIVE=inactive PNM_LIFECYCLE_PRE_ENABLED=enabled ;;
+            stop|disable)
+                printf 'active=active\nenabled=enabled\n' >"$FAKE_SYSTEMCTL_STATE"
+                if [[ "$action" == stop ]]; then
+                    PNM_LIFECYCLE_PRE_ACTIVE=inactive PNM_LIFECYCLE_PRE_ENABLED=enabled
+                else
+                    PNM_LIFECYCLE_PRE_ACTIVE=active PNM_LIFECYCLE_PRE_ENABLED=disabled
+                fi
+                ;;
+        esac
+        export FAKE_NOOP_ACTION="$action"
+        run_capture pnm_core_lifecycle_restore
+        rc=$RUN_RC
+        rm -rf -- "$temp_dir"
+        assert_eq 70 "$rc" "successful $action without baseline recovery must fail" || return 1
+    done
+}
+
+test_recovery_observes_exact_supported_policy_pairs() {
+    local active enabled temp_dir actual_active actual_enabled rc
+    for active in active inactive; do
+        for enabled in enabled disabled; do
+            temp_dir="$(mktemp -d)"
+            prepare_lifecycle "$temp_dir"
+            PNM_LIFECYCLE_UNIT=xray.service
+            PNM_LIFECYCLE_PRE_ACTIVE=$active PNM_LIFECYCLE_PRE_ENABLED=$enabled
+            run_capture pnm_core_lifecycle_restore
+            rc=$RUN_RC
+            actual_active="$(pnm_systemd_active_state xray.service)"
+            actual_enabled="$(pnm_systemd_enabled_state xray.service)"
+            rm -rf -- "$temp_dir"
+            assert_eq 0 "$rc" || return 1
+            assert_eq "$active" "$actual_active" || return 1
+            assert_eq "$enabled" "$actual_enabled" || return 1
+        done
+    done
+}
+
+test_recovery_rejects_final_failed_query_with_valid_output() {
+    local temp_dir rc after_reload=0
+    temp_dir="$(mktemp -d)"
+    prepare_lifecycle "$temp_dir"
+    PNM_LIFECYCLE_UNIT=xray.service
+    PNM_LIFECYCLE_PRE_ACTIVE=active PNM_LIFECYCLE_PRE_ENABLED=disabled
+    pnm_systemd_active_state() { printf 'active\n'; ((after_reload == 0)); }
+    pnm_systemd_daemon_reload() { after_reload=1; }
+    run_capture pnm_core_lifecycle_restore
+    rc=$RUN_RC
+    rm -rf -- "$temp_dir"
+    assert_eq 70 "$rc"
+}
+
+test_recovery_rejects_invalid_baseline_before_controls() {
+    local temp_dir rc log
+    temp_dir="$(mktemp -d)"
+    prepare_lifecycle "$temp_dir"
+    PNM_LIFECYCLE_UNIT=xray.service
+    PNM_LIFECYCLE_PRE_ACTIVE=unknown PNM_LIFECYCLE_PRE_ENABLED=disabled
+    run_capture pnm_core_lifecycle_restore
+    rc=$RUN_RC log="$(<"$FAKE_SYSTEMCTL_LOG")"
+    rm -rf -- "$temp_dir"
+    assert_eq 70 "$rc" || return 1
+    assert_eq '' "$log" 'invalid baseline must not control services'
+}
+
+test_ineffective_compensation_keeps_transaction_uncertain() {
+    local temp_dir rc recovery journal
+    temp_dir="$(mktemp -d)"
+    prepare_lifecycle "$temp_dir"
+    PNM_TX_ID_OVERRIDE=ineffective-recovery
+    export FAKE_START_FAIL=1 FAKE_NOOP_ACTION=disable
+    run_capture pnm_core_lifecycle_apply hysteria2
+    rc=$RUN_RC recovery=$PNM_TX_RECOVERY_REQUIRED
+    journal="$(<"$PNM_STATE_DIR/transactions/ineffective-recovery/journal.tsv")"
+    rm -rf -- "$temp_dir"
+    assert_eq 70 "$rc" || return 1
+    assert_eq 1 "$recovery" || return 1
+    assert_contains "$journal" $'RECOVERY_REQUIRED\t' || return 1
+    assert_not_contains "$journal" $'ROLLBACK_COMPLETE\t'
+}
+
+run_test 'lifecycle recovery rejects successful controls without effect' test_recovery_rejects_successful_controls_without_effect
+run_test 'lifecycle recovery accepts all exact supported policies' test_recovery_observes_exact_supported_policy_pairs
+run_test 'lifecycle recovery rejects failed final query with matching stdout' test_recovery_rejects_final_failed_query_with_valid_output
+run_test 'lifecycle recovery rejects invalid baseline before controls' test_recovery_rejects_invalid_baseline_before_controls
+run_test 'ineffective lifecycle compensation retains recovery-required' test_ineffective_compensation_keeps_transaction_uncertain
 run_test 'Core lifecycle commits independently after health validation' test_lifecycle_success_is_independent
 run_test 'Core lifecycle failure compensates the same Core only' test_lifecycle_failure_restores_previous_state
 run_test 'Core lifecycle dry-run does not mutate systemd state' test_lifecycle_dry_run_does_not_mutate

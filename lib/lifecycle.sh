@@ -39,6 +39,8 @@ pnm_core_lifecycle_restore() {
     local rc=0 current_active current_enabled
 
     [[ -n "$PNM_LIFECYCLE_UNIT" ]] || return "$PNM_EXIT_SOFTWARE"
+    [[ "$PNM_LIFECYCLE_PRE_ACTIVE" == active || "$PNM_LIFECYCLE_PRE_ACTIVE" == inactive ]] || return "$PNM_EXIT_SOFTWARE"
+    [[ "$PNM_LIFECYCLE_PRE_ENABLED" == enabled || "$PNM_LIFECYCLE_PRE_ENABLED" == disabled ]] || return "$PNM_EXIT_SOFTWARE"
     current_active="$(pnm_systemd_active_state "$PNM_LIFECYCLE_UNIT")" || return "$PNM_EXIT_SOFTWARE"
     current_enabled="$(pnm_systemd_enabled_state "$PNM_LIFECYCLE_UNIT")" || return "$PNM_EXIT_SOFTWARE"
     [[ "$current_active" == active || "$current_active" == inactive ]] || return "$PNM_EXIT_SOFTWARE"
@@ -62,7 +64,12 @@ pnm_core_lifecycle_restore() {
     if ((rc == 0)); then
         pnm_systemd_daemon_reload || rc="$PNM_EXIT_SOFTWARE"
     fi
-    return "$rc"
+    ((rc == 0)) || return "$rc"
+    # Command acceptance is not proof that the captured runtime policy recovered.
+    current_active="$(pnm_systemd_active_state "$PNM_LIFECYCLE_UNIT")" || return "$PNM_EXIT_SOFTWARE"
+    current_enabled="$(pnm_systemd_enabled_state "$PNM_LIFECYCLE_UNIT")" || return "$PNM_EXIT_SOFTWARE"
+    [[ "$current_active" == "$PNM_LIFECYCLE_PRE_ACTIVE" &&
+        "$current_enabled" == "$PNM_LIFECYCLE_PRE_ENABLED" ]] || return "$PNM_EXIT_SOFTWARE"
 }
 
 pnm_core_lifecycle_reload_step() {
