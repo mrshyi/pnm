@@ -73,6 +73,33 @@ pnm_test_record_applied_config() {
     chmod 0600 -- "$directory/applied.env"
 }
 
+# Map fixed service labels to the runner only in tests that opt in. Numeric
+# snapshot ownership still reaches real chown unchanged; no accounts are created.
+pnm_test_map_service_ownership() {
+    id() {
+        if (($# == 2)) && [[ "$1" == -u ]]; then
+            case "$2" in root|xray|hysteria) printf '%s\n' "$EUID"; return 0 ;; esac
+        fi
+        command id "$@"
+    }
+    getent() {
+        if (($# == 2)) && [[ "$1" == group ]]; then
+            case "$2" in
+                xray|hysteria) printf '%s:x:%s:\n' "$2" "$(command id -g)"; return 0 ;;
+            esac
+        fi
+        command getent "$@"
+    }
+    chown() {
+        [[ "${1-}" != -- ]] || shift
+        local owner=${1:?owner required}
+        shift
+        [[ "${1-}" != -- ]] || shift
+        case "$owner" in root:xray|hysteria:hysteria) owner="$EUID:$(command id -g)" ;; esac
+        command chown -- "$owner" "$@"
+    }
+}
+
 run_test() {
     local name="${1:?test name required}"
     local function_name="${2:?test function required}"

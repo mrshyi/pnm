@@ -144,14 +144,6 @@ pnm_core_log() {
     fi
 }
 
-pnm_core_fix_owner() {
-    case "$1" in
-        xray) chown root:xray -- "$2" && chmod 0640 -- "$2" ;;
-        hysteria2) chown hysteria:hysteria -- "$2" && chmod 0600 -- "$2" ;;
-        *) return "$PNM_EXIT_CONFIG" ;;
-    esac
-}
-
 pnm_core_restore_config() {
     local rc=0 active enabled
     pnm_tx_restore_written_files || return "$PNM_EXIT_SOFTWARE"
@@ -223,7 +215,7 @@ pnm_core_apply_config() {
 }
 
 pnm_core_apply_config_locked() {
-    local core=$1 rc stage config validation_output tls_check tls_status tls_detail
+    local core=$1 rc stage config validation_output tls_check tls_status tls_detail mode owner
     local PNM_CORE_PRIOR_CONFIG_HASH='' PNM_CORE_PRIOR_APPLIED_HASH='' PNM_CORE_PRIOR_APPLIED_ATTRIBUTES=''
     local node_name=PNM_CORE_NODE secret_name=PNM_CORE_SECRET
     local -A PNM_CORE_NODE=() PNM_CORE_SECRET=()
@@ -280,10 +272,10 @@ pnm_core_apply_config_locked() {
     pnm_tx_begin "core-config-$core" || return $?
     pnm_core_capture_applied || { rc=$?; pnm_tx_close; return "$rc"; }
     pnm_tx_add_rollback pnm_core_restore_config || { pnm_tx_close; return "$PNM_EXIT_SOFTWARE"; }
-    pnm_tx_write_file "$config" "$PNM_CORE_CONFIG" core_config "$([[ "$core" == xray ]] && printf 0640 || printf 0600)" || {
+    if [[ "$core" == xray ]]; then mode=0640 owner=root:xray; else mode=0600 owner=hysteria:hysteria; fi
+    pnm_core_restore_write_file "$config" "$PNM_CORE_CONFIG" core_config "$mode" "$owner" || {
         rc=$?; pnm_core_apply_rollback || true; pnm_tx_close; return "$rc";
     }
-    pnm_core_fix_owner "$core" "$PNM_CORE_CONFIG" || { pnm_core_apply_rollback || true; pnm_tx_close; return "$PNM_EXIT_NOPERM"; }
     if pnm_systemctl restart "$PNM_CORE_UNIT"; then
         :
     else
@@ -625,7 +617,7 @@ pnm_core_restore_prepare_directory() {
 }
 
 pnm_core_restore_write_file() {
-    local source="$1" destination="$2" label="$3" mode="$4" owner="$5" rc=0
+    local source="$1" destination="$2" label="$3" mode="$4" owner="$5" rc=0 metadata_rc
     local owner_uid="${5%%:*}" owner_gid="${5#*:}"
     [[ "$owner" == *:* ]] || return "$PNM_EXIT_CONFIG"
     [[ "$owner_uid" =~ ^[0-9]+$ ]] || owner_uid="$(id -u "$owner_uid")" || return "$PNM_EXIT_NOPERM"
@@ -637,7 +629,12 @@ pnm_core_restore_write_file() {
     # Otherwise a post-publication external chmod could be silently re-enrolled.
     pnm_tx_verify_written_resources || return $?
     chown -- "$owner" "$destination" || rc="$PNM_EXIT_NOPERM"
-    pnm_tx_record_written_metadata "$destination" required "${mode#0}|$owner_uid|$owner_gid" || return $?
+    # Keep the first ownership error; rejected enrollment leaves its old receipt
+    # intact so compensation can either verify it or retain unexpected drift.
+    if pnm_tx_record_written_metadata "$destination" required "${mode#0}|$owner_uid|$owner_gid"; then :; else
+        metadata_rc=$?
+        ((rc != 0)) || rc="$metadata_rc"
+    fi
     return "$rc"
 }
 

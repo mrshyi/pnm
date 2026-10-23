@@ -221,7 +221,7 @@ test_real_apply_failure_recovers_confirmed_invocation() {
     printf '#!/usr/bin/env bash\nexit 0\n' >"$PNM_XRAY_BIN"
     chmod 0700 "$PNM_XRAY_BIN"
     pnm_node_xray_reality_public_key() { return 0; }
-    pnm_core_fix_owner() { return 0; }
+    pnm_test_map_service_ownership
     pnm_systemd_unit_healthy() { return 78; } # Inject forward health failure.
     pnm_systemctl enable xray.service && pnm_systemctl start xray.service || return 1
     seed_applied_fixture xray "$PNM_XRAY_CONFIG" xray.service || return 1

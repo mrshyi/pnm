@@ -1,8 +1,8 @@
 # PNM Current Tasks
 
-**Last reconciled:** 2026-10-23 (Core/legacy state directories participate in recovery; Debian WSL `make check` passes 348 tests and isolated systemd harness passes 8/8; real Core/production acceptance remains open)
+**Last reconciled:** 2026-10-23 (runtime config publication protects metadata and ownership errors; Debian WSL `make check` passes 351 tests and isolated systemd harness passes 8/8; real Core/production acceptance remains open)
 
-**Current increment baseline:** branch `dev`, HEAD `99481cb`, VERSION `0.16.0-rc.1`.
+**Current increment baseline:** branch `dev`, HEAD `ccdb868`, VERSION `0.16.0-rc.1`.
 
 This page is a status snapshot, not a test report. Status must be refreshed from current source, test output, or host evidence before it is changed. Historical Phase 2 analysis is preserved in [PHASE2_GAP_ANALYSIS.md](PHASE2_GAP_ANALYSIS.md).
 
@@ -827,6 +827,40 @@ Both final exact units
 not-found/inactive after cleanup, with no runtime files or enable links remaining.
 Directory fault injection uses real files and metadata with mocked services/NSS;
 the systemd suite uses separate nobody/sleep units, not actual Core/TLS/reboot/L3.
+
+## Runtime config publication protects metadata — 2026-10-23
+
+Root cause: config apply used optional file metadata and a separate ownership
+normalizer. External chmod after publication could be overwritten on rollback;
+drift before normalization could also be accepted as success. Correctly scoped
+red regressions reported **35 passed / 2 failed** (`/var/tmp/pnm-config-metadata.red-v2.log`):
+0660 became original 0644, and pre-owner drift returned success.
+
+Apply now reuses the existing guarded Core writer: required metadata at publish,
+receipt verification before chown, then fixed expected UID/GID/mode enrollment.
+The redundant private normalizer is removed. Independent review reproduced a
+shared-helper error boundary (**37 passed / 1 failed**, `.review-red.log`): failed
+chown with a different intended group returned 70 instead of original 77. The
+helper now preserves the first ownership error without adopting a mismatched
+metadata sample. A no-effect ownership failure can use its intact old receipt;
+additional drift remains untouched with recovery-required.
+
+Tests opt into fixed service-name mappings to the runner's actual UID/primary GID;
+numeric snapshot ownership is passed through to real chown. Both cores exercise
+the real publisher, transaction and metadata guards without account creation.
+The different-target-group fault is injected without attempting host ownership
+changes. Existing CLI mock tests continue to map transaction I/O explicitly.
+
+Final copy `/var/tmp/pnm-config-metadata-final`: evidence suite **38/38** in the
+default run and actual nobody **38/38**, focused restore **9/9**, isolated systemd
+**8/8**, all **exit 0**, plus syntax/security scan/ShellCheck **exit 0**.
+`make check` **exit 0, 31 suites / 351 passed / 0 failed**. Logs under that prefix:
+`.check.log`, `.evidence-nobody.log`,
+`.restore-focused.log`, `.systemd.log`, `.lint.log`. Both final units
+`pnm-accept-8a1be1cb-4dde-4ff8-84a0-cac8edc77598-{xray,hy2}.service` are
+not-found/inactive, with no runtime files or enable links after cleanup.
+These results do not prove actual xray/hysteria account provisioning, Core/TLS
+loading, reboot or external traffic.
 
 ## Verification already reported (historical host evidence)
 

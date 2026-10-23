@@ -2,7 +2,14 @@
 
 This document describes the source baseline plus safety/G-02, persisted-port, lifecycle-evidence and update/restore-input changes through 2026-10-23. It is not a production deployment attestation. Verify behavior against source and tests when changing it.
 
-**Increment baseline:** branch `dev`, HEAD `99481cb`, `VERSION` `0.16.0-rc.1` (checked 2026-10-23).
+**Increment baseline:** branch `dev`, HEAD `ccdb868`, `VERSION` `0.16.0-rc.1` (checked 2026-10-23).
+
+Config apply shares the guarded Core file writer with archive restore. Runtime
+configuration metadata is required at publication, checked before ownership
+normalization and re-enrolled only against the fixed intended tuple. External
+permission drift cannot be normalized away or silently overwritten on failure.
+The first ownership error remains authoritative; rejected metadata enrollment
+leaves the previous receipt intact for safe compensation or retained uncertainty.
 
 Applied publication uses existing directory receipts for standalone Core paths as
 well as deployment/restore. Update prepares its previous-state destination after

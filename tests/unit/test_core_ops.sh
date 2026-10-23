@@ -82,7 +82,8 @@ pnm_core_lifecycle_snapshot() {
 }
 pnm_systemd_active_state() { printf 'active\n'; }
 pnm_systemd_enabled_state() { printf 'enabled\n'; }
-pnm_core_fix_owner() { return 0; }
+# This suite maps all transaction I/O; evidence tests exercise the real publisher.
+pnm_core_restore_write_file() { pnm_tx_write_file "$1" "$2" "$3" "$4" required; }
 pnm_systemctl() {
     ((PNM_TEST_APPLY_RESTARTS += 1))
     if ((PNM_TEST_APPLY_RESTART_FAIL == 1 && PNM_TEST_APPLY_RESTARTS == 1)); then return 1; fi

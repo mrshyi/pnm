@@ -598,7 +598,7 @@ prepare_apply_evidence_fixture() {
     pnm_hysteria_tls_server_name() { return 0; }
     pnm_tls_certificate_check() { printf 'OK|fixture\n'; }
     pnm_hysteria_config_matches_node() { return 0; }
-    pnm_core_fix_owner() { return 0; }
+    pnm_test_map_service_ownership
     pnm_systemctl() {
         if [[ "$fixture_apply_fault:$fixture_apply_injected" == restart:0 ]]; then
             fixture_apply_injected=1; return 69
@@ -610,6 +610,10 @@ prepare_apply_evidence_fixture() {
         pnm_test_real_record_applied_config "$@"
     }
     pnm_tx_commit() {
+        if [[ "$fixture_apply_fault" == config-metadata ]]; then
+            chmod 0660 "$PNM_CORE_CONFIG" || return 70
+            return 73
+        fi
         if [[ "$fixture_apply_fault" == record-metadata ]]; then
             chmod 0640 "$PNM_STATE_DIR/cores/$PNM_CORE_ID/applied.env" || return 70
             return 73
@@ -870,6 +874,81 @@ test_legacy_install_state_preserves_foreign_directory_changes() {
     done
 }
 
+test_config_apply_preserves_runtime_config_metadata_edits() {
+    local core
+    for core in xray hysteria2; do
+        prepare_apply_evidence_fixture config-metadata
+        run_capture pnm_core_apply_config "$core"
+        assert_eq 73 "$RUN_RC" || return 1
+        assert_eq 660 "$(stat -c %a "$PNM_CORE_CONFIG")" || return 1
+        assert_eq 1 "$PNM_TX_RECOVERY_REQUIRED" || return 1
+        assert_peer_untouched "$core" || return 1
+    done
+}
+
+test_config_apply_rejects_metadata_drift_before_ownership() {
+    local core
+    for core in xray hysteria2; do
+        prepare_apply_evidence_fixture
+        pnm_tx_manifest_append() {
+            pnm_test_real_manifest_append "$@" || return $?
+            if [[ "$1:$2" == APPLIED:core_config ]]; then chmod 0660 "$3"; fi
+        }
+        run_capture pnm_core_apply_config "$core"
+        assert_eq 70 "$RUN_RC" || return 1
+        assert_eq 660 "$(stat -c %a "$PNM_CORE_CONFIG")" || return 1
+        assert_eq 1 "$PNM_TX_RECOVERY_REQUIRED" || return 1
+        assert_eq 0 "${fixture_restarts[$PNM_CORE_UNIT]}" || return 1
+        assert_peer_untouched "$core" || return 1
+    done
+}
+
+test_config_apply_keeps_ownership_error_and_safe_receipts() {
+    local core change original expected_uncertainty target_gid
+    for core in xray hysteria2; do
+        for change in none drift; do
+            prepare_apply_evidence_fixture
+            pnm_core_resolve "$core" || return 1
+            original="$(pnm_tx_file_sha256 "$PNM_CORE_CONFIG")"
+            target_gid=$(( $(command id -g) + 1 ))
+            getent() {
+                if [[ "${1-}:${2-}" == group:xray || "${1-}:${2-}" == group:hysteria ]]; then
+                    printf '%s:x:%s:\n' "$2" "$target_gid"
+                else
+                    command getent "$@"
+                fi
+            }
+            chown() {
+                [[ "${1-}" != -- ]] || shift
+                local owner=$1
+                shift
+                [[ "${1-}" != -- ]] || shift
+                case "$owner" in
+                    root:xray|hysteria:hysteria)
+                        [[ "$change" != drift ]] || chmod 0660 "$1"
+                        return 1 ;;
+                esac
+                command chown -- "$owner" "$@"
+            }
+            run_capture pnm_core_apply_config "$core"
+            assert_eq 77 "$RUN_RC" || return 1
+            expected_uncertainty=0
+            if [[ "$change" == none ]]; then
+                assert_eq "$original" "$(pnm_tx_file_sha256 "$PNM_CORE_CONFIG")" || return 1
+                assert_eq confirmed "$(pnm_core_applied_config_status "$core" "$PNM_CORE_CONFIG")" || return 1
+            else
+                expected_uncertainty=1
+                assert_eq 660 "$(stat -c %a "$PNM_CORE_CONFIG")" || return 1
+            fi
+            assert_eq "$expected_uncertainty" "$PNM_TX_RECOVERY_REQUIRED" || return 1
+            assert_peer_untouched "$core" || return 1
+        done
+    done
+}
+
+run_test 'config apply retains ownership error and protected receipts' test_config_apply_keeps_ownership_error_and_safe_receipts
+run_test 'config apply preserves external runtime config metadata' test_config_apply_preserves_runtime_config_metadata_edits
+run_test 'config apply rejects metadata drift before ownership normalization' test_config_apply_rejects_metadata_drift_before_ownership
 run_test 'legacy install-state recovers existing and missing directories' test_legacy_install_state_recovers_directory_baselines
 run_test 'legacy install-state retains foreign directory changes' test_legacy_install_state_preserves_foreign_directory_changes
 run_test 'partial Core directory preparation recovers metadata' test_partial_core_directory_preparation_failure_recovers_metadata
