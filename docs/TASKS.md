@@ -2,7 +2,7 @@
 
 **Last reconciled:** 2026-10-23 (Debian WSL default checks pass 354 tests, isolated systemd stand-ins 8/8, real Core/URI positive and refusal checks 10/10; managed-account/lifecycle, reboot and external acceptance remain open)
 
-**Current increment baseline:** branch `dev`, HEAD `5c832b2`, VERSION `0.16.0-rc.1`.
+**Current increment baseline:** branch `dev`, HEAD `bded939`, VERSION `0.16.0-rc.1`.
 
 This page is a status snapshot, not a test report. Status must be refreshed from current source, test output, or host evidence before it is changed. Historical Phase 2 analysis is preserved in [PHASE2_GAP_ANALYSIS.md](PHASE2_GAP_ANALYSIS.md).
 
@@ -970,7 +970,20 @@ No host packages, accounts or services were installed/changed. The next bounded
 stage is isolation/boot preflight in a disposable rootfs; PNM writes are forbidden
 until the guest boundary is verified. See the
 [container main-flow plan](superpowers/plans/2026-10-23-container-mainflow.md).
-Actual managed-account/lifecycle/reboot/external acceptance is still open.
+The native minimal shell and a separately prepared fresh rootfs now pass strict
+namespace/UID/network/cgroup gates. All five namespaces differ; UID 0 maps to a
+nonzero host range; only lo exists; writable systemd/unified mounts are rooted in
+the owned scope/payload, with outside controllers not writable. Native idmapped
+mounts keep backing ownership separate from the effective guest identity.
+
+Debian foreign bootstrap passes Release signature verification and exits 0.
+Package configuration runs only inside the verified private guest and exits 0.
+Host account databases and dpkg status remain unchanged; scopes are not-found and
+no fixture mounts remain after exit. Rootfs/evidence parent:
+`/var/tmp/pnm-debian-guest.4w7y455l`; exact logs and additional privately verified
+wget/xz tool pins are in the plan. No host package or account was changed.
+Full guest systemd boot is next; actual PNM managed-account/lifecycle, VM reboot
+and external acceptance remain open. No PNM deployment has run in this rootfs.
 
 ## Verification already reported (historical host evidence)
 
