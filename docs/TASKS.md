@@ -953,11 +953,34 @@ not redundantly rerun for these isolated test additions. Actual managed accounts
 integrated deployment/update/restore/recovery, reboot and external clients remain
 separate acceptance work. No disposable target or external client is available.
 
+## Native container acceptance prerequisites — 2026-10-23
+
+The user reiterated automatic consecutive stages. A further bounded local path
+is being evaluated: private native nspawn/rootfs testing, without host installation
+or account/service changes. Mount/PID/user/cgroup namespace probes exit 0. WSL has
+a hybrid cgroup layout: read-only parent tmpfs, writable legacy/unified children.
+Those observations do not prove nested systemd can boot or safely delegate cgroups.
+
+No container/bootstrap tool was installed. Exact Debian systemd-container
+257.13-1~deb13u1 and debootstrap 1.0.141 packages were acquired through an
+officially listed HTTPS mirror after direct CDN/Windows failures. Sizes and hashes
+match the fixed APT metadata before private extraction under
+`/var/tmp/pnm-container-tools-20261023/tools`; both version commands exit 0.
+No host packages, accounts or services were installed/changed. The next bounded
+stage is isolation/boot preflight in a disposable rootfs; PNM writes are forbidden
+until the guest boundary is verified. See the
+[container main-flow plan](superpowers/plans/2026-10-23-container-mainflow.md).
+Actual managed-account/lifecycle/reboot/external acceptance is still open.
+
 ## Verification already reported (historical host evidence)
 
 A prior user-provided `proxy-tokyo` read-only report stated that PNM 0.16.0-rc.1, both Core services/listeners, `pnm check`, and selected permissions were healthy, and that public client connections had succeeded. This report is historical and was not independently refreshed in this documentation task. It does not close the local failure-injection gaps above or prove the current installed source matches this HEAD.
 
 ## Immediate next steps
+
+First evaluate the native container isolation/boot preflight above. A safe guest
+could supplement local account/lifecycle evidence; it cannot replace the following
+VM/reboot, deployed-host and external-client prerequisites.
 
 1. Confirm deployed PNM source identity for G-01 using read-only checks.
 2. Accept the repaired A-03/A-04 paths in a disposable systemd VM, including explicit commands versus reboot/external restart; do not treat local results as completed Phase 3 acceptance.
