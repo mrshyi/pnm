@@ -1,8 +1,8 @@
 # PNM Current Tasks
 
-**Last reconciled:** 2026-10-23 (remaining Core preparation and metadata recovery; Debian WSL `make check` passes 327 tests; systemd/production acceptance remains open)
+**Last reconciled:** 2026-10-23 (opt-in systemd fixture harness reviewed; execution blocked by WSL HCS/0x800705aa; prior Debian WSL `make check` passes 327 tests; systemd/production acceptance remains open)
 
-**Current increment baseline:** branch `dev`, HEAD `6b98456bd571902f973a1aa89430f3a1fc887d5a`, VERSION `0.16.0-rc.1`.
+**Current increment baseline:** branch `dev`, HEAD `2e14d234c341855f44fcf95a6c0e3e9af6e24cc3`, VERSION `0.16.0-rc.1`.
 
 This page is a status snapshot, not a test report. Status must be refreshed from current source, test output, or host evidence before it is changed. Historical Phase 2 analysis is preserved in [PHASE2_GAP_ANALYSIS.md](PHASE2_GAP_ANALYSIS.md).
 
@@ -657,6 +657,33 @@ both **exit 0**. Logs: `.check.log`, `.lint.log`, `.nobody.log`,
 `.apply-nobody.log` under that prefix. Real systemd/Core/client/reboot acceptance
 remains distinct.
 
+## Opt-in real systemd fixture harness — 2026-10-23
+
+`make test-systemd` explicitly enables a root-only integration script, separate
+from `make check`. It maps the two Core unit names into two newly generated
+`pnm-accept-<uuid>-*.service` names running sleep as existing nobody. Only these
+owned units are enabled, started, restarted, stopped and removed. Private config,
+applied-record and transaction fixtures do not replace actual Core paths.
+Five scenarios cover activation, restart InvocationID/peer isolation, both
+inactive/disabled and active/disabled compensation, and TERM recovery/lock release.
+These are implemented scenarios, not executed acceptance results.
+
+`make syntax security-scan shellcheck` plus explicit ShellCheck of the integration
+script passed **exit 0** in `/var/tmp/pnm-systemd-review`; log:
+`/var/tmp/pnm-systemd-review.lint-final.log`. Independent static safety review found
+no blocking issue. Default unit checks remain the prior **31 suites / 327 passed**;
+they were not rerun for this test-only increment.
+
+The attempted fresh-copy `make test-systemd` never reached Bash: WSL returned
+**exit 1**, `Wsl/Service/CreateInstance/CreateVm/HCS/0x800705aa` (insufficient
+system resources). A separate read-only Bash/PID-1/systemd probe returned the
+same failure. No fixture service was created, and no dynamic assertion ran.
+Do not interpret this as a harness pass or a source regression. No WSL restart
+or user-process termination was attempted. Retry `sudo make test-systemd` after
+Debian WSL becomes available; inspect failures and retained private evidence
+before repeating. Actual Core/TLS/account provisioning/reboot/client checks remain
+open even if these stand-in service tests later pass.
+
 ## Verification already reported (historical host evidence)
 
 A prior user-provided `proxy-tokyo` read-only report stated that PNM 0.16.0-rc.1, both Core services/listeners, `pnm check`, and selected permissions were healthy, and that public client connections had succeeded. This report is historical and was not independently refreshed in this documentation task. It does not close the local failure-injection gaps above or prove the current installed source matches this HEAD.
@@ -666,7 +693,7 @@ A prior user-provided `proxy-tokyo` read-only report stated that PNM 0.16.0-rc.1
 1. Confirm deployed PNM source identity for G-01 using read-only checks.
 2. Accept the repaired A-03/A-04 paths in a disposable systemd VM, including explicit commands versus reboot/external restart; do not treat local results as completed Phase 3 acceptance.
 3. Use a disposable Debian 13 systemd VM for real lifecycle/recovery acceptance. The local WSL environment already provides Bash, make, ShellCheck, Python, ripgrep, zip/unzip, flock and OpenSSL for source and mock tests.
-4. Use isolated test-unit names for narrower WSL systemd lifecycle checks. Accept real service-account/TLS/Core/reboot/client behavior separately. Extend local results and record exact commands/exits/environment.
+4. Restore Debian WSL availability (currently HCS/0x800705aa), then run the reviewed `sudo make test-systemd` harness for narrower lifecycle evidence. Accept real service-account/TLS/Core/reboot/client behavior separately. Record exact commands/exits/environment.
 5. Reassess Phase 3 completion. Do not start Phase 4 automatically.
 
 ## Boundaries
