@@ -79,6 +79,11 @@ pnm_runtime_exit() {
             ((rc != 0)) || rc="$PNM_EXIT_SOFTWARE"
             if pnm_apply_gate_fail "$rc"; then :; else rc=$?; fi
         fi
+    elif (( ${PNM_TX_ACTIVE:-0} == 1 )) && [[ "${PNM_TX_OPERATION:-}" != deployment ]] &&
+        declare -F pnm_tx_recover_on_exit >/dev/null 2>&1; then
+        # Finish one recovery attempt before accepting another catchable signal.
+        trap '' INT TERM
+        if pnm_tx_recover_on_exit "$rc"; then :; else rc=$?; fi
     fi
     pnm_cleanup || pnm_warn 'Temporary cleanup failed; private staging files may remain.' >&2
     exit "$rc"

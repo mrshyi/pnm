@@ -2,7 +2,9 @@
 
 This document describes the source baseline plus safety/G-02, persisted-port, lifecycle-evidence and update/restore-input changes through 2026-10-23. It is not a production deployment attestation. Verify behavior against source and tests when changing it.
 
-**Increment baseline:** branch `dev`, HEAD `454b6443469ba6e93a1009ac9ae40f4e6b45a01a`, `VERSION` `0.16.0-rc.1` (checked 2026-10-23).
+**Increment baseline:** branch `dev`, HEAD `7f08d08ea978cf3b0953cc8be04a534faa8cb8a1`, `VERSION` `0.16.0-rc.1` (checked 2026-10-23).
+
+Catchable EXIT/INT/TERM during an active standalone transaction uses the existing registered rollback callbacks and then closes its lock level. Persisted valid COMMIT/rollback receipts take precedence over an interrupted memory-flag update. Completed callbacks finish a missing completion receipt without repeating file/service recovery. Invalid or already uncertain journal evidence is retained for manual inspection; invalid evidence closes without appending to the rejected journal. Original failures/signals retain their exit status, and an unclosed uncommitted success becomes an error. Recovery defers subsequent INT/TERM for that attempt. This does not catch SIGKILL, perform cross-process replay or establish real systemd recovery.
 
 Restore binds its initial root/mode check to a device/inode pair. The parser opens with `O_NOFOLLOW|O_NONBLOCK`, checks the descriptor is the same regular file with protected ownership/mode, and reads tar data from that descriptor. Replacement with another file, symlink or FIFO is refused before candidate validation. This does not prevent a privileged writer changing bytes in place, authenticate the archive or replace the trusted-provenance requirement.
 

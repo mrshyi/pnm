@@ -343,6 +343,53 @@ test_restore_refuses_file_compensation_until_processes_stop() {
     assert_contains "$RUN_ERROR" 'rollback failed'
 }
 
+test_restore_term_uses_registered_service_and_file_recovery() {
+    local -a transaction=()
+    prepare_flow_fixture || return 1
+    restore_term_child() (
+        pnm_init_runtime
+        pnm_tx_commit() { kill -TERM "$BASHPID"; }
+        pnm_core_restore_rollback() {
+            fixture_recovering=1
+            pnm_test_real_pnm_core_restore_rollback || return $?
+            [[ "${fixture_active[xray.service]}:${fixture_enabled[xray.service]}" == active:disabled &&
+                "${fixture_active[hysteria-server.service]}:${fixture_enabled[hysteria-server.service]}" == active:enabled ]] || return 70
+            [[ "$(pnm_core_applied_config_status xray "$PNM_XRAY_CONFIG")" == confirmed &&
+                "$(pnm_core_applied_config_status hysteria2 "$PNM_HY2_CONFIG")" == confirmed ]] || return 70
+            printf 'verified\n' >"$fixture_root/recovery.verified"
+        }
+        pnm_core_restore "$fixture_root/archive.tar.gz"
+    )
+    run_capture restore_term_child
+    assert_eq 143 "$RUN_RC" || return 1
+    assert_original_resources || return 1
+    assert_eq verified "$(<"$fixture_root/recovery.verified")" || return 1
+    transaction=("$PNM_STATE_DIR"/transactions/*)
+    pnm_tx_load_for_inspect "${transaction[0]##*/}" || return 1
+    assert_eq ROLLED_BACK "$PNM_TX_INSPECT_STATE" || return 1
+    assert_not_contains "$RUN_OUTPUT" 'Both Cores restored and healthy'
+}
+
+test_restore_term_recovery_failure_retains_resources_and_journal() {
+    local -a transaction=()
+    prepare_flow_fixture || return 1
+    fixture_ignore_recovery_stop=1
+    restore_term_child() (
+        pnm_init_runtime
+        pnm_tx_commit() { kill -TERM "$BASHPID"; }
+        pnm_core_restore "$fixture_root/archive.tar.gz"
+    )
+    run_capture restore_term_child
+    assert_eq 143 "$RUN_RC" || return 1
+    assert_eq 'non-executable fixture' "$(<"$PNM_XRAY_CONFIG")" || return 1
+    transaction=("$PNM_STATE_DIR"/transactions/*)
+    pnm_tx_load_for_inspect "${transaction[0]##*/}" || return 1
+    assert_eq RECOVERY_REQUIRED "$PNM_TX_INSPECT_STATE" || return 1
+    assert_contains "$RUN_ERROR" 'recovery failed'
+}
+
+run_test 'TERM during restore recovers files and mocked service/applied baselines' test_restore_term_uses_registered_service_and_file_recovery
+run_test 'TERM recovery refuses file writes until mocked candidates stop' test_restore_term_recovery_failure_retains_resources_and_journal
 run_test 'restore flow publishes both confirmed applied records' test_restore_success_publishes_both_confirmed_records
 run_test 'restore stops both processes before publishing runtime resources' test_restore_stops_processes_before_resource_publication
 run_test 'restore late failures recover service and applied baselines' test_restore_late_failures_recover_service_and_applied_baselines

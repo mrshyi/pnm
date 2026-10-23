@@ -1,14 +1,14 @@
 # PNM Current Tasks
 
-**Last reconciled:** 2026-10-23 (G-04 archive identity continuation; Debian WSL `make check` passes 286 tests; systemd/production acceptance remains open)
+**Last reconciled:** 2026-10-23 (standalone catchable-exit recovery; Debian WSL `make check` passes 305 tests; systemd/production acceptance remains open)
 
-**Current increment baseline:** branch `dev`, HEAD `454b6443469ba6e93a1009ac9ae40f4e6b45a01a`, VERSION `0.16.0-rc.1`.
+**Current increment baseline:** branch `dev`, HEAD `7f08d08ea978cf3b0953cc8be04a534faa8cb8a1`, VERSION `0.16.0-rc.1`.
 
 This page is a status snapshot, not a test report. Status must be refreshed from current source, test output, or host evidence before it is changed. Historical Phase 2 analysis is preserved in [PHASE2_GAP_ANALYSIS.md](PHASE2_GAP_ANALYSIS.md).
 
 ## Active phase
 
-**Phase 3 — existing defect fixes and acceptance.** Phase 4 has not started. G-02, A-03/A-04, G-03/G-04 restore recovery and G-06 access have local evidence in committed increments. The current continuation bounds archive parsing and states the trusted-backup contract; real systemd, reboot and client acceptance remain open. The user has authorized consecutive local stages and commits, and confirmed Debian WSL is the only available test environment.
+**Phase 3 — existing defect fixes and acceptance.** Phase 4 has not started. G-02, A-03/A-04, G-03/G-04 recovery, backup/input safety and G-06 access have local evidence in committed increments. The current continuation handles catchable standalone transaction exits; real systemd, reboot and client acceptance remain open. The user has authorized consecutive local stages and commits, and confirmed Debian WSL is the only available test environment.
 
 Current review artifacts (2026-10-22):
 
@@ -93,7 +93,7 @@ not close G-02 or prove systemd recovery, reboot or public client connectivity.
 | G-01 — runtime/config/link state | BLOCKED for production acceptance | Current `lib/node.sh` source prints an HY2 runtime row. Prior production output reportedly omitted it despite the same VERSION; deployed executable/source identity has not been verified in this session. | On an authorized host, perform read-only path/version/source-hash comparison; do not apply or upgrade as diagnosis. |
 | G-02 — complete deployment rollback | IMPLEMENTED / local filesystem and mock checks PASS; systemd acceptance open | One deployment transaction now spans resources, lifecycle, applied/node state and final outer checks; durable marker and unresolved-deployment guards are tested. | Run the disposable-systemd/interrupt/reboot matrix in [the acceptance plan](ACCEPTANCE_PLAN.md); do not infer production readiness. |
 | G-03 — Core update transaction | PARTIAL L1 PASS / Linux acceptance open | Local publication faults restore current/previous/version-metadata pairs; external edits and recovery failures are visible. Kernel flock tests now cover preparation, contention, unresolved deployments, reentrancy and cleanup errors. | Run the real systemd binary/metadata/service/concurrent-command/interruption matrix in a disposable VM. |
-| G-04 — backup/restore safety | PARTIAL L1 PASS / Linux acceptance open | Archive parser budgets include hidden extensions; trusted input is operator-verified; file/directory metadata and full restore dispatch with mocked service/applied recovery have local evidence. | Verify backup snapshot consistency and staging cleanup, then accept real systemd, interruption and concurrent commands before closure. |
+| G-04 — backup/restore safety | PARTIAL L1 PASS / Linux acceptance open | Locked backup snapshot/manifest, caller staging cleanup, parser budgets/file identity and mocked restore service/applied recovery have local evidence. | Verify unresolved standalone journal guards, then accept real systemd, interruption/reboot and concurrent commands before closure. |
 | G-05 — dependency preflight | MOCK TESTS PASS / systemd acceptance open | Debian 13 WSL preflight suite passes 14/14, including configured ports, invalid-node refusal, repeat-install refusal and missing-tool checks. Mock results do not prove real systemd install ordering. | Verify missing tools before managed-resource mutation in a disposable systemd VM. |
 | G-06 — HY2 TLS permissions | PARTIAL local DAC PASS / service integration open | Real root/nobody permission probes cover ownership/mode, ancestor denial and tool/metadata exceptions; account names/NSS are mapped. Privileged service identities are refused. | Verify the actual hysteria account, real TLS loading and systemd sandbox access in a disposable VM. |
 
@@ -538,6 +538,50 @@ and restore dispatch **15/15**, all **exit 0**. Logs use that same prefix:
 `.restore-nobody.log`. This closes the checked/opened-object
 window, not privileged in-place modification or trusted provenance. Standalone
 transaction interruption and real systemd/reboot/client acceptance remain open.
+
+## Standalone transaction catchable-exit recovery — 2026-10-23
+
+Root cause: runtime EXIT compensated active deployments only. Standalone Core
+transactions could leave candidate files/services after TERM, INT or unexpected
+exit, despite having registered recovery callbacks. The original eight-case
+engine regression passed 3 and failed 5. The runtime now calls an existing-engine
+exit helper, defers repeated INT/TERM during recovery, invokes callbacks only for
+valid interrupted evidence, closes the owned lock level and preserves the primary
+error/signal. An unclosed uncommitted exit 0 becomes 70. Committed/completed work
+is not compensated again; missing callbacks retain uncertainty.
+
+Independent review found deterministic COMMIT-receipt/flag and rollback-receipt/flag
+signal windows (10 passed / 2 failed). The helper now checks existing journal
+authority in a child inspector without altering active receipt arrays. Completed
+callbacks can finish their missing completion receipt. Earlier uncertainty remains
+inspectable after ROLLBACK_COMPLETE, while COMMIT/ROLLED_BACK remain final. Invalid
+or already uncertain evidence is not an automatic replay request. A journal-symlink
+regression also proved close could write to rejected evidence (15 passed / 1 failed);
+invalid close now skips journal writes while releasing memory/lock state.
+
+Final ROLLED_BACK publication also has a signal-before-memory-cleanup regression
+(16 passed / 1 failed before correction). A persisted completed recovery now
+closes without appending a second terminal event.
+
+The dedicated suite now has 17 cases; focused root/nobody runs both pass
+17/17, with syntax/security scan/ShellCheck exit 0. Two actual restore dispatch
+TERM cases exercise the existing file/directory/applied/service callbacks against
+private files and mocked services: one verifies original resources, active/enable
+policy and confirmed applied state; the other refuses file recovery if candidate
+processes cannot be observed stopped, retaining RECOVERY_REQUIRED. Restore suite
+17/17 also passed under actual nobody. No real systemd/Core execution is claimed.
+
+Logs: `/var/tmp/pnm-interruption.red.log`, `.receipt-red.log`, `.retained-red.log`,
+`.invalid-red.log`, `.symlink-red.log`, `.symlink-green.log`, `.symlink-nobody.log`
+(all latter suffixes share `/var/tmp/pnm-interruption`);
+`/var/tmp/pnm-interruption-final-v2.restore-nobody.log`,
+`/var/tmp/pnm-interruption.close-red.log`, `.close-green.log`, `.close-nobody.log`.
+Final fixed copy `/var/tmp/pnm-interruption-final-v4`: `make check` **exit 0,
+29 suites / 305 passed / 0 failed**, including syntax/security scan;
+`make shellcheck` **exit 0**. Logs: `.check.log` and `.lint.log` under that prefix.
+v1-v3 were intermediate checks before the final boundary fix.
+SIGKILL and unresolved standalone journal guards remain the next source stage;
+automatic cross-process recovery remains outside scope.
 
 ## Verification already reported (historical host evidence)
 

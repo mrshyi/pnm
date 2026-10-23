@@ -279,7 +279,10 @@ pnm_tx_load_for_inspect() {
                 ;;
             RECOVERY_REQUIRED)
                 ((begin_count == 1)) || return "$PNM_EXIT_CONFIG"
-                [[ "$terminal" != COMMIT && "$terminal" != ROLLED_BACK && "$terminal" != ROLLBACK_COMPLETE ]] || return "$PNM_EXIT_CONFIG"
+                # Completed callbacks do not erase earlier receipt uncertainty;
+                # close may retain it after ROLLBACK_COMPLETE. Final COMMIT or
+                # ROLLED_BACK still forbids any following journal event.
+                [[ "$terminal" != COMMIT && "$terminal" != ROLLED_BACK ]] || return "$PNM_EXIT_CONFIG"
                 terminal=RECOVERY_REQUIRED
                 ;;
             ABANDONED)
@@ -983,11 +986,66 @@ pnm_tx_commit() {
     PNM_TX_COMMITTED=1
 }
 
+pnm_tx_recover_on_exit() {
+    local exit_rc="${1:-0}" persisted_state='' close_mode=''
+    ((PNM_TX_ACTIVE == 1)) || return "$exit_rc"
+    if ((PNM_TX_COMMITTED == 0 && PNM_DRY_RUN == 0)); then
+        # Standalone journal receipts are authoritative. A signal may arrive
+        # after COMMIT is written but before its in-memory flag is updated.
+        # Inspect in a child so its parsed receipt arrays cannot alter recovery.
+        persisted_state="$(pnm_tx_load_for_inspect "$PNM_TX_ID" >/dev/null 2>&1 && printf '%s' "$PNM_TX_INSPECT_STATE")" || persisted_state=''
+        case "$persisted_state" in
+            COMMITTED) PNM_TX_COMMITTED=1 ;;
+            ROLLED_BACK) PNM_TX_ROLLED_BACK=1; close_mode=--skip-journal ;;
+            INTERRUPTED)
+                if ((PNM_TX_ROLLED_BACK == 1)); then
+                    # The callbacks completed before this flag was set. Finish
+                    # their missing receipt rather than applying them again.
+                    pnm_tx_journal ROLLBACK_COMPLETE '' || PNM_TX_RECOVERY_REQUIRED=1
+                fi
+                ;;
+            RECOVERY_REQUIRED)
+                # A persisted failed/uncertain recovery is not a replay request.
+                PNM_TX_RECOVERY_REQUIRED=1
+                ((exit_rc != 0)) || exit_rc="$PNM_EXIT_SOFTWARE"
+                pnm_error 'Standalone transaction recovery remains uncertain; inspect retained evidence.' >&2
+                ;;
+            *)
+                PNM_TX_RECOVERY_REQUIRED=1
+                close_mode=--skip-journal
+                ((exit_rc != 0)) || exit_rc="$PNM_EXIT_SOFTWARE"
+                pnm_error 'Standalone transaction recovery receipt is invalid; inspect retained evidence.' >&2
+                ;;
+        esac
+    fi
+    if ((PNM_TX_COMMITTED == 0 && PNM_TX_ROLLED_BACK == 0 && PNM_DRY_RUN == 0)) && [[ "$persisted_state" == INTERRUPTED ]]; then
+        ((exit_rc != 0)) || exit_rc="$PNM_EXIT_SOFTWARE"
+        ((PNM_TX_STEP_FAILURE_RC != 0)) || PNM_TX_STEP_FAILURE_RC="$exit_rc"
+        if ((${#PNM_TX_ROLLBACKS[@]} > 0)); then
+            pnm_tx_rollback || pnm_error 'Standalone transaction recovery failed; inspect retained recovery evidence.' >&2
+        else
+            # An unregistered callback cannot prove that service or file effects
+            # were compensated, even if the process had not reported a failure.
+            PNM_TX_RECOVERY_REQUIRED=1
+            pnm_tx_journal RECOVERY_REQUIRED 'process exited without a recovery callback' || true
+            pnm_error 'Standalone transaction recovery is unavailable; inspect retained recovery evidence.' >&2
+        fi
+    fi
+    if pnm_tx_close "$close_mode"; then :; else
+        pnm_error 'Standalone transaction recovery close failed; inspect retained recovery evidence.' >&2
+        ((exit_rc != 0)) || exit_rc="$PNM_EXIT_SOFTWARE"
+    fi
+    return "$exit_rc"
+}
+
 pnm_tx_close() {
-    local journal_rc=0 lock_rc=0
+    local journal_rc=0 lock_rc=0 close_mode="${1-}"
+
+    (($# <= 1)) || return "$PNM_EXIT_USAGE"
+    [[ -z "$close_mode" || "$close_mode" == --skip-journal ]] || return "$PNM_EXIT_USAGE"
 
     ((PNM_TX_ACTIVE == 1)) || return 0
-    if ((PNM_TX_COMMITTED == 0)); then
+    if ((PNM_TX_COMMITTED == 0)) && [[ "$close_mode" != --skip-journal ]]; then
         if ((PNM_TX_RECOVERY_REQUIRED == 1)); then
             pnm_tx_journal RECOVERY_REQUIRED 'transaction closed with uncertain state' || journal_rc="$PNM_EXIT_CANTCREAT"
         elif ((PNM_TX_ROLLED_BACK == 1)); then
