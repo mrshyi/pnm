@@ -38,7 +38,7 @@ Stages and stop conditions:
   extraction; `--second-stage` package scripts run in the isolated guest. Never
   copy host credentials or bind host /etc, /var, /run, physical devices, sockets
   or homes. Native private /dev may contain standard pseudo-devices, not host disks.
-- [ ] Boot a randomly named, time-bounded test container. Before PNM writes,
+- [x] Boot a randomly named, time-bounded test container. Before PNM writes,
   verify distinct host/guest mount, PID, network, user and cgroup namespaces plus
   manager identity. Guest UID mappings must not grant host-root capabilities;
   only the guest's delegated cgroup subtree may be writable. Require private
@@ -95,3 +95,26 @@ and `configure-result.json`. wget/xz were also privately verified/extracted;
 existing sqv performed signature verification. No host tools were installed.
 This establishes rootfs preparation and shell isolation, not a booted guest
 systemd or PNM managed-account/lifecycle acceptance. Full boot is next.
+
+Boot-stage result: `/var/tmp/pnm-debian-guest.4w7y455l/boot-result.json` records
+`passed=true`, manager `running`, distinct identity guards, live host-side cgroup
+boundary confirmation, normal nspawn exit 0, unchanged host databases, not-found
+scope and no fixture mounts. The guest's temporary service performs its own checks
+and poweroff only after identity is confirmed; the host never issues a poweroff
+inside another namespace. Parent success requires both the guest report and normal
+exit, in addition to cleanup. Both private Python scripts compile successfully.
+
+In a fully booted guest the cgroup parent tmpfs is read-only; only systemd/unified
+are writable, both still mounted from the owned scope/payload as observed from the
+host. This stricter state differs from the earlier as-pid2 shell. A transient
+assertion requiring the parent tmpfs to remain writable failed and was corrected;
+failed attempts were not counted as success. Controller observations and actual
+mount roots are in `boot-live-mounts.json` and the guest report.
+
+`systemd-detect-virt --container` returns `wsl` here because the
+[systemd 257 detection order](https://github.com/systemd/systemd/blob/v257/src/basic/virt.c)
+checks the WSL kernel before the native marker. The guest must additionally read
+the exact `systemd-nspawn` marker at `/run/host/container-manager`; none of the
+namespace/UID/PID1/root/machine-ID guards are relaxed. The successful boot is a
+usable local guest for subsequent PNM tests, not evidence that PNM installation
+or recovery has run, and not VM/kernel reboot or external client acceptance.

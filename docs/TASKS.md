@@ -2,7 +2,7 @@
 
 **Last reconciled:** 2026-10-23 (Debian WSL default checks pass 354 tests, isolated systemd stand-ins 8/8, real Core/URI positive and refusal checks 10/10; managed-account/lifecycle, reboot and external acceptance remain open)
 
-**Current increment baseline:** branch `dev`, HEAD `bded939`, VERSION `0.16.0-rc.1`.
+**Current increment baseline:** branch `dev`, HEAD `ac2e455`, VERSION `0.16.0-rc.1`.
 
 This page is a status snapshot, not a test report. Status must be refreshed from current source, test output, or host evidence before it is changed. Historical Phase 2 analysis is preserved in [PHASE2_GAP_ANALYSIS.md](PHASE2_GAP_ANALYSIS.md).
 
@@ -982,8 +982,20 @@ Host account databases and dpkg status remain unchanged; scopes are not-found an
 no fixture mounts remain after exit. Rootfs/evidence parent:
 `/var/tmp/pnm-debian-guest.4w7y455l`; exact logs and additional privately verified
 wget/xz tool pins are in the plan. No host package or account was changed.
-Full guest systemd boot is next; actual PNM managed-account/lifecycle, VM reboot
-and external acceptance remain open. No PNM deployment has run in this rootfs.
+Full guest systemd boot now passes. `boot-result.json` in that private parent
+records manager `running`, all identity guards, live host-side cgroup boundary,
+nspawn exit 0, unchanged host databases and complete scope/mount cleanup. Only
+systemd/unified are writable inside the booted guest, and both host-visible mount
+roots remain the owned scope/payload; the parent tmpfs is read-only after boot.
+The WSL detector's outer-kernel result is paired with the exact native nspawn
+marker and all namespace/UID/root/PID1/machine-ID guards. Private boot scripts
+compile and were reviewed before execution. Earlier failed assumptions were not
+counted as success; details and source reference are in the plan.
+
+Next is actual PNM managed-account/installation/lifecycle testing inside this
+verified disposable guest. No PNM deployment has run there yet. A private container
+is now available locally; VM/kernel reboot and independent external clients remain
+unavailable and cannot be inferred from this boot result.
 
 ## Verification already reported (historical host evidence)
 
@@ -991,9 +1003,9 @@ A prior user-provided `proxy-tokyo` read-only report stated that PNM 0.16.0-rc.1
 
 ## Immediate next steps
 
-First evaluate the native container isolation/boot preflight above. A safe guest
-could supplement local account/lifecycle evidence; it cannot replace the following
-VM/reboot, deployed-host and external-client prerequisites.
+Next run scoped PNM account/installation/lifecycle cases in the verified native
+guest above. This can supplement local integration evidence; it cannot replace
+the following VM/reboot, deployed-host and external-client prerequisites.
 
 1. Confirm deployed PNM source identity for G-01 using read-only checks.
 2. Accept the repaired A-03/A-04 paths in a disposable systemd VM, including explicit commands versus reboot/external restart; do not treat local results as completed Phase 3 acceptance.
@@ -1001,11 +1013,11 @@ VM/reboot, deployed-host and external-client prerequisites.
 4. Isolated WSL systemd stand-ins pass 8/8 and real Core/TLS/local-client positive/refusal checks pass 10/10. Accept actual managed accounts and integrated PNM lifecycle/recovery, reboot and external clients separately.
 5. Reassess Phase 3 completion. Do not start Phase 4 automatically.
 
-Remaining acceptance needs external prerequisites: an authorized deployed source
-identity for G-01, a disposable target for actual managed-account provisioning,
-integrated lifecycle/recovery and reboot/fault injection, and external clients for
-dual-protocol traffic. Only Debian WSL is currently available. The stand-in and
-private-network real Core results do not close these items;
+Local account/lifecycle acceptance can now continue in the verified Debian WSL
+container. Remaining external prerequisites include an authorized deployed source
+identity for G-01, an independent disposable VM for kernel reboot/fault injection,
+and external clients for dual-protocol traffic. The stand-in and private-network
+Core/container results do not close those external items;
 Phase 3 remains incomplete and release work has not started.
 
 ## Boundaries
