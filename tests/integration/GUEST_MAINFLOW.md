@@ -40,6 +40,15 @@ on the actual selected ports refuse before any managed write. It then runs the
 real installation/lifecycle/restore, verifies actual listeners and URI ports,
 and requires both unrelated default sockets to remain untouched.
 
+`PNM_GUEST_SCENARIO=runtime-evidence` restarts each actual Core outside PNM,
+requires show/links to retain unconfirmed applied state and withhold only that
+Core's URI, and checks that PNM restart cannot promote it. Fully validated apply
+then rebuilds the confirmed binding. A separate real flock holder collides with
+the writer and protected link reader; both refuse without output/Core changes
+or a new transaction, then normal operations resume after release. This covers
+held-lock contention and external service restart, not all timing interleavings
+or VM/kernel reboot.
+
 For distinct-version testing, set `PNM_GUEST_SCENARIO=core-update` and
 `PNM_PREVIOUS_CORE_ASSETS=/var/tmp/pnm-update-core-assets`. That separately
 acquired mode-0700 root-owned cache must match `previous_core_versions.json`:

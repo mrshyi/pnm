@@ -1,6 +1,6 @@
 from pathlib import Path
 from datetime import datetime
-import hashlib,json,os,pwd,grp,re,secrets,signal,socket,subprocess,sys
+import fcntl,hashlib,json,os,pwd,grp,re,secrets,signal,socket,stat,subprocess,sys
 from urllib.parse import urlsplit,parse_qs
 mapping=[int(x) for x in Path('/proc/self/uid_map').read_text().split()]
 if sys.flags.optimize:
@@ -164,11 +164,80 @@ def deployment_failure_cases() -> None:
     subprocess.run(['systemctl','daemon-reload'],check=True,timeout=15,capture_output=True)
     passed.append('late deployment deadline restores live services resources accounts and commit state')
 
+def runtime_evidence_cases(core_state, binding, links_ready) -> None:
+    units={'xray':'xray.service','hysteria2':'hysteria-server.service'}
+    uri_keys={'xray':'xray_vless_reality','hysteria2':'hysteria2'}
+    for core,unit in units.items():
+        peer='hysteria2' if core=='xray' else 'xray'
+        before=core_state(core)
+        peer_before=core_state(peer)
+        subprocess.run(['systemctl','restart',unit],check=True,timeout=20,capture_output=True)
+        external=core_state(core)
+        check(external['invocation']!=before['invocation'] and external['resources']==before['resources']
+              and external['applied']==before['applied'],'external restart changed resources or failed to replace invocation')
+
+        def unconfirmed(label: str) -> None:
+            links=json.loads(call(label,['--json','node','links','--address','203.0.113.10']).stdout)
+            check(links[core+'_status']!='ready' and not links.get(uri_keys[core])
+                  and links[peer+'_status']=='ready','unconfirmed restart disclosed an unsafe URI or suppressed peer')
+            report=json.loads(call(label+'-show',['--json','node','show'],accepted=(78,)).stdout)
+            check(report['runtime'][core+'_applied_state']!='confirmed'
+                  and report['runtime'][core+'_link_status']!='ready'
+                  and report['runtime'][peer+'_link_status']=='ready','node show promoted unknown runtime evidence')
+
+        unconfirmed('links-external-'+core)
+        call('restart-unconfirmed-'+core,['restart',core])
+        restarted=core_state(core)
+        check(restarted['invocation']!=external['invocation'] and restarted['applied']==before['applied']
+              and restarted['resources']==before['resources'],
+              'PNM restart promoted stale applied evidence')
+        unconfirmed('links-unconfirmed-restart-'+core)
+        check(core_state(peer)==peer_before,'external/repeated restart changed peer Core')
+        passed.append('actual '+core+' external and unconfirmed restart withhold stale evidence and preserve peer')
+
+        call('apply-reconfirm-'+core,['apply',core])
+        binding(core)
+        links_ready('links-reconfirmed-'+core)
+        check(core_state(peer)==peer_before,'validated reconfirmation changed peer Core')
+        passed.append('actual '+core+' validated apply rebuilds the confirmed runtime binding')
+
+    before={core:core_state(core) for core in units}
+    transactions=set(Path('/var/lib/pnm/transactions').iterdir())
+    lock=Path('/run/lock/pnm.lock')
+    fd=os.open(lock,os.O_RDWR|os.O_NOFOLLOW)
+    try:
+        info=os.fstat(fd)
+        check(stat.S_ISREG(info.st_mode) and info.st_uid==0,'unexpected PNM lock object')
+        fcntl.flock(fd,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        probe=os.open(lock,os.O_RDWR|os.O_NOFOLLOW)
+        try:
+            try:
+                fcntl.flock(probe,fcntl.LOCK_EX|fcntl.LOCK_NB)
+            except BlockingIOError:
+                pass
+            else:
+                raise RuntimeError('independent lock probe did not observe the held lock')
+        finally:
+            os.close(probe)
+        writer=call('contended-apply',['apply','xray'],accepted=(73,))
+        reader=call('contended-links',['--json','node','links','--address','203.0.113.10'],accepted=(73,))
+        check(not writer.stdout and not reader.stdout,'contended operation emitted output or credentials')
+        check(before=={core:core_state(core) for core in units},'contended operation changed a Core')
+        check(transactions==set(Path('/var/lib/pnm/transactions').iterdir()),'contended operation began a transaction')
+    finally:
+        fcntl.flock(fd,fcntl.LOCK_UN)
+        os.close(fd)
+    call('apply-after-contention',['apply','xray'])
+    binding('xray')
+    links_ready('links-after-contention')
+    check(core_state('hysteria2')==before['hysteria2'],'post-contention apply changed peer Core')
+    passed.append('real cross-process lock refuses writers and protected readers then releases without leakage')
+
 try:
     absent()
     passed.append('fresh guest has no managed accounts or resources')
     scenario=Path('/opt/pnm-test-scenario').read_text().strip()
-    check(scenario in ('lifecycle','deployment-failure','core-update','configured-ports'),'unknown guest scenario')
+    check(scenario in ('lifecycle','deployment-failure','core-update','configured-ports','runtime-evidence'),'unknown guest scenario')
     if scenario=='configured-ports':
         ports={'xray':10443,'hysteria2':18443}
         for kind,port in ((socket.SOCK_STREAM,443),(socket.SOCK_DGRAM,8443)):
@@ -368,6 +437,9 @@ try:
         check(len(default_sockets)==2 and all(fixture.fileno()>=0 and fixture.getsockname()==('127.0.0.1',port)
               for fixture,port in zip(default_sockets,(443,8443))), 'unrelated default listeners changed')
         passed.append('unrelated default listeners survive the complete custom-port lifecycle')
+    if scenario=='runtime-evidence':
+        stage='external restart and real consistency lock'
+        runtime_evidence_cases(core_state,binding,links_ready)
     result={'passed':True,'checks':passed,'clock_diagnostic':checks.get('time_sync'),'uids_distinct':True}
 except Exception as error:
     result={'passed':False,'checks':passed,'stage':stage,'error_class':type(error).__name__}

@@ -1,8 +1,8 @@
 # PNM Current Tasks
 
-**Last reconciled:** 2026-10-24 (default370 tests; guest main-flow14/14, failure/retry16/16, distinct-version update22/22 and custom-port16/16 pass; broader fault/reboot/external acceptance remain open)
+**Last reconciled:** 2026-10-24 (default370 tests; guest main-flow14/14, failure/retry16/16, update22/22, custom-port16/16 and runtime-evidence19/19 pass; broader fault/reboot/external acceptance remain open)
 
-**Current increment baseline:** branch `dev`, parent HEAD `f756e43`, VERSION `0.16.0-rc.1`.
+**Current increment baseline:** branch `dev`, parent HEAD `2d60bf9`, VERSION `0.16.0-rc.1`.
 
 This page is a status snapshot, not a test report. Status must be refreshed from current source, test output, or host evidence before it is changed. Historical Phase 2 analysis is preserved in [PHASE2_GAP_ANALYSIS.md](PHASE2_GAP_ANALYSIS.md).
 
@@ -1213,14 +1213,36 @@ is packaged separately in the existing Make entry; default scenarios retain443/
 8443 and all cases now verify actual listener/URI port agreement. Broader failure/
 concurrency/reboot/external acceptance remains open.
 
+## Actual external restart evidence and held-lock contention — 2026-10-24
+
+The existing opt-in guest entry's `runtime-evidence` scenario passes **19/19**
+in `/var/tmp/pnm-install-guest.j61dn9c1`, Make exit0. After the original14, both
+actual services are restarted outside PNM. Their invocation changes while config/
+applied bytes stay fixed; show returns78 with unconfirmed target and ready peer.
+Links return0 with only the peer URI. PNM restart still cannot promote stale
+evidence or alter runtime resources; fully validated apply rebuilds confirmation
+and both links become ready, with the peer unchanged.
+
+A real independent flock FD holds the global lock; a second FD confirms kernel
+contention. The actual writer and protected reader return73 with empty stdout,
+unchanged Core/process/applied state and no new transaction. After release the
+same commands succeed, confirming the cause and absence of a leaked lock. This
+tests held-lock collision, not every concurrent install/apply/read interleaving.
+
+Two changed Python files compile and seven offline guards pass. Host databases
+remain unchanged, nspawn exits0, scope is not-found and no fixture mounts remain.
+No production code changes; default source evidence remains31/370 without a
+redundant rerun. Broader fault recovery and independent VM/kernel reboot remain
+open; external service restart does not stand in for reboot acceptance.
+
 ## Verification already reported (historical host evidence)
 
 A prior user-provided `proxy-tokyo` read-only report stated that PNM 0.16.0-rc.1, both Core services/listeners, `pnm check`, and selected permissions were healthy, and that public client connections had succeeded. This report is historical and was not independently refreshed in this documentation task. It does not close the local failure-injection gaps above or prove the current installed source matches this HEAD.
 
 ## Immediate next steps
 
-Next exercise external restart evidence, concurrent readers/writers and remaining
-fault cases in fresh native guests.
+Next exercise actual Core startup failure compensation and remaining update/
+restore fault cases in fresh native guests.
 Successful main flow, update/rollback and late-deadline compensation cannot replace
 the following VM/reboot, deployed-host and external-client prerequisites.
 
