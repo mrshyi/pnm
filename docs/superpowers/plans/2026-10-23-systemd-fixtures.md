@@ -18,8 +18,8 @@ units, removes only their files, and preserves private evidence on failure.
 - [x] Implement scenarios for real activation, peer-preserving restart and applied InvocationID,
   inactive/disabled and active/disabled failure compensation, and TERM recovery.
 - [x] Run syntax, security scan and ShellCheck, obtain independent safety review.
-- [ ] Execute the test target through the normal approval path.
-- [ ] Verify cleanup and record exact evidence, update Tasks/acceptance boundaries,
+- [x] Execute the test target through the normal approval path.
+- [x] Verify cleanup and record exact evidence, update Tasks/acceptance boundaries,
   review the staged delta and commit.
 
 These stand-in services do not establish actual Xray/Hysteria behavior, account
@@ -30,4 +30,10 @@ Execution attempt: WSL failed before Bash with exit 1 and
 `Wsl/Service/CreateInstance/CreateVm/HCS/0x800705aa`; the read-only retry failed
 identically. No service setup or assertion ran. Static checks passed exit 0
 (`/var/tmp/pnm-systemd-review.lint-final.log`); independent review accepted the
-script for execution. Dynamic cleanup verification and acceptance remain pending.
+script for execution. That attempt did not establish dynamic acceptance.
+
+Continuation: WSL recovered; frozen copy `/var/tmp/pnm-systemd-continue` at
+`ee88135` passed `make test-systemd` (exit 0, 5/5). Log:
+`/var/tmp/pnm-systemd-continue.systemd.log`. Both exact random units were subsequently
+not-found/inactive, without runtime files or enable links. This completes this
+bounded fixture stage; the real Core/TLS/reboot/client items above remain open.

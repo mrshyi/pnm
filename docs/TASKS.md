@@ -1,8 +1,8 @@
 # PNM Current Tasks
 
-**Last reconciled:** 2026-10-23 (opt-in systemd fixture harness reviewed; execution blocked by WSL HCS/0x800705aa; prior Debian WSL `make check` passes 327 tests; systemd/production acceptance remains open)
+**Last reconciled:** 2026-10-23 (isolated Debian WSL systemd harness passes 5/5; prior `make check` passes 327 tests; real Core/production acceptance remains open)
 
-**Current increment baseline:** branch `dev`, HEAD `2e14d234c341855f44fcf95a6c0e3e9af6e24cc3`, VERSION `0.16.0-rc.1`.
+**Current increment baseline:** branch `dev`, HEAD `ee88135`, VERSION `0.16.0-rc.1`.
 
 This page is a status snapshot, not a test report. Status must be refreshed from current source, test output, or host evidence before it is changed. Historical Phase 2 analysis is preserved in [PHASE2_GAP_ANALYSIS.md](PHASE2_GAP_ANALYSIS.md).
 
@@ -684,6 +684,19 @@ Debian WSL becomes available; inspect failures and retained private evidence
 before repeating. Actual Core/TLS/account provisioning/reboot/client checks remain
 open even if these stand-in service tests later pass.
 
+Continuation after WSL recovered: Debian **13.5**, kernel
+`5.15.167.4-microsoft-standard-WSL2`, systemd **257.13-1~deb13u1**, PID 1 systemd,
+manager running. Frozen source copy `/var/tmp/pnm-systemd-continue` at `ee88135`:
+`make test-systemd` **exit 0, 5 passed / 0 failed**; log
+`/var/tmp/pnm-systemd-continue.systemd.log`. Actual service operations and
+InvocationID observations passed for the two isolated nobody/sleep units.
+Post-cleanup read-only checks found both exact units `LoadState=not-found`,
+`ActiveState=inactive`, with no runtime unit files or enable symlinks remaining
+(`pnm-accept-7dd05f94-fc0e-488e-ae42-fbfa9f891be2-{xray,hy2}.service`).
+The earlier HCS failure is historical, not the current blocker. This adds real
+systemd stand-in lifecycle evidence only; it does not establish actual Core
+configuration loading, TLS, provisioning, reboot, listener or external traffic.
+
 ## Verification already reported (historical host evidence)
 
 A prior user-provided `proxy-tokyo` read-only report stated that PNM 0.16.0-rc.1, both Core services/listeners, `pnm check`, and selected permissions were healthy, and that public client connections had succeeded. This report is historical and was not independently refreshed in this documentation task. It does not close the local failure-injection gaps above or prove the current installed source matches this HEAD.
@@ -693,7 +706,7 @@ A prior user-provided `proxy-tokyo` read-only report stated that PNM 0.16.0-rc.1
 1. Confirm deployed PNM source identity for G-01 using read-only checks.
 2. Accept the repaired A-03/A-04 paths in a disposable systemd VM, including explicit commands versus reboot/external restart; do not treat local results as completed Phase 3 acceptance.
 3. Use a disposable Debian 13 systemd VM for real lifecycle/recovery acceptance. The local WSL environment already provides Bash, make, ShellCheck, Python, ripgrep, zip/unzip, flock and OpenSSL for source and mock tests.
-4. Restore Debian WSL availability (currently HCS/0x800705aa), then run the reviewed `sudo make test-systemd` harness for narrower lifecycle evidence. Accept real service-account/TLS/Core/reboot/client behavior separately. Record exact commands/exits/environment.
+4. Isolated WSL systemd lifecycle checks now pass 5/5. Accept real service-account/TLS/Core/reboot/client behavior separately; preserve these evidence boundaries.
 5. Reassess Phase 3 completion. Do not start Phase 4 automatically.
 
 ## Boundaries
