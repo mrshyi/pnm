@@ -97,10 +97,14 @@ pnm_core_lifecycle_deployment_apply() {
 }
 
 pnm_core_lifecycle_apply() {
+    pnm_systemd_available || return "$PNM_EXIT_UNAVAILABLE"
+    pnm_core_with_write_lock pnm_core_lifecycle_apply_locked "$1"
+}
+
+pnm_core_lifecycle_apply_locked() {
     local core="${1:?core id required}"
     local rc
 
-    pnm_systemd_available || return "$PNM_EXIT_UNAVAILABLE"
     pnm_core_lifecycle_snapshot "$core" || return $?
     pnm_tx_begin "core-lifecycle-$core" || return $?
     if ((PNM_DRY_RUN == 0)); then
@@ -118,9 +122,11 @@ pnm_core_lifecycle_apply() {
     }
 
     if ((PNM_DRY_RUN == 1)); then
-        pnm_tx_journal PLAN "core=$core unit=$PNM_LIFECYCLE_UNIT action=daemon-reload,enable,start,health"
-        pnm_tx_commit
-        pnm_tx_close
+        pnm_tx_journal PLAN "core=$core unit=$PNM_LIFECYCLE_UNIT action=daemon-reload,enable,start,health" || {
+            rc=$?; pnm_tx_close || true; return "$rc";
+        }
+        pnm_tx_commit || { rc=$?; pnm_tx_close || true; return "$rc"; }
+        pnm_tx_close || return $?
         return 0
     fi
 

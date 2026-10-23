@@ -17,6 +17,8 @@ source "$PNM_LIB_DIR/node.sh"
 source "$PNM_LIB_DIR/render.sh"
 # shellcheck source=../../lib/tls.sh
 source "$PNM_LIB_DIR/tls.sh"
+source "$PNM_LIB_DIR/lock.sh"
+source "$PNM_LIB_DIR/transaction.sh"
 # shellcheck source=../../lib/core-ops.sh
 source "$PNM_LIB_DIR/core-ops.sh"
 # shellcheck source=../testlib.sh
@@ -39,6 +41,7 @@ pnm_test_apply_setup() {
     cp -- "$TEST_ROOT/fixtures/config-secrets/secrets/reality.env" "$PNM_TEST_APPLY_ROOT/config/secrets/reality.env"
     PNM_CONFIG_DIR="$PNM_TEST_APPLY_ROOT/config"
     PNM_STATE_DIR="$PNM_TEST_APPLY_ROOT/state"
+    PNM_LOCK_FILE="$PNM_TEST_APPLY_ROOT/pnm.lock"
     mkdir -p -- "$PNM_STATE_DIR"
     PNM_XRAY_CONFIG="$PNM_TEST_APPLY_ROOT/xray/config.json"
     PNM_XRAY_BIN="$PNM_TEST_APPLY_ROOT/xray-bin"
@@ -108,6 +111,18 @@ pnm_tx_rollback() {
 pnm_tx_commit() { return 0; }
 pnm_tx_close() { PNM_TX_ACTIVE=0; }
 pnm_make_temp_dir() { printf -v "$1" '%s' "$PNM_TEST_APPLY_ROOT/stage"; }
+
+test_apply_close_failure_is_not_reported_as_success() {
+    local failed=0
+    pnm_test_apply_setup || return 1
+    pnm_tx_close() { PNM_TX_ACTIVE=0; return 70; }
+    run_capture pnm_core_apply_config xray
+    assert_eq 70 "$RUN_RC" || failed=1
+    assert_not_contains "$RUN_OUTPUT" 'configuration applied' || failed=1
+    assert_eq 0 "$PNM_LOCK_DEPTH" || failed=1
+    pnm_test_apply_cleanup
+    return "$failed"
+}
 
 test_xray_apply_validation_failure_preserves_runtime_config() {
     local original rc
@@ -325,6 +340,7 @@ run_test 'unsupported service names are rejected' test_unknown_core_is_rejected
 run_test 'log options reject invalid line counts' test_log_options_are_validated_before_journal_access
 run_test 'dry-run blocks mutating core commands' test_dry_run_cannot_mutate_a_core
 run_test 'core command help is available' test_core_command_help
+run_test 'configuration close failure suppresses success and releases the outer lock' test_apply_close_failure_is_not_reported_as_success
 run_test 'invalid Xray candidate leaves current runtime config untouched' test_xray_apply_validation_failure_preserves_runtime_config
 run_test 'Xray restart failure restores previous config and service' test_xray_apply_restart_failure_restores_previous_config_and_service
 run_test 'Xray health-check failure restores previous config and service' test_xray_apply_health_failure_restores_previous_config_and_service

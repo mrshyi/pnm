@@ -520,12 +520,13 @@ test_transaction_close_failure_is_reported_and_releases_outer_lock() {
     local core operation
     pnm_tx_close() { pnm_test_real_tx_close "$@" || return $?; return 70; }
     for core in xray hysteria2; do
-        for operation in update rollback; do
+        for operation in restart update rollback; do
             prepare_evidence_fixture
             run_capture "pnm_core_$operation" "$core"
             assert_eq 70 "$RUN_RC" || return 1
             assert_not_contains "$RUN_OUTPUT" 'updated to' || return 1
             assert_not_contains "$RUN_OUTPUT" 'rolled back to' || return 1
+            assert_not_contains "$RUN_OUTPUT" 'restarted and healthy' || return 1
             assert_eq 0 "$PNM_LOCK_DEPTH" || return 1
             flock -n "$PNM_LOCK_FILE" true || return 1
             assert_peer_untouched "$core" || return 1

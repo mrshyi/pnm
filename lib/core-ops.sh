@@ -30,11 +30,16 @@ pnm_core_resolve() {
 }
 
 pnm_core_restart() {
+    pnm_core_resolve "$1" || return $?
+    pnm_require_root || return $?
+    pnm_core_with_write_lock pnm_core_restart_locked "$PNM_CORE_ID"
+}
+
+pnm_core_restart_locked() {
     local core rc
     local PNM_CORE_PRIOR_CONFIG_HASH='' PNM_CORE_PRIOR_APPLIED_HASH='' PNM_CORE_PRIOR_APPLIED_ATTRIBUTES=''
     pnm_core_resolve "$1" || return $?
     core=$PNM_CORE_ID
-    pnm_require_root || return $?
     pnm_core_lifecycle_snapshot "$core" || return $?
     pnm_tx_begin "core-lifecycle-$core" || return $?
     pnm_core_capture_applied || { rc=$?; pnm_tx_close; return "$rc"; }
@@ -48,7 +53,7 @@ pnm_core_restart() {
     if pnm_tx_run health pnm_core_lifecycle_health_step; then :; else rc=$?; pnm_tx_close; return "$rc"; fi
     if pnm_tx_run applied_evidence pnm_core_refresh_applied; then :; else rc=$?; pnm_tx_close; return "$rc"; fi
     pnm_tx_commit || { rc=$?; pnm_tx_rollback || true; pnm_tx_close; return "$rc"; }
-    pnm_tx_close
+    pnm_tx_close || return $?
     pnm_success "$core restarted and healthy."
 }
 
@@ -149,9 +154,6 @@ pnm_core_fix_owner() {
 pnm_core_restore_config() {
     local rc=0
     pnm_tx_restore_written_files || return "$PNM_EXIT_SOFTWARE"
-    if [[ -f "$PNM_CORE_CONFIG" ]]; then
-        pnm_core_fix_owner "$PNM_CORE_ID" "$PNM_CORE_CONFIG" || return "$PNM_EXIT_SOFTWARE"
-    fi
     if [[ "$PNM_LIFECYCLE_PRE_ACTIVE" == active ]]; then
         pnm_systemctl restart "$PNM_CORE_UNIT" || rc="$PNM_EXIT_SOFTWARE"
         pnm_systemd_unit_healthy "$PNM_CORE_UNIT" || rc="$PNM_EXIT_SOFTWARE"
@@ -212,12 +214,17 @@ pnm_core_record_applied_config() {
 }
 
 pnm_core_apply_config() {
+    pnm_core_resolve "$1" || return $?
+    pnm_require_root || return $?
+    pnm_core_with_write_lock pnm_core_apply_config_locked "$PNM_CORE_ID"
+}
+
+pnm_core_apply_config_locked() {
     local core=$1 rc stage config validation_output tls_check tls_status tls_detail
     local node_name=PNM_CORE_NODE secret_name=PNM_CORE_SECRET
     local -A PNM_CORE_NODE=() PNM_CORE_SECRET=()
     pnm_core_resolve "$core" || return $?
     core=$PNM_CORE_ID
-    pnm_require_root || return $?
     [[ -d "$(dirname -- "$PNM_CORE_CONFIG")" && ! -L "$(dirname -- "$PNM_CORE_CONFIG")" ]] || return "$PNM_EXIT_CONFIG"
     pnm_load_node_config "$node_name" || return "$PNM_EXIT_CONFIG"
     pnm_validate_node_config "$node_name" || return "$PNM_EXIT_CONFIG"
@@ -263,7 +270,7 @@ pnm_core_apply_config() {
             return "$PNM_EXIT_CONFIG"
         fi
     fi
-    chmod 0600 -- "$config"
+    chmod 0600 -- "$config" || return "$PNM_EXIT_NOPERM"
     pnm_core_lifecycle_snapshot "$core" || return $?
     [[ "$PNM_LIFECYCLE_PRE_ACTIVE" == active ]] || return "$PNM_EXIT_CONFIG"
     pnm_tx_begin "core-config-$core" || return $?
@@ -315,7 +322,7 @@ pnm_core_apply_config() {
         return "$rc"
     fi
     pnm_tx_commit || { rc=$?; pnm_core_apply_rollback || true; pnm_tx_close; return "$rc"; }
-    pnm_tx_close
+    pnm_tx_close || return $?
     pnm_success "$core configuration applied."
 }
 
@@ -396,21 +403,6 @@ pnm_core_backup_locked() {
     rm -f -- "$publication" || return "$PNM_EXIT_SOFTWARE"
     PNM_CORE_BACKUP_PATH="$destination"
     printf '%s\n' "$destination"
-}
-
-pnm_core_with_write_lock() {
-    local function_name="${1:?Core operation required}" rc=0
-    shift
-    # Preparation reads mutable baselines too. Keep the existing reentrant
-    # lock until the nested transaction and its compensation have finished.
-    pnm_lock_acquire exclusive || return $?
-    if pnm_tx_assert_no_pending_deployment; then
-        if "$function_name" "$@"; then :; else rc=$?; fi
-    else
-        rc=$?
-    fi
-    pnm_lock_release || rc="$PNM_EXIT_SOFTWARE"
-    return "$rc"
 }
 
 pnm_core_update() {
@@ -960,12 +952,17 @@ pnm_core_uninstall_stop() {
 }
 
 pnm_core_uninstall() {
+    pnm_core_resolve "$1" || return $?
+    pnm_require_root || return $?
+    ((PNM_ASSUME_YES == 1)) || { pnm_error 'Uninstall requires --yes.'; return "$PNM_EXIT_USAGE"; }
+    pnm_core_with_write_lock pnm_core_uninstall_locked "$PNM_CORE_ID"
+}
+
+pnm_core_uninstall_locked() {
     local core unit binary config secret backup stage path target rc index=0 uninstall_root
     local -a paths=()
     pnm_core_resolve "$1" || return $?
     core=$PNM_CORE_ID unit=$PNM_CORE_UNIT binary=$PNM_CORE_BINARY config=$PNM_CORE_CONFIG
-    pnm_require_root || return $?
-    ((PNM_ASSUME_YES == 1)) || { pnm_error 'Uninstall requires --yes.'; return "$PNM_EXIT_USAGE"; }
     pnm_core_backup '' >/dev/null || return $?
     backup="$PNM_CORE_BACKUP_PATH"
     if [[ "$core" == xray ]]; then
@@ -981,10 +978,10 @@ pnm_core_uninstall() {
     stage="$uninstall_root/$core-$(date -u '+%Y%m%dT%H%M%SZ')-$$"
     [[ "$stage" == "$uninstall_root/"* ]] || return "$PNM_EXIT_CONFIG"
     mkdir -m 0700 -- "$stage" || return "$PNM_EXIT_CANTCREAT"
-    pnm_core_lifecycle_snapshot "$core" || { rmdir -- "$stage"; return $?; }
+    pnm_core_lifecycle_snapshot "$core" || { rc=$?; rmdir -- "$stage" || true; return "$rc"; }
     PNM_CORE_REMOVE_PATHS=()
     PNM_CORE_REMOVE_STAGED=()
-    pnm_tx_begin "core-uninstall-$core" || { rmdir -- "$stage"; return $?; }
+    pnm_tx_begin "core-uninstall-$core" || { rc=$?; rmdir -- "$stage" || true; return "$rc"; }
     pnm_tx_add_rollback pnm_core_uninstall_restore || { pnm_tx_close; rmdir -- "$stage"; return "$PNM_EXIT_SOFTWARE"; }
     if pnm_tx_run stop_core pnm_core_uninstall_stop; then :; else rc=$?; pnm_tx_close; rm -rf -- "$stage"; return "$rc"; fi
     for path in "${paths[@]}"; do
@@ -1003,8 +1000,8 @@ pnm_core_uninstall() {
     done
     pnm_systemd_daemon_reload || { pnm_tx_rollback || true; pnm_tx_close; rm -rf -- "$stage"; return "$PNM_EXIT_SOFTWARE"; }
     pnm_tx_commit || { rc=$?; pnm_tx_rollback || true; pnm_tx_close; return "$rc"; }
-    pnm_tx_close
-    rm -rf -- "$stage"
+    pnm_tx_close || return $?
+    rm -rf -- "$stage" || return "$PNM_EXIT_SOFTWARE"
     pnm_success "$core removed; rollback backup: $backup"
 }
 

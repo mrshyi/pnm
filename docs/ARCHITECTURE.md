@@ -2,7 +2,9 @@
 
 This document describes the source baseline plus safety/G-02, persisted-port, lifecycle-evidence and update/restore-input changes through 2026-10-23. It is not a production deployment attestation. Verify behavior against source and tests when changing it.
 
-**Increment baseline:** branch `dev`, HEAD `fc01a538e8390be1090885696be6244eb40fb06b`, `VERSION` `0.16.0-rc.1` (checked 2026-10-23).
+**Increment baseline:** branch `dev`, HEAD `6b98456bd571902f973a1aa89430f3a1fc887d5a`, `VERSION` `0.16.0-rc.1` (checked 2026-10-23).
+
+Restart, configuration apply, uninstall and standalone lifecycle now share the same preparation-through-close exclusive lock as update/rollback/restore/backup. The existing helper lives in common code for lifecycle reuse; nested backup/transactions preserve the caller's lock level. Argument/root/confirmation checks precede this boundary. Configuration compensation restores snapshot ownership/mode without normalizing them afterwards. Success paths explicitly propagate close failures, including lifecycle dry-run bookkeeping; uninstall preparation preserves its primary failure across directory cleanup and retains staging when close fails.
 
 The existing unresolved-deployment guard also inspects standalone Core, node-init, install-state and sandbox-install transactions. Writers and protected reads refuse interrupted, abandoned-after-attempt, invalid or recovery-required evidence. Valid committed/rolled-back receipts allow progress. A narrow schema-2 retry exception accepts protected empty receipts with only BEGIN, private SNAPSHOT and ABANDONED events, without any service/restore/commit baseline or attempted step. It does not replay recovery across processes or infer service safety from an empty file manifest.
 

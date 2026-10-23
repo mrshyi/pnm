@@ -5,7 +5,7 @@ TEST_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 
 failed=0
 for test_name in \
-    test_accounts.sh test_assets.sh test_backup_archive.sh test_backup_flow.sh test_check.sh test_cli.sh test_core_ops.sh test_core_evidence.sh \
+    test_accounts.sh test_assets.sh test_backup_archive.sh test_backup_flow.sh test_check.sh test_cli.sh test_core_ops.sh test_core_evidence.sh test_core_preparation.sh \
     test_config.sh test_deploy.sh test_deployment_transaction.sh test_host_apply.sh test_interruption.sh test_lifecycle.sh test_lock.sh test_node.sh \
     test_preflight.sh test_pending_core.sh test_read_access.sh test_render.sh test_hy2_sni.sh test_restore_flow.sh test_restore_recovery.sh test_sandbox_install.sh test_service.sh \
     test_staging.sh test_testlib.sh test_tls.sh test_tls_access.sh test_transaction.sh; do

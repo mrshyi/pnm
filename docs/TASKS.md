@@ -1,8 +1,8 @@
 # PNM Current Tasks
 
-**Last reconciled:** 2026-10-23 (unresolved standalone transaction guard; Debian WSL `make check` passes 318 tests; systemd/production acceptance remains open)
+**Last reconciled:** 2026-10-23 (remaining Core preparation and metadata recovery; Debian WSL `make check` passes 327 tests; systemd/production acceptance remains open)
 
-**Current increment baseline:** branch `dev`, HEAD `fc01a538e8390be1090885696be6244eb40fb06b`, VERSION `0.16.0-rc.1`.
+**Current increment baseline:** branch `dev`, HEAD `6b98456bd571902f973a1aa89430f3a1fc887d5a`, VERSION `0.16.0-rc.1`.
 
 This page is a status snapshot, not a test report. Status must be refreshed from current source, test output, or host evidence before it is changed. Historical Phase 2 analysis is preserved in [PHASE2_GAP_ANALYSIS.md](PHASE2_GAP_ANALYSIS.md).
 
@@ -626,6 +626,37 @@ Read-only environment refresh also confirms Debian WSL PID 1 is systemd and
 yet run. An independent disposable VM and real Core/client/reboot evidence remain
 unavailable; uniquely named test services can provide a narrower future check.
 
+## Remaining Core preparation and configuration compensation — 2026-10-23
+
+Root cause: restart/apply/uninstall/lifecycle read mutable preparation state before
+transaction locking; config compensation normalized ownership/mode after restoring
+the original snapshot. The first four regressions all failed. These paths now
+reuse the existing exclusive write helper from common code, before preparation
+through close. Nested backup/transaction lock levels remain reentrant. Compensation
+retains the verified original numeric ownership/mode without a second normalization.
+
+Review identified success paths swallowing close errors in conditional callback
+context: uninstall/dry-run regressions failed 2/7, apply failed 1/14 and Core evidence
+failed 1/22. Additional preparation injection confirmed uninstall snapshot/begin
+errors became success after rmdir. Success close and dry-run bookkeeping now
+propagate errors; preparation cleanup preserves the primary error. A close failure
+retains private uninstall staging. Private chmod and post-commit stage cleanup also
+propagate failure explicitly.
+
+Focused suites pass preparation **8/8**, apply/CLI **14/14**, lifecycle evidence
+**22/22**, and lifecycle **3/3**; syntax/security scan/ShellCheck exit 0. The tests
+use real independent flock and filesystem metadata, with service/NSS boundaries
+mapped into fixtures. Uninstall fault tests never move host files or call host
+services. Independent review accepted the corrected delta. Red/green logs share
+`/var/tmp/pnm-core-preparation`: `.red.log`, `.errors-red.log`, `.errors-green.log`,
+`.apply-red.log`, `.apply-green.log`, `.restart-red.log`, `.restart-green.log`.
+Final fixed copy `/var/tmp/pnm-core-preparation-final`: `make check` **exit 0,
+31 suites / 327 passed / 0 failed**, including syntax/security scan;
+`make shellcheck` **exit 0**. Actual nobody preparation **8/8** and apply **14/14**,
+both **exit 0**. Logs: `.check.log`, `.lint.log`, `.nobody.log`,
+`.apply-nobody.log` under that prefix. Real systemd/Core/client/reboot acceptance
+remains distinct.
+
 ## Verification already reported (historical host evidence)
 
 A prior user-provided `proxy-tokyo` read-only report stated that PNM 0.16.0-rc.1, both Core services/listeners, `pnm check`, and selected permissions were healthy, and that public client connections had succeeded. This report is historical and was not independently refreshed in this documentation task. It does not close the local failure-injection gaps above or prove the current installed source matches this HEAD.
@@ -635,7 +666,7 @@ A prior user-provided `proxy-tokyo` read-only report stated that PNM 0.16.0-rc.1
 1. Confirm deployed PNM source identity for G-01 using read-only checks.
 2. Accept the repaired A-03/A-04 paths in a disposable systemd VM, including explicit commands versus reboot/external restart; do not treat local results as completed Phase 3 acceptance.
 3. Use a disposable Debian 13 systemd VM for real lifecycle/recovery acceptance. The local WSL environment already provides Bash, make, ShellCheck, Python, ripgrep, zip/unzip, flock and OpenSSL for source and mock tests.
-4. Close the remaining restart/apply/uninstall/lifecycle preparation-lock and configuration metadata recovery gaps, then use isolated test-unit names for narrower WSL systemd lifecycle checks. Accept real service-account/TLS/Core/reboot/client behavior separately. Extend local results and record exact commands/exits/environment.
+4. Use isolated test-unit names for narrower WSL systemd lifecycle checks. Accept real service-account/TLS/Core/reboot/client behavior separately. Extend local results and record exact commands/exits/environment.
 5. Reassess Phase 3 completion. Do not start Phase 4 automatically.
 
 ## Boundaries

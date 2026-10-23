@@ -102,6 +102,21 @@ pnm_with_deployment_read_lock() {
     return "$rc"
 }
 
+pnm_core_with_write_lock() {
+    local function_name="${1:?Core operation required}" rc=0
+    shift
+    # Preparation reads mutable baselines too. Reuse this boundary for all
+    # standalone Core writers, including lifecycle callers outside core-ops.
+    pnm_lock_acquire exclusive || return $?
+    if pnm_tx_assert_no_pending_deployment; then
+        if "$function_name" "$@"; then :; else rc=$?; fi
+    else
+        rc=$?
+    fi
+    pnm_lock_release || rc="$PNM_EXIT_SOFTWARE"
+    return "$rc"
+}
+
 pnm_cleanup() {
     local path rc=0
 
