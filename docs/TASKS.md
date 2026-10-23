@@ -1,8 +1,8 @@
 # PNM Current Tasks
 
-**Last reconciled:** 2026-10-23 (standalone catchable-exit recovery; Debian WSL `make check` passes 305 tests; systemd/production acceptance remains open)
+**Last reconciled:** 2026-10-23 (unresolved standalone transaction guard; Debian WSL `make check` passes 318 tests; systemd/production acceptance remains open)
 
-**Current increment baseline:** branch `dev`, HEAD `7f08d08ea978cf3b0953cc8be04a534faa8cb8a1`, VERSION `0.16.0-rc.1`.
+**Current increment baseline:** branch `dev`, HEAD `fc01a538e8390be1090885696be6244eb40fb06b`, VERSION `0.16.0-rc.1`.
 
 This page is a status snapshot, not a test report. Status must be refreshed from current source, test output, or host evidence before it is changed. Historical Phase 2 analysis is preserved in [PHASE2_GAP_ANALYSIS.md](PHASE2_GAP_ANALYSIS.md).
 
@@ -583,6 +583,49 @@ v1-v3 were intermediate checks before the final boundary fix.
 SIGKILL and unresolved standalone journal guards remain the next source stage;
 automatic cross-process recovery remains outside scope.
 
+## Unresolved standalone transaction guard — 2026-10-23
+
+Root cause: pending-state guards considered deployment operations only. A real
+private child process killed by SIGKILL could leave changed bytes and INTERRUPTED
+Core receipts while a later writer or protected reader was allowed through.
+Recovery-required, service-only interruption, damaged metadata and abandoned
+service attempts had the same gap. The original suite passed 2 and failed 6.
+
+The existing guard now covers standalone Core, node-init, install-state and
+sandbox-install evidence through the existing inspector. Only valid committed or
+rolled-back records permit progress. Damaged metadata with journal/resource or
+service evidence is rejected. A strict empty-abandonment exception permits retry
+only for protected schema-2 metadata, empty file/directory/account receipts, no
+service/restore/deployment/commit baselines, and an exact BEGIN / optional private
+SNAPSHOT / ABANDONED journal. Attempted service steps cannot masquerade as empty.
+No journal is evaluated as shell code or automatically replayed.
+
+Review found parseable-but-incomplete metadata, unknown-operation skipping and a
+missing file-attributes receipt check. Added regressions failed 3/12 before the
+fix. The guard now validates required metadata structure, inspects unknown
+producers for valid terminal evidence, and refuses the empty-abandonment exception
+whenever a publication attributes receipt exists. Focused root/nobody suites pass
+12/12 with syntax/security scan/ShellCheck exit 0. A further dangling-baseline
+regression failed 1/13; both paths now share the same existence check, including
+ordinary and dangling service/commit/attributes receipts. Final focused root and
+nobody suites both pass **13/13, exit 0**, including valid unknown-producer terminal
+records (`/var/tmp/pnm-pending-core.compatibility.log`, `.compatibility-nobody.log`).
+Real SIGKILL targets only the test's own child; production services are untouched.
+Logs: `/var/tmp/pnm-pending-core.red.log`, `.extended-green.log`, `.nobody.log`,
+`.extended-lint.log` (all suffixes share `/var/tmp/pnm-pending-core`).
+Review regression logs: `/var/tmp/pnm-pending-core.review-red.log`,
+`.review-green.log`, `.review-nobody.log`, `.review-lint.log` under that prefix.
+Final fixed copy `/var/tmp/pnm-pending-core-final-v3`: `make check` **exit 0,
+30 suites / 318 passed / 0 failed**, including syntax/security scan;
+`make shellcheck` **exit 0**. Logs: `.check.log` and `.lint.log` under that prefix.
+This is persisted-state refusal,
+not reboot recovery or real Core/systemd acceptance.
+
+Read-only environment refresh also confirms Debian WSL PID 1 is systemd and
+`systemctl is-system-running` reports `running`. No systemd integration test has
+yet run. An independent disposable VM and real Core/client/reboot evidence remain
+unavailable; uniquely named test services can provide a narrower future check.
+
 ## Verification already reported (historical host evidence)
 
 A prior user-provided `proxy-tokyo` read-only report stated that PNM 0.16.0-rc.1, both Core services/listeners, `pnm check`, and selected permissions were healthy, and that public client connections had succeeded. This report is historical and was not independently refreshed in this documentation task. It does not close the local failure-injection gaps above or prove the current installed source matches this HEAD.
@@ -592,7 +635,7 @@ A prior user-provided `proxy-tokyo` read-only report stated that PNM 0.16.0-rc.1
 1. Confirm deployed PNM source identity for G-01 using read-only checks.
 2. Accept the repaired A-03/A-04 paths in a disposable systemd VM, including explicit commands versus reboot/external restart; do not treat local results as completed Phase 3 acceptance.
 3. Use a disposable Debian 13 systemd VM for real lifecycle/recovery acceptance. The local WSL environment already provides Bash, make, ShellCheck, Python, ripgrep, zip/unzip, flock and OpenSSL for source and mock tests.
-4. Verify restore input identity and standalone interruption handling, then accept real service-account/TLS loading and restore/update/rollback recovery/concurrency in systemd. Extend local results and record exact commands/exits/environment.
+4. Close the remaining restart/apply/uninstall/lifecycle preparation-lock and configuration metadata recovery gaps, then use isolated test-unit names for narrower WSL systemd lifecycle checks. Accept real service-account/TLS/Core/reboot/client behavior separately. Extend local results and record exact commands/exits/environment.
 5. Reassess Phase 3 completion. Do not start Phase 4 automatically.
 
 ## Boundaries

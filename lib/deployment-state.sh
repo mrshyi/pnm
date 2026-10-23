@@ -241,6 +241,49 @@ except (OSError, ValueError, UnicodeError):
 PY
 }
 
+pnm_tx_baseline_evidence_exists() {
+    local directory=$1 file
+    for file in core-state.env restore.env deployment.env commit.env commit-uncertain.env file-attributes.tsv; do
+        [[ ! -e "$directory/$file" && ! -L "$directory/$file" ]] || return 0
+    done
+    return 1
+}
+
+pnm_tx_empty_abandonment_safe() {
+    local directory=$1 operation=$2 file timestamp event detail began=0 ended=0
+    # This narrow retry exception proves no mutation was attempted. In
+    # particular, an empty file manifest says nothing about service operations.
+    [[ -d "$directory" && ! -L "$directory" &&
+        "$(stat -c '%a:%u' -- "$directory")" == "700:$EUID" ]] || return 1
+    for file in changes.tsv directories.tsv; do
+        [[ -f "$directory/$file" && ! -L "$directory/$file" && ! -s "$directory/$file" &&
+            "$(stat -c '%a:%u' -- "$directory/$file")" == "600:$EUID" ]] || return 1
+    done
+    if [[ -e "$directory/accounts.tsv" || -L "$directory/accounts.tsv" ]]; then
+        [[ -f "$directory/accounts.tsv" && ! -L "$directory/accounts.tsv" && ! -s "$directory/accounts.tsv" &&
+            "$(stat -c '%a:%u' -- "$directory/accounts.tsv")" == "600:$EUID" ]] || return 1
+    fi
+    if pnm_tx_baseline_evidence_exists "$directory"; then return 1; fi
+    [[ -f "$directory/metadata.env" && ! -L "$directory/metadata.env" &&
+        "$(stat -c '%a:%u' -- "$directory/metadata.env")" == "600:$EUID" ]] || return 1
+    [[ -f "$directory/journal.tsv" && ! -L "$directory/journal.tsv" &&
+        "$(stat -c '%a:%u' -- "$directory/journal.tsv")" == "600:$EUID" ]] || return 1
+    while IFS=$'\t' read -r timestamp event detail || [[ -n "$timestamp$event$detail" ]]; do
+        [[ "$timestamp" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]] || return 1
+        case "$event" in
+            BEGIN)
+                [[ "$began:$ended" == 0:0 && "$detail" == "operation=$operation deployment_id=none" ]] || return 1
+                began=1 ;;
+            SNAPSHOT) [[ "$began:$ended" == 1:0 ]] || return 1 ;;
+            ABANDONED)
+                [[ "$began:$ended" == 1:0 && "$detail" == 'transaction closed without commit' ]] || return 1
+                ended=1 ;;
+            *) return 1 ;;
+        esac
+    done <"$directory/journal.tsv"
+    [[ "$began:$ended" == 1:1 ]]
+}
+
 pnm_tx_assert_no_pending_deployment() {
     local directory id
     local -A metadata=()
@@ -248,14 +291,32 @@ pnm_tx_assert_no_pending_deployment() {
     pnm_validate_managed_path "$PNM_STATE_DIR/transactions" || return $?
     for directory in "$PNM_STATE_DIR"/transactions/*; do
         [[ -d "$directory" && ! -L "$directory" ]] || continue
-        if ! pnm_config_load "$directory/metadata.env" metadata SCHEMA_VERSION TRANSACTION_ID OPERATION DEPLOYMENT_ID 2>/dev/null; then
-            [[ ! -e "$directory/deployment.env" ]] || return "$PNM_EXIT_SOFTWARE"
+        id="${directory##*/}"
+        if ! pnm_config_load "$directory/metadata.env" metadata SCHEMA_VERSION TRANSACTION_ID OPERATION DEPLOYMENT_ID 2>/dev/null ||
+            [[ ! "${metadata[SCHEMA_VERSION]-}" =~ ^[12]$ || "${metadata[TRANSACTION_ID]-}" != "$id" ||
+                ! "${metadata[OPERATION]-}" =~ ^[a-z0-9][a-z0-9-]{0,63}$ ||
+                ( "${metadata[DEPLOYMENT_ID]-}" != none && ! "${metadata[DEPLOYMENT_ID]-}" =~ ^deploy-[A-Za-z0-9._-]{1,80}$ ) ]]; then
+            if pnm_tx_baseline_evidence_exists "$directory" ||
+                [[ -s "$directory/changes.tsv" || -s "$directory/directories.tsv" ||
+                    -s "$directory/accounts.tsv" || -s "$directory/journal.tsv" ||
+                    -L "$directory/changes.tsv" || -L "$directory/directories.tsv" ||
+                    -L "$directory/accounts.tsv" || -L "$directory/journal.tsv" ]]; then
+                pnm_error "Unresolved transaction ${directory##*/}; inspect invalid metadata and recovery evidence."
+                return "$PNM_EXIT_SOFTWARE"
+            fi
             continue
         fi
-        [[ "${metadata[OPERATION]-}" == deployment ]] || continue
-        id="${directory##*/}"
+        case "${metadata[OPERATION]-}" in
+            deployment) ;;
+            core-* | node-init | install-state | sandbox-install)
+                if [[ "${metadata[SCHEMA_VERSION]-}" == 2 && "${metadata[TRANSACTION_ID]-}" == "$id" &&
+                    "${metadata[DEPLOYMENT_ID]-}" == none ]] &&
+                    pnm_tx_empty_abandonment_safe "$directory" "${metadata[OPERATION]}"; then continue; fi
+                ;;
+            *) ;; # Unknown producers still need valid terminal evidence.
+        esac
         if ! pnm_tx_load_for_inspect "$id" || [[ "$PNM_TX_INSPECT_STATE" != COMMITTED && "$PNM_TX_INSPECT_STATE" != ROLLED_BACK ]]; then
-            pnm_error "Unresolved deployment transaction $id; inspect recovery evidence before continuing."
+            pnm_error "Unresolved ${metadata[OPERATION]} transaction $id; inspect recovery evidence before continuing."
             return "$PNM_EXIT_SOFTWARE"
         fi
     done

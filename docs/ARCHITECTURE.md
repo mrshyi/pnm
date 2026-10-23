@@ -2,7 +2,9 @@
 
 This document describes the source baseline plus safety/G-02, persisted-port, lifecycle-evidence and update/restore-input changes through 2026-10-23. It is not a production deployment attestation. Verify behavior against source and tests when changing it.
 
-**Increment baseline:** branch `dev`, HEAD `7f08d08ea978cf3b0953cc8be04a534faa8cb8a1`, `VERSION` `0.16.0-rc.1` (checked 2026-10-23).
+**Increment baseline:** branch `dev`, HEAD `fc01a538e8390be1090885696be6244eb40fb06b`, `VERSION` `0.16.0-rc.1` (checked 2026-10-23).
+
+The existing unresolved-deployment guard also inspects standalone Core, node-init, install-state and sandbox-install transactions. Writers and protected reads refuse interrupted, abandoned-after-attempt, invalid or recovery-required evidence. Valid committed/rolled-back receipts allow progress. A narrow schema-2 retry exception accepts protected empty receipts with only BEGIN, private SNAPSHOT and ABANDONED events, without any service/restore/commit baseline or attempted step. It does not replay recovery across processes or infer service safety from an empty file manifest.
 
 Catchable EXIT/INT/TERM during an active standalone transaction uses the existing registered rollback callbacks and then closes its lock level. Persisted valid COMMIT/rollback receipts take precedence over an interrupted memory-flag update. Completed callbacks finish a missing completion receipt without repeating file/service recovery. Invalid or already uncertain journal evidence is retained for manual inspection; invalid evidence closes without appending to the rejected journal. Original failures/signals retain their exit status, and an unclosed uncommitted success becomes an error. Recovery defers subsequent INT/TERM for that attempt. This does not catch SIGKILL, perform cross-process replay or establish real systemd recovery.
 
