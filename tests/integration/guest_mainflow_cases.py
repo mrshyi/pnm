@@ -315,7 +315,8 @@ try:
           'runtime-evidence','restore-failure','startup-readiness','core-recovery-failure-xray',
           'core-recovery-failure-hysteria2','restore-recovery-failure','tls-access','account-reuse',
           'core-interruption','core-interruption-hysteria2','restart-readiness','dependency-refusal',
-          'deployment-startup-failure','deployment-listener-failure'),'unknown guest scenario')
+          'deployment-startup-failure','deployment-listener-failure','deployment-term',
+          'deployment-sigkill'),'unknown guest scenario')
     if scenario=='account-reuse':
         from guest_account_cases import prepare_accounts, require_preserved
         reused_accounts=prepare_accounts()
@@ -367,11 +368,17 @@ try:
         stage='actual installation dependency refusal matrix'
         from guest_preflight_cases import run_dependencies
         run_dependencies(logs,env,call,absent,passed)
-    if scenario in ('deployment-startup-failure','deployment-listener-failure'):
+    if scenario in ('deployment-startup-failure','deployment-listener-failure','deployment-term','deployment-sigkill'):
         stage='actual first-deployment Core startup failure compensation'
         from guest_deployment_cases import run_startup_failures
-        run_startup_failures(logs,call,absent,passed,
-                             failure='listener' if scenario=='deployment-listener-failure' else 'start')
+        failure={'deployment-startup-failure':'start','deployment-listener-failure':'listener',
+                 'deployment-term':'term','deployment-sigkill':'kill'}[scenario]
+        run_startup_failures(logs,call,absent,passed,failure=failure)
+        if scenario=='deployment-sigkill':
+            # This fixture intentionally retains an interrupted deployment.
+            # Its protected result is still written by the shared finally block.
+            result={'passed':True,'checks':passed,'expected_recovery_required':True,'mainflow_completed':False}
+            raise SystemExit(0)
     stage='installation apply'
     call('install-apply',['install','--apply','--yes'])
     check(fields('/etc/pnm/node.conf')['PNM_CONFIGURED']=='yes','successful install lacks committed node state')
@@ -565,6 +572,7 @@ try:
         run_interruptions(logs,call,core_state,binding,links_ready,passed,
                           core='hysteria2' if scenario.endswith('-hysteria2') else 'xray')
     result={'passed':True,'checks':passed,'clock_diagnostic':checks.get('time_sync'),'uids_distinct':True,
+            'mainflow_completed':True,
             'expected_recovery_required':scenario.startswith('core-recovery-failure-')
             or scenario in ('restore-recovery-failure','core-interruption','core-interruption-hysteria2')}
 except Exception as error:

@@ -1,18 +1,42 @@
 """Real first-deployment service failures without repairing recovery in the fixture."""
 from pathlib import Path
 import json
+import signal
 import subprocess
 import threading
 import time
 
 from guest_start_fault import require, require_guest, start_fault
-from guest_recovery_cases import fingerprint
+from guest_recovery_cases import fingerprint, receipt_state
+
+
+def require_pending_deployment(call, unit_state, passed) -> None:
+    require_guest()
+    managed=tuple(Path(name) for name in ('/usr/local/bin/xray','/usr/local/bin/hysteria',
+        '/usr/local/etc/xray/config.json','/etc/hysteria/config.yaml',
+        '/etc/hysteria/tls/server.crt','/etc/hysteria/tls/server.key',
+        '/etc/systemd/system/xray.service','/etc/systemd/system/hysteria-server.service'))
+    receipts=receipt_state()
+    resources={str(path):fingerprint(path) for path in managed}
+    services=unit_state()
+    for label,args in (('writer',['apply','hysteria2']),
+            ('links',['--json','node','links','--address','203.0.113.10']),
+            ('show',['--json','node','show']),('check',['--json','check'])):
+        refused=call('pending-deployment-'+label,args,accepted=(70,))
+        require(not refused.stdout,'pending deployment disclosed protected output')
+        require(b'Unresolved deployment transaction ' in refused.stderr,
+                'protected command refusal did not identify the interrupted deployment')
+    require(receipts==receipt_state() and resources=={str(path):fingerprint(path) for path in managed}
+            and services==unit_state(),'refused deployment command changed persisted state or services')
+    passed.append('interrupted deployment blocks real writer and protected readers without mutation after fault removal')
 
 
 def run_startup_failures(logs, call, absent, passed, *, failure='start') -> None:
     require_guest()
-    require(failure in ('start','listener'),'unknown deployment startup failure')
+    require(failure in ('start','listener','term','kill'),'unknown deployment startup failure')
     delayed=failure=='listener'
+    signalled=failure in ('term','kill')
+    hard=failure=='kill'
     fixed=[Path('/etc/pnm/node.conf'),Path('/etc/pnm/versions.conf')]
     fixed.extend(Path('/etc')/name for name in ('passwd','group','shadow','gshadow'))
     baseline={str(path):fingerprint(path)[:4] for path in fixed}
@@ -48,10 +72,12 @@ def run_startup_failures(logs, call, absent, passed, *, failure='start') -> None
     observations=[]
     transactions=Path('/var/lib/pnm/transactions')
     deployments=Path('/var/lib/pnm/deployments')
-    for core in ('xray','hysteria2'):
+    applies=Path('/var/lib/pnm/apply')
+    for core in (('xray',) if hard else ('xray','hysteria2')):
         before=set(transactions.iterdir())
         before_deployments=set(deployments.iterdir()) if deployments.exists() else set()
-        with start_fault(core,mode='delay' if delayed else 'reject-once',delay_seconds=12 if delayed else 3) as fault:
+        before_applies=set(applies.iterdir()) if applies.exists() else set()
+        with start_fault(core,mode='delay' if failure!='start' else 'reject-once',delay_seconds=12 if delayed else 3) as fault:
             startup_runtime={}
             stop=threading.Event()
 
@@ -77,8 +103,15 @@ def run_startup_failures(logs, call, absent, passed, *, failure='start') -> None
             if observer is not None:
                 observer.start()
             try:
-                failed=call('install-'+failure+'-failure-'+core,['install','--apply','--yes'],
-                            accepted=(78 if delayed else 70,))
+                if signalled:
+                    from guest_signal_cases import signal_owned_command_on_start
+                    caught=signal.SIGKILL if hard else signal.SIGTERM
+                    with signal_owned_command_on_start(fault,caught) as slot:
+                        failed=call('install-'+failure+'-'+core,['install','--apply','--yes'],
+                                    accepted=(-9 if hard else 143,),process_slot=slot)
+                else:
+                    failed=call('install-'+failure+'-failure-'+core,['install','--apply','--yes'],
+                                accepted=(78 if delayed else 70,))
                 returned_at=time.monotonic()
             finally:
                 stop.set()
@@ -90,6 +123,14 @@ def run_startup_failures(logs, call, absent, passed, *, failure='start') -> None
             transaction=created.pop()
             rows=[line.split('\t',2) for line in (transaction/'journal.tsv').read_text().splitlines()]
             events=[row[1] for row in rows]
+            if hard:
+                deadline=time.monotonic()+10
+                while True:
+                    sockets=subprocess.check_output(['ss','-H','-lnt'],text=True,timeout=3)
+                    if any(line.split()[3].endswith(':443') for line in sockets.splitlines()):
+                        break
+                    require(time.monotonic()<deadline,'post-SIGKILL deployment listener did not stabilize')
+                    time.sleep(0.1)
             created_deployments=set(deployments.iterdir())-before_deployments
             require(len(created_deployments)==1,'startup failure created an unexpected deployment count')
             phase_rows=[line.split('\t',2) for line in
@@ -107,6 +148,17 @@ def run_startup_failures(logs, call, absent, passed, *, failure='start') -> None
                 wait_preserved=(fault['first_attempt_at'] is not None and
                                 returned_at-fault['first_attempt_at']<11.75)
                 cause=cause and wait_preserved
+            elif signalled:
+                wait_preserved=None
+                if hard:
+                    cause=failed.returncode==-9 and 'WRITE' in events and 'STEP_BEGIN' in events
+                else:
+                    created_applies=set(applies.iterdir())-before_applies
+                    require(len(created_applies)==1,'TERM deployment has an unexpected apply receipt count')
+                    apply_rows=[line.split('\t',2) for line in
+                                (created_applies.pop()/'journal.tsv').read_text().splitlines()]
+                    cause=failed.returncode==143 and any(row[1]=='APPLY_FAILED' and row[2]=='rc=143'
+                                                        for row in apply_rows)
             else:
                 cause=any(row[1]=='STEP_FAILED' and row[2]=='start rc=70' for row in rows)
                 wait_preserved=None
@@ -122,13 +174,22 @@ def run_startup_failures(logs, call, absent, passed, *, failure='start') -> None
                                     for name in ('commit.env','commit-uncertain.env'))}
             observations.append(observation)
             (logs/'deployment-startup-failures.json').write_text(json.dumps(observations))
-            require(fault['attempts']==1 and fault['rejected']==(0 if delayed else 1) and cause,
+            require(fault['attempts']==1 and fault['rejected']==(1 if failure=='start' else 0) and cause,
                     'deployment failure did not follow the intended real Core startup phase')
-            require(events[-1]=='ROLLED_BACK' and 'ROLLBACK_COMPLETE' in events
+            if hard:
+                require(not any(event in events for event in ('COMMIT','ROLLED_BACK','ROLLBACK_COMPLETE'))
+                        and observation['commit_absent'] and observation['applied_absent'],
+                        'SIGKILL deployment was falsely finalized or promoted')
+            else:
+                require(events[-1]=='ROLLED_BACK' and 'ROLLBACK_COMPLETE' in events
                     and 'RECOVERY_REQUIRED' not in events and 'COMMIT' not in events
                     and observation['authority_nss_recovered'] and observation['directories_recovered']
                     and observation['applied_absent'] and observation['commit_absent']
                     and observation['units']==original_units,
-                    'incomplete deployment rollback after '+core+' startup failure')
-            absent()
+                        'incomplete deployment rollback after '+core+' startup failure')
+                absent()
+        if hard:
+            passed.append('actual SIGKILL during first deployment retains unfinished resources and absent applied/commit promotion')
+            require_pending_deployment(call,unit_state,passed)
+            return
         passed.append('actual first-deployment '+core+' '+failure+' failure restores original resources identities and service baseline')

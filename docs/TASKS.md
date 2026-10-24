@@ -2,7 +2,7 @@
 
 **Last reconciled:** 2026-10-24 (default31/389; native initial-start compensation16/16, dependency matrix33/33, ordinary restart16/16 and prior recovery/TLS/account/interruption slices pass; broader VM/external acceptance remains open)
 
-**Current increment baseline:** branch `dev`, parent HEAD `08b4a6c`, VERSION `0.16.0-rc.1`.
+**Current increment baseline:** branch `dev`, parent HEAD `3336d92`, VERSION `0.16.0-rc.1`.
 
 **Environment recheck:** the earlier host EIO/EROFS/CreateInstance failure is no
 longer reproduced: Debian root is writable, real `true`/`df` execute successfully
@@ -103,7 +103,7 @@ not close G-02 or prove systemd recovery, reboot or public client connectivity.
 | Item | Current status | Evidence / blocker | Next action |
 |---|---|---|---|
 | G-01 — runtime/config/link state | BLOCKED for production acceptance | Current `lib/node.sh` source prints an HY2 runtime row. Prior production output reportedly omitted it despite the same VERSION; deployed executable/source identity has not been verified in this session. | On an authorized host, perform read-only path/version/source-hash comparison; do not apply or upgrade as diagnosis. |
-| G-02 — complete deployment rollback | Actual first-start, absent-listener post-health and late-deadline rollback/retry PASS / broader matrix open | Both Core startup and active-without-listener failures compensate services/accounts/resources/metadata without commit/applied promotion, then retry passes. Failed units are normalized and absent units require inactive/PID0. | Continue deployment interruption, other publication failures and independent VM reboot; do not infer production readiness. |
+| G-02 — complete deployment rollback | Actual startup/post-health/deadline and TERM compensation PASS; deployment SIGKILL guard PASS / broader matrix open | Both Core failures and TERM compensate original baselines without commit/applied promotion, then retry passes. SIGKILL retains unfinished candidate state; fresh writer/protected reads refuse70 without mutation. | Continue other publication failures and independent VM reboot; do not infer production readiness. |
 | G-03 — Core update transaction | Actual distinct-version operations and startup/recovery failure PASS / broader matrix open | Both official Cores change real versions, retain paired previous state and preserve peer evidence. Native start-once failures compensate; start-twice failures retain RECOVERY_REQUIRED and block protected commands. Curl uses a private HTTPS transport fixture. | Extend late publication/commit and interruption matrix; upstream acquisition and VM reboot remain separate. |
 | G-04 — backup/restore safety | Actual trusted round trip and startup/recovery failure PASS / broader matrix open | Real CLI restores bytes/metadata and applied bindings. Native startup failure compensates and retries; failed compensation retains uncertainty and blocks further protected operations. | Accept interruption, other publication failures and reboot separately. |
 | G-05 — dependency preflight | Actual Debian guest19-tool refusal and repeat refusal PASS | A private PATH individually hides all19 declared preflight prerequisites. Actual JSON install returns2 with the matching FAIL class and preserves authority/NSS fingerprints, PNM inventory/transactions and absent Core/service/account state; normal lifecycle then passes. | Upstream acquisition failures, other distributions and remaining fault positions stay separate. |
@@ -1528,15 +1528,41 @@ independent review accepts the final causal evidence and thread cleanup. Product
 source remains31 suites/389 tests; this test-only slice does not prove VM reboot
 or external connectivity.
 
+## Whole-deployment process interruption — 2026-10-24
+
+Post-health listener acceptance is committed as `3336d92`. The existing exact
+CLI Popen/session watcher is shared between standalone and deployment tests,
+with namespace/SID/PGID ownership checks, bounded retirement and primary-error
+preservation. Actual TERM `r7jlz938` passes16/16: both first-start windows retain
+143 plus APPLY_FAILED rc143, complete all original resource/NSS/directory/service
+compensation, then run the normal lifecycle. Initial SIGKILL `kaiki853` passes5/5.
+Their full images under control `/var/tmp/pnm-deploy-signal-volume.cz3yjtzb` and
+the ignored D archive pass cipher/raw readback; loop detached, cleanup errors empty.
+
+Final SIGKILL `wetg5fc0` passes5/5 with explicit unresolved-deployment stderr,
+empty stdout and unchanged PNM/NSS/managed resource inode/mtime/runtime state
+across real apply/links/show/check. Control/key/results:
+`/var/tmp/pnm-deploy-sigkill-final-volume.ppf6ot75`; its full encrypted image also
+passes readback, loop detached and no cleanup error. All native/Make exits0 retain
+unchanged host databases, not-found scopes and no mounts. SIGKILL explicitly
+reports mainflow_completed=false and expected_recovery_required=true: candidate
+state is retained, no automatic recovery or full healthy lifecycle is claimed.
+Nine guards, thirteen compilations and syntax/security/ShellCheck pass; independent
+review has no blocker. An approval-service quota rejection delayed the final
+rerun; later continuation was approved and no approval check was bypassed.
+Product source remains31 suites/389 tests. Update/restore interruption and other
+fault-position matrices remain necessary local work before external closure.
+
 ## Immediate next steps
 
 Startup readiness/harness and initiating-error repairs are committed as
 `ce6713f`, `0bee0d8`, and `580ead7`. Fresh native fault cases now complete the
 recovery-required plan. TLS access, valid-account reuse and per-Core process
 interruption now also pass. Ordinary restart's forward readiness gate is repaired.
-All19 declared dependency classes and first-deployment Core startup failures now
+All19 declared prerequisite tools and first-deployment Core startup failures now
 pass real checks. Actual post-health listener absence now passes as well. Continue
-deployment process interruption and other fault-position acceptance,
+actual update/rollback and restore process interruption, late previous/metadata/
+commit and other fault-position acceptance,
 together with the following external prerequisites;
 the earlier cleanup proposal is unnecessary and all original roots are retained.
 Successful main flow, update/rollback and late-deadline compensation cannot replace
@@ -1545,7 +1571,7 @@ the following VM/reboot, deployed-host and external-client prerequisites.
 1. Confirm deployed PNM source identity for G-01 using read-only checks.
 2. Accept the repaired A-03/A-04 paths in a disposable systemd VM, including explicit commands versus reboot/external restart; do not treat local results as completed Phase 3 acceptance.
 3. Use a disposable Debian 13 systemd VM for real lifecycle/recovery acceptance. The local WSL environment already provides Bash, make, ShellCheck, Python, ripgrep, zip/unzip, flock and OpenSSL for source and mock tests.
-4. Isolated WSL stand-ins pass 8/8, real Core/local-client checks pass 10/10, and the actual private guest main flow passes 14/14. Continue new-version update, injected failure recovery, concurrency, reboot and external clients separately.
+4. Isolated WSL stand-ins pass8/8, real Core/local-client checks pass10/10, and the private guest main flow passes14/14. Distinct-version update/rollback and selected injected failure/concurrency/interruption slices now pass as recorded above; remaining positions, reboot and external clients stay separate.
 5. Reassess Phase 3 completion. Do not start Phase 4 automatically.
 
 Local account/lifecycle acceptance can now continue in the verified Debian WSL

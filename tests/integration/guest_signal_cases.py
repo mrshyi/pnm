@@ -1,5 +1,6 @@
-"""Interrupt only this guest test's owned CLI process group during real restart."""
+"""Owned CLI signal fixtures for native restart and deployment acceptance."""
 from pathlib import Path
+from contextlib import contextmanager
 import json
 import os
 import signal
@@ -9,6 +10,46 @@ import time
 
 from guest_start_fault import require, require_guest, start_fault
 from guest_recovery_cases import require_commands_blocked
+
+
+@contextmanager
+def signal_owned_command_on_start(fault, caught):
+    require_guest()
+    require(caught in (signal.SIGTERM,signal.SIGKILL),'unsupported owned command signal')
+    slot=[]
+    sent=[]
+    errors=[]
+    stop=threading.Event()
+
+    def interrupt() -> None:
+        deadline=time.monotonic()+60
+        try:
+            while not stop.wait(0.02):
+                require(time.monotonic()<deadline,'owned command signal observation timed out')
+                if not slot or fault['attempts']<1:
+                    continue
+                process=slot[0]
+                require(process.poll() is None and os.getsid(process.pid)==process.pid
+                        and os.getpgid(process.pid)==process.pid,'owned CLI session is no longer live')
+                os.killpg(process.pid,caught)
+                sent.append(int(caught))
+                return
+        except Exception as error:
+            errors.append(type(error).__name__)
+
+    observer=threading.Thread(target=interrupt,name='pnm-owned-cli-interrupt')
+    observer.start()
+    completed=False
+    try:
+        yield slot
+        completed=True
+    finally:
+        stop.set()
+        observer.join(timeout=3)
+        require(not observer.is_alive(),'owned command signal observer did not retire')
+        # Keep an initiating CLI exception; validate delivery on a normal return.
+        if completed:
+            require(not errors and sent==[int(caught)],'owned command signal was not delivered exactly once')
 
 
 def run_interruptions(logs, call, state, binding, links_ready, passed, *, core='xray') -> None:
@@ -26,32 +67,7 @@ def run_interruptions(logs, call, state, binding, links_ready, passed, *, core='
         peer=state(peer_core)
         transactions=set(Path('/var/lib/pnm/transactions').iterdir())
         with start_fault(core,mode='delay') as fault:
-            slot=[]
-            sent=[]
-            errors=[]
-            stop=threading.Event()
-
-            def interrupt() -> None:
-                deadline=time.monotonic()+60
-                try:
-                    while not stop.wait(0.02):
-                        require(time.monotonic()<deadline,'restart signal observation timed out')
-                        if not slot or fault['attempts']<1:
-                            continue
-                        process=slot[0]
-                        # No name lookup or namespace traversal: target only the
-                        # exact child/session created by the call helper below.
-                        require(process.poll() is None and os.getsid(process.pid)==process.pid
-                                and os.getpgid(process.pid)==process.pid,'owned CLI session is no longer live')
-                        os.killpg(process.pid,caught)
-                        sent.append(int(caught))
-                        return
-                except Exception as error:
-                    errors.append(type(error).__name__)
-
-            observer=threading.Thread(target=interrupt,name='pnm-owned-cli-interrupt')
-            observer.start()
-            try:
+            with signal_owned_command_on_start(fault,caught) as slot:
                 call('restart-signal-'+caught.name,['restart',core],
                      accepted=(143 if caught==signal.SIGTERM else -9,),process_slot=slot)
                 if caught==signal.SIGTERM:
@@ -59,11 +75,6 @@ def run_interruptions(logs, call, state, binding, links_ready, passed, *, core='
                     (logs/'TERM-return-readiness.json').write_text(json.dumps({
                         'core':core,'listener_present_at_return':ready,'start_attempts':fault['attempts']}))
                     require(ready,'TERM compensation returned before the original runtime listener was ready')
-            finally:
-                stop.set()
-                observer.join(timeout=3)
-            require(not observer.is_alive() and not errors and sent==[int(caught)],
-                    'owned restart signal was not delivered and retired exactly once')
             require(fault['rejected']==0,'signal case unexpectedly rejected Core startup')
             created=set(Path('/var/lib/pnm/transactions').iterdir())-transactions
             require(len(created)==1,'interruption created an unexpected transaction count')

@@ -74,9 +74,11 @@ for entry in (
     lambda: accounts.prepare_accounts(),
     lambda: accounts.require_preserved({}),
     lambda: interruption.run_interruptions(None,forbidden,forbidden,forbidden,forbidden,[]),
+    lambda: interruption.signal_owned_command_on_start({},15).__enter__(),
     lambda: readiness.run_restart_readiness(None,forbidden,forbidden,forbidden,forbidden,[]),
     lambda: preflight.run_dependencies(None,None,forbidden,forbidden,[]),
     lambda: deployment.run_startup_failures(None,forbidden,forbidden,[]),
+    lambda: deployment.require_pending_deployment(forbidden,forbidden,[]),
 ):
     try:
         entry()

@@ -182,6 +182,17 @@ TCP/UDP listener must exist, applied binding must match the new invocation,
 target resources must be unchanged and the peer untouched. Exactly one startup
 attempt is allowed, followed by both links ready after removing the test drop-in.
 
+`PNM_GUEST_SCENARIO=deployment-term` interrupts the exact owned install CLI
+session during each Core's first start. It requires143, APPLY_FAILED rc143,
+complete original resource/account/service recovery and a normal14-case retry.
+`deployment-sigkill` uses a separate fresh guest and kills that CLI group during
+the first Xray start. It retains unfinished deployment evidence and no applied/
+commit promotion; actual writer/links/show/check must refuse70, identify the
+unresolved deployment and disclose no output or mutate candidate state. Its
+successful test report explicitly has `mainflow_completed:false` and
+`expected_recovery_required:true`. It does not run the normal lifecycle afterward
+or perform automatic recovery. Neither variant signals host/user processes.
+
 The parent prints a safe JSON summary and leaves `boot-result.json`, source
 hashes and protected evidence under the new fixture. Raw CLI/Core output,
 configuration and backups can contain secrets; do not print or publish them.
