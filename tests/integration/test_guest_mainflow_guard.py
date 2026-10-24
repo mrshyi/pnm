@@ -18,22 +18,58 @@ DRIVER=Path(__file__).with_name('test_guest_mainflow.py')
 
 
 class GuestGuardTests(unittest.TestCase):
+    @unittest.skipUnless(sys.platform=='linux' and os.geteuid()==0,'Linux work-directory policy')
+    def test_custom_work_directory_rejects_unsafe_paths_before_fixture_access(self):
+        with tempfile.TemporaryDirectory(prefix='pnm-workdir-guard.') as directory:
+            root=Path(directory)
+            public=root/'public'
+            public.mkdir()
+            public.chmod(0o777)
+            link=root/'link'
+            link.symlink_to(root,target_is_directory=True)
+            regular=root/'regular'
+            regular.write_text('sentinel')
+            foreign=root/'foreign'
+            foreign.mkdir(mode=0o700)
+            os.chown(foreign,65534,65534)
+            for candidate in (public,link,regular,foreign):
+                result=subprocess.run([sys.executable,'-B',str(DRIVER),
+                    '--baseline',str(root/'missing-baseline'),'--nspawn',str(root/'missing-nspawn'),
+                    '--asset-cache',str(root/'missing-assets'),'--work-dir',str(candidate)],
+                    env={**os.environ,'PNM_RUN_GUEST_TESTS':'1'},capture_output=True,timeout=10)
+                self.assertNotEqual(result.returncode,0)
+                self.assertIn(b'work directory required',result.stderr)
+                self.assertEqual(result.stdout,b'')
+            self.assertEqual(regular.read_text(),'sentinel')
+
     @unittest.skipUnless(sys.platform=='linux','Linux namespace guard')
     def test_start_fault_refuses_host_before_mutation_or_network(self):
         script='''import sys
 sys.path.insert(0,sys.argv[1])
 import guest_start_fault as fixture
+import guest_recovery_cases as recovery
 def forbidden(*args,**kwargs):
     raise AssertionError('fixture acted before its namespace guard')
 fixture.socket.socket=forbidden
 fixture.subprocess.run=forbidden
 for name in ('open','mkdir','unlink','rmdir'):
     setattr(fixture.os,name,forbidden)
-try:
-    with fixture.start_fault('xray'):
-        raise AssertionError('host entered guest fixture')
-except RuntimeError as error:
-    assert str(error)=='start fault requires mapped guest root'
+for mode in ('reject-once','reject-twice','delay'):
+    try:
+        with fixture.start_fault('xray',mode=mode):
+            raise AssertionError('host entered guest fixture')
+    except RuntimeError as error:
+        assert str(error)=='start fault requires mapped guest root'
+for entry in (
+    lambda: recovery.run_core_recovery_failure(forbidden,forbidden,'xray',[]),
+    lambda: recovery.run_restore_recovery_failure(None,forbidden,forbidden,forbidden,(),None,[]),
+    lambda: recovery.require_commands_blocked(forbidden,forbidden,'xray',[]),
+):
+    try:
+        entry()
+        raise AssertionError('host entered recovery fixture')
+    except RuntimeError as error:
+        assert str(error)=='start fault requires mapped guest root'
 '''
         result=subprocess.run([sys.executable,'-B','-c',script,str(DRIVER.parent)],
                               capture_output=True,timeout=10)

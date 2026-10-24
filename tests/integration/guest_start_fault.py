@@ -15,17 +15,21 @@ def require(condition: bool, label: str) -> None:
         raise RuntimeError(label)
 
 
-@contextmanager
-def start_fault(core: str, *, mode: str = 'reject-once'):
+def require_guest() -> None:
     mapping=[int(x) for x in Path('/proc/self/uid_map').read_text().split()]
     require(os.geteuid()==0 and len(mapping)==3 and mapping[0]==0 and mapping[1]>0
             and mapping[2]==65536,'start fault requires mapped guest root')
     require(Path('/run/host/container-manager').read_text().strip()=='systemd-nspawn',
             'start fault requires native guest')
     require({p.name for p in Path('/sys/class/net').iterdir()}=={'lo'},'start fault requires private lo')
+
+
+@contextmanager
+def start_fault(core: str, *, mode: str = 'reject-once'):
+    require_guest()
     units={'xray':'xray.service','hysteria2':'hysteria-server.service'}
     require(core in units,'unknown start-fault Core')
-    require(mode in ('reject-once','delay'),'unknown start-fault mode')
+    require(mode in ('reject-once','reject-twice','delay'),'unknown start-fault mode')
     unit=units[core]
     show=subprocess.run(['systemctl','show',unit,'--property=DropInPaths','--value'],
                         capture_output=True,text=True,timeout=10)
@@ -65,7 +69,7 @@ def start_fault(core: str, *, mode: str = 'reject-once'):
                 connection.settimeout(2)
                 with lock:
                     state['attempts']+=1
-                    reject=mode=='reject-once' and state['attempts']==1
+                    reject=(mode!='delay' and state['attempts']<=(2 if mode=='reject-twice' else 1))
                     state['rejected']+=int(reject)
                 try:
                     connection.sendall(b'!' if reject else b'.')

@@ -92,7 +92,23 @@ does not promote evidence after the fixture's external restart. Ordinary
 diagnostics remain immediate. The wrapper uses ExecStart because ExecStartPre
 would delay systemctl's completion and could not expose this readiness window.
 
-Each invocation creates a new private `/var/tmp/pnm-install-guest.*` clone and
+The `core-recovery-failure-xray` and `core-recovery-failure-hysteria2` scenarios
+use the same previous-asset cache as `core-update`. After the normal distinct-
+version trajectory, both rollback starts are rejected. The target must remain
+failed while binary/previous/applied bytes and the peer are preserved. The
+`restore-recovery-failure` counterpart checks restored ordinary resources,
+reconfirmed Xray and failed HY2, without claiming complete service recovery.
+Both remove their owned fault and require real writes/links/show/check to remain
+blocked by retained uncertainty, with no protected stdout or state changes.
+Expected-failure acceptance is marked `expected_recovery_required=true`; a
+passing test result here does not mean the target service is healthy. Execution
+status and validation limits are recorded in TASKS, not inferred from this guide.
+
+Each invocation creates a private `pnm-install-guest.*` clone under `/var/tmp`
+by default. Optional `PNM_GUEST_WORK_DIR` must be a canonical absolute root-owned
+mode0700 POSIX directory. Unsafe paths are refused before fixture access; raw
+DrvFS is unsuitable. The driver does not create or mount volumes. Each invocation
+also creates a
 unique native scope, rotates only that clone's machine ID, copies current PNM
 source and checked asset bytes, and compiles the guest scripts before boot.
 It replaces only the clone's dedicated test unit with a 690-second limit; the
@@ -123,11 +139,11 @@ the current PNM check dispatcher. Distinct versions and the one deadline-failure
 case require their named scenarios above. VM/kernel reboot, other injected
 failure positions, deployed-source identity and external clients remain separate.
 
-`test_guest_mainflow_guard.py` runs eight offline checks before boot: explicit
+`test_guest_mainflow_guard.py` runs nine offline checks before boot: explicit
 opt-in, enabled assertions, protected regular-file/link behavior, nonblocking
 FIFO rejection, retirement of a PIPE-holding descendant on command timeout,
 asset header limits, guest-only start-fault refusal before host mutation/network,
-and isolated-network asset/TLS positive/refusal/cleanup.
+custom work-directory safety, and isolated-network asset/TLS positive/refusal/cleanup.
 The latter proves a distinct network namespace before raising only that child's
 lo; no host socket/interface is created or changed. It covers incomplete CONNECT/
 TLS, wrong target/path, and a CA-verified fixed response with complete retirement.

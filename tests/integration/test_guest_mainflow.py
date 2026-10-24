@@ -14,10 +14,18 @@ parser=argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--baseline',type=Path,required=True,help='private verified boot fixture parent')
 parser.add_argument('--nspawn',type=Path,required=True,help='trusted native systemd-nspawn executable')
 parser.add_argument('--asset-cache',type=Path,required=True,help='verified pinned Core asset cache')
-parser.add_argument('--scenario',choices=('lifecycle','deployment-failure','core-update','core-update-failure','configured-ports','runtime-evidence','restore-failure','startup-readiness'),default='lifecycle')
+parser.add_argument('--scenario',choices=('lifecycle','deployment-failure','core-update','core-update-failure',
+    'configured-ports','runtime-evidence','restore-failure','startup-readiness',
+    'core-recovery-failure-xray','core-recovery-failure-hysteria2','restore-recovery-failure'),default='lifecycle')
 parser.add_argument('--previous-asset-cache',type=Path)
+parser.add_argument('--work-dir',type=Path,help='optional canonical private root-owned POSIX fixture directory')
 options=parser.parse_args()
-is_update=options.scenario in ('core-update','core-update-failure')
+work_dir=options.work_dir or Path('/var/tmp')
+if options.work_dir is not None:
+    assert work_dir.is_absolute() and work_dir==work_dir.resolve() and work_dir.is_dir(), 'canonical work directory required'
+    info=work_dir.stat()
+    assert info.st_uid==0 and stat.S_IMODE(info.st_mode)==0o700, 'private root-owned work directory required'
+is_update=options.scenario in ('core-update','core-update-failure','core-recovery-failure-xray','core-recovery-failure-hysteria2')
 if is_update and options.previous_asset_cache is None:
     parser.error('core-update requires --previous-asset-cache')
 for location in (options.baseline,options.nspawn):
@@ -55,7 +63,7 @@ if is_update:
 source=options.baseline/'rootfs'
 assert source.is_dir() and source==source.resolve(), 'canonical rootfs required'
 assert json.loads((options.baseline/'boot-result.json').read_text())['guest']['passed'] is True
-base=Path(tempfile.mkdtemp(prefix='pnm-install-guest.',dir='/var/tmp'))
+base=Path(tempfile.mkdtemp(prefix='pnm-install-guest.',dir=work_dir))
 root=base/'rootfs'
 subprocess.run(['cp','-a','--reflink=auto',str(source),str(root)],check=True,timeout=120)
 # Host-side preparation must never follow an absolute guest symlink out of its
@@ -133,7 +141,8 @@ if is_update:
     shutil.copyfile(repo/'tests/integration/guest_update_cases.py',destination)
     destination.chmod(0o700)
     py_compile.compile(str(destination),cfile=str(base/'guest_update_cases.pyc'),doraise=True)
-if options.scenario in ('core-update-failure','restore-failure','startup-readiness'):
+if options.scenario in ('core-update-failure','restore-failure','startup-readiness',
+                        'core-recovery-failure-xray','core-recovery-failure-hysteria2','restore-recovery-failure'):
     destination=root/'opt/guest_start_fault.py'
     assert not destination.exists() and not destination.is_symlink()
     shutil.copyfile(repo/'tests/integration/guest_start_fault.py',destination)
@@ -145,6 +154,12 @@ if options.scenario=='startup-readiness':
     shutil.copyfile(repo/'tests/integration/guest_readiness_cases.py',destination)
     destination.chmod(0o700)
     py_compile.compile(str(destination),cfile=str(base/'guest_readiness_cases.pyc'),doraise=True)
+if options.scenario.startswith('core-recovery-failure-') or options.scenario=='restore-recovery-failure':
+    destination=root/'opt/guest_recovery_cases.py'
+    assert not destination.exists() and not destination.is_symlink()
+    shutil.copyfile(repo/'tests/integration/guest_recovery_cases.py',destination)
+    destination.chmod(0o700)
+    py_compile.compile(str(destination),cfile=str(base/'guest_recovery_cases.pyc'),doraise=True)
 unit=root/'etc/systemd/system/pnm-boot-probe.service'
 assert unit.is_file() and not unit.is_symlink()
 assert 'ExecStart=/usr/bin/python3 /opt/pnm-boot-worker.py' in unit.read_text(), 'dedicated boot fixture unit required'

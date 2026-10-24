@@ -303,7 +303,9 @@ try:
     absent()
     passed.append('fresh guest has no managed accounts or resources')
     scenario=Path('/opt/pnm-test-scenario').read_text().strip()
-    check(scenario in ('lifecycle','deployment-failure','core-update','core-update-failure','configured-ports','runtime-evidence','restore-failure','startup-readiness'),'unknown guest scenario')
+    check(scenario in ('lifecycle','deployment-failure','core-update','core-update-failure','configured-ports',
+          'runtime-evidence','restore-failure','startup-readiness','core-recovery-failure-xray',
+          'core-recovery-failure-hysteria2','restore-recovery-failure'),'unknown guest scenario')
     if scenario=='configured-ports':
         ports={'xray':10443,'hysteria2':18443}
         for kind,port in ((socket.SOCK_STREAM,443),(socket.SOCK_DGRAM,8443)):
@@ -495,11 +497,12 @@ try:
     final_checks={item['id']:item['status'] for item in json.loads(call('check-restored',['--json','check'],accepted=(0,1,2)).stdout)['checks']}
     check(not [k for k,v in final_checks.items() if v in ('FAIL','UNKNOWN') and k!='time_sync'],'restored diagnostics not healthy')
     passed.append('protected trusted backup restores all resources and real applied bindings')
-    if scenario in ('core-update','core-update-failure'):
+    if scenario in ('core-update','core-update-failure','core-recovery-failure-xray','core-recovery-failure-hysteria2'):
         stage='actual distinct-version Core update and rollback'
         from guest_update_cases import run_updates
         run_updates(logs,env,call,core_state,binding,links_ready,passed,
-                    inject_start_failure=scenario=='core-update-failure')
+                    inject_start_failure=scenario=='core-update-failure',
+                    recovery_failure_core=scenario.rsplit('-',1)[-1] if scenario.startswith('core-recovery-failure-') else None)
     if scenario=='configured-ports':
         check(len(default_sockets)==2 and all(fixture.fileno()>=0 and fixture.getsockname()==('127.0.0.1',port)
               for fixture,port in zip(default_sockets,(443,8443))), 'unrelated default listeners changed')
@@ -514,7 +517,12 @@ try:
         stage='actual delayed Core listener readiness'
         from guest_readiness_cases import run_readiness
         run_readiness(logs,env,core_state,show,passed)
-    result={'passed':True,'checks':passed,'clock_diagnostic':checks.get('time_sync'),'uids_distinct':True}
+    if scenario=='restore-recovery-failure':
+        stage='actual restore service recovery failure'
+        from guest_recovery_cases import run_restore_recovery_failure
+        run_restore_recovery_failure(logs,call,core_state,binding,all_paths,archive,passed)
+    result={'passed':True,'checks':passed,'clock_diagnostic':checks.get('time_sync'),'uids_distinct':True,
+            'expected_recovery_required':scenario.startswith('core-recovery-failure-') or scenario=='restore-recovery-failure'}
 except Exception as error:
     result={'passed':False,'checks':passed,'stage':stage,'error_class':type(error).__name__}
     if isinstance(error,RuntimeError):

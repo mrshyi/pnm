@@ -133,7 +133,8 @@ class AssetRequest(socketserver.StreamRequestHandler):
 
 def run_updates(logs: Path, env: dict[str,str], call: Callable,
                 core_state: Callable, binding: Callable, links_ready: Callable,
-                passed: list[str], *, inject_start_failure: bool = False) -> None:
+                passed: list[str], *, inject_start_failure: bool = False,
+                recovery_failure_core: str | None = None) -> None:
     mapping=[int(x) for x in Path('/proc/self/uid_map').read_text().split()]
     require(os.geteuid()==0 and len(mapping)==3 and mapping[0]==0 and mapping[1]>0
             and mapping[2]==65536,'updates require isolated mapped guest root')
@@ -300,3 +301,6 @@ def run_updates(logs: Path, env: dict[str,str], call: Callable,
     report=json.loads(call('check-updated',['--json','check'],accepted=(0,1,2)).stdout)
     require(not [x for x in report['checks'] if x['status'] in ('FAIL','UNKNOWN') and x['id']!='time_sync'],
             'final updated Core health failed')
+    if recovery_failure_core is not None:
+        from guest_recovery_cases import run_core_recovery_failure
+        run_core_recovery_failure(call,state,recovery_failure_core,passed)

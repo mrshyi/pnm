@@ -1,8 +1,8 @@
 # PNM Current Tasks
 
-**Last reconciled:** 2026-10-24 (final default31 suites/380 tests pass; actual startup-readiness16/16 and update-failure26/26 pass; persistent recovery failure remains next)
+**Last reconciled:** 2026-10-24 (default31/380 pass; persistent recovery failure Xray24/24, HY224/24 and restore16/16 pass with retained evidence; broader VM/external acceptance remains open)
 
-**Current increment baseline:** branch `dev`, parent HEAD `0bee0d8`, VERSION `0.16.0-rc.1`.
+**Current increment baseline:** branch `dev`, parent HEAD `580ead7`, VERSION `0.16.0-rc.1`.
 
 **Environment recheck:** the earlier host EIO/EROFS/CreateInstance failure is no
 longer reproduced: Debian root is writable, real `true`/`df` execute successfully
@@ -12,8 +12,9 @@ invalid evidence. The initial resume recheck measured approximately6.3GiB free
 on C; capacity is rechecked before another retained guest and only one runs at
 a time. Fresh `/var/tmp/pnm-resume-full.tqz8e8l2` passes syntax/security/
 ShellCheck, eight offline guards and `make check` (31 suites/373 tests, exit0).
-Startup-failure acceptance is being rerun. No host
-remount, disk repair, WSL restart or retained-fixture deletion was performed.
+Startup-failure acceptance is completed below. No host remount, disk repair,
+WSL restart or retained-fixture deletion was performed. New test storage was
+mounted only in a private mount namespace and is now unmounted.
 
 This page is a status snapshot, not a test report. Status must be refreshed from current source, test output, or host evidence before it is changed. Historical Phase 2 analysis is preserved in [PHASE2_GAP_ANALYSIS.md](PHASE2_GAP_ANALYSIS.md).
 
@@ -1338,15 +1339,43 @@ focused suite38/38 and default **31 suites/380 tests, exit0**. Independent read-
 review found no blocking issue. This focused matrix uses actual files/journals
 with simulated services; native persistent recovery failure remains separate.
 
-The next native slice needs additional reusable disk space. Exact stopped roots
+At the earlier disk checkpoint, the next native slice needed reusable space. Exact stopped roots
 `mkmrfpdx/rootfs` and `jkja5d_v/rootfs` have private, hash-verified retained-evidence
 bundles beside them, including logs, trusted backup, actual source/configuration
 and small transaction receipts. Their cleanup-review.json files identify device/
-inode, file count and logical size. The explicit cleanup decision is pending;
+inode, file count and logical size. The cleanup proposal was not used;
 neither rootfs has been deleted. Removing them would make approximately1.45GiB
 of guest filesystem data reusable; Windows VHD/C free space need not immediately
 increase. Baseline, asset caches, failed fixtures and external acceptance stay
 outside that proposed cleanup.
+
+The implemented reject-twice cases now pass actual native acceptance:
+`core-recovery-failure-xray`24/24 in `2xnywz__`, HY224/24 in `btg1m7ba` and
+`restore-recovery-failure`16/16 in `fzm8pblq`. The latter two are retained in the
+verified private-storage archive below. Both Core rollback failures restore
+binary/previous/applied bytes yet leave the target failed with MainPID0 and peer
+unchanged. Restore recovers ordinary resources and Xray binding while HY2's
+compensation fails; no complete service recovery is claimed. Original1/recovery70
+and RECOVERY_REQUIRED are retained. Removing the owned fault does not clear the
+gate: actual apply/links/show/check return70 with empty stdout and unchanged
+PNM/NSS and managed Core inode/mtime. `expected_recovery_required=true` explicitly
+distinguishes the accepted failure state from a healthy service.
+
+Each native case records unchanged host databases, nspawn0, not-found scope and
+no guest mounts. Nine offline guards pass, including all recovery host-entry
+refusals and the optional canonical/root0700 POSIX work directory; eight Python
+files compile. Independent source review accepts the test slice. Product source
+remains the final31-suite/380-test baseline without a redundant full rerun.
+
+C fell to1570078720 free bytes after Xray; an anonymous D-backed ext4 volume in
+a private mount namespace completed the other cases without deleting old data.
+The first export timed out and is not final evidence. The buffered rerun retains
+the full raw image in an808675120-byte encrypted archive; trusted producer-cipher
+hash and full decrypted raw-image hash both verify. Control/key/audit data are
+under root0700 `/var/tmp/pnm-test-volume.cky4eb0a`, key0600; retain this with the
+ignored D archive described in the test-storage plan. The storage loop is
+detached and cleanup errors are empty. Its executed success path and separately
+reviewed/error-injected fixed worker are explicitly distinguished in that plan.
 
 ## Verification already reported (historical host evidence)
 
@@ -1354,9 +1383,11 @@ A prior user-provided `proxy-tokyo` read-only report stated that PNM 0.16.0-rc.1
 
 ## Immediate next steps
 
-Finish final source checks and commit the startup-readiness repair and reusable
-fault scenarios. Then follow the recovery-required plan: retain the initiating
-error code and prove that failed service compensation blocks later real commands.
+Startup readiness/harness and initiating-error repairs are committed as
+`ce6713f`, `0bee0d8`, and `580ead7`. Fresh native fault cases now complete the
+recovery-required plan. Reconcile remaining
+local reuse/permission acceptance and the following external prerequisites;
+the earlier cleanup proposal is unnecessary and all original roots are retained.
 Successful main flow, update/rollback and late-deadline compensation cannot replace
 the following VM/reboot, deployed-host and external-client prerequisites.
 
