@@ -1,6 +1,16 @@
 # PNM Architecture
 
-This document describes implemented behavior through the configured-port health repair on 2026-10-24. It is not a production deployment attestation. Verify behavior against source and tests when changing it.
+This document describes implemented behavior through the bounded startup-listener health repair on 2026-10-24. It is not a production deployment attestation. Verify behavior against source and tests when changing it.
+
+Startup and recovered-generation listener checks may request up to26 probes,
+with25 waits of0.2 seconds. This covers the `Type=simple` interval between a
+successful systemd start and the real Core binding its configured socket. The
+startup gate then independently collects its full service/configuration/TLS/
+listener policy again; waiting cannot bypass a failed check. Recovered-generation
+ports still come only from hash-verified runtime configuration. Ordinary status,
+diagnostics and preflight listener probes retain one immediate sample. Probe
+execution adds to the five-second sleep budget; this is not an external-client
+connectivity test or a configurable deployment deadline.
 
 **Port-health increment baseline:** branch `dev`, parent HEAD `dfd864d`, `VERSION` `0.16.0-rc.1` (checked 2026-10-24).
 

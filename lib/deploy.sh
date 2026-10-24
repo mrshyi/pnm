@@ -302,12 +302,12 @@ pnm_deploy_refresh_recovered_applied() {
         runtime_values="$(pnm_xray_config_runtime_values "$config")" || return "$PNM_EXIT_SOFTWARE"
         [[ "${runtime_values##*$'\t'}" == tcp ]] || return "$PNM_EXIT_SOFTWARE"
         port="${runtime_values%%$'\t'*}"
-        pnm_validate_port "$port" && pnm_listener_present tcp "$port" || return "$PNM_EXIT_SOFTWARE"
+        pnm_validate_port "$port" && pnm_listener_present tcp "$port" 26 || return "$PNM_EXIT_SOFTWARE"
     else
         pnm_hysteria_config_parse_candidate "$config" recovered_fields || return "$PNM_EXIT_SOFTWARE"
         [[ "${recovered_fields[listen]-}" =~ ^:([0-9]+)$ ]] || return "$PNM_EXIT_SOFTWARE"
         port="${BASH_REMATCH[1]}"
-        pnm_validate_port "$port" && pnm_listener_present udp "$port" || return "$PNM_EXIT_SOFTWARE"
+        pnm_validate_port "$port" && pnm_listener_present udp "$port" 26 || return "$PNM_EXIT_SOFTWARE"
     fi
     record="$PNM_STATE_DIR/cores/$core/applied.env"
     pnm_validate_managed_path "$record" || return "$PNM_EXIT_SOFTWARE"

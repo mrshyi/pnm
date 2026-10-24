@@ -3,10 +3,12 @@
 pnm_listener_present() {
     local protocol="${1:?protocol required}"
     local port="${2:?port required}"
-    local flag
+    local attempts="${3:-1}" attempt flag
+    local -a probe_status=()
 
     pnm_command_exists ss || return 2
     pnm_validate_port "$port" || return 2
+    [[ "$attempts" =~ ^([1-9]|1[0-9]|2[0-6])$ ]] || return 2
 
     case "$protocol" in
         tcp) flag='-ltnH' ;;
@@ -14,7 +16,10 @@ pnm_listener_present() {
         *) return 2 ;;
     esac
 
-    ss "$flag" 2>/dev/null | awk -v wanted="$port" '
+    # Type=simple can become active before its Core binds. Startup callers may
+    # request up to 26 probes (25 x 0.2s waits); ordinary diagnostics stay instant.
+    for ((attempt=1; attempt<=attempts; attempt++)); do
+        if ss "$flag" 2>/dev/null | awk -v wanted="$port" '
         {
             local_addr = $4
             sub(/^.*:/, "", local_addr)
@@ -22,7 +27,23 @@ pnm_listener_present() {
             if (local_addr == wanted) found = 1
         }
         END { exit(found ? 0 : 1) }
-    '
+        '; then
+            probe_status=("${PIPESTATUS[@]}")
+        else
+            probe_status=("${PIPESTATUS[@]}")
+        fi
+        # Tool errors are unknown, never an absent/free port. Inspect both
+        # commands even when awk matched data emitted by a failing ss process.
+        ((probe_status[0] == 0)) || return 2
+        case "${probe_status[1]}" in
+            0) return 0 ;;
+            1) ;;
+            *) return 2 ;;
+        esac
+        ((attempt < attempts)) || break
+        sleep 0.2 || return 2
+    done
+    return 1
 }
 
 # Return success only when the requested listening socket is owned by this PID.

@@ -264,6 +264,9 @@ pnm_check_deploy_core_health() {
     # managed resources must already meet the strict configured policy.
     PNM_CHECK_CONFIGURED=1
     if [[ "$core" == xray ]]; then
+        # Wait only for startup readiness, then independently sample the full
+        # service/configuration/listener policy below. Exhaustion still fails.
+        pnm_listener_present tcp "${PNM_NODE_CONFIG[XRAY_PORT]}" 26 || :
         pnm_check_xray
         pnm_check_file_metadata xray_permissions "$PNM_XRAY_CONFIG" 640 root xray
         local -A reality=()
@@ -274,6 +277,7 @@ pnm_check_deploy_core_health() {
             pnm_check_add xray_config_consistency FAIL 'Runtime Xray configuration differs from desired settings' 'candidate/runtime comparison failed'
         fi
     else
+        pnm_listener_present udp "${PNM_NODE_CONFIG[HY2_PORT]}" 26 || :
         pnm_check_hysteria
         pnm_check_file_metadata hysteria_permissions "$PNM_HY2_CONFIG" 600 hysteria hysteria
         pnm_check_hysteria_tls

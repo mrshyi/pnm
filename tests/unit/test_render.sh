@@ -198,6 +198,7 @@ test_deployment_health_uses_real_renderer_with_local_secrets() (
     pnm_check_file_metadata() { pnm_check_add "$1" OK fixture; }
     pnm_check_hysteria_tls() { pnm_check_add hysteria_tls OK fixture; }
     pnm_check_hysteria_tls_permissions() { pnm_check_add hysteria_tls_permissions OK fixture; }
+    pnm_listener_present() { return 0; }
     for core in xray hysteria2; do
         run_capture pnm_check_deploy_core_health "$core"
         assert_eq 0 "$RUN_RC" || return 1

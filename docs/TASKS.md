@@ -1,16 +1,18 @@
 # PNM Current Tasks
 
-**Last reconciled:** 2026-10-24 (restore startup-failure/retry16/16 and focused recovery12/12 pass; new full run encounters host EIO; previous clean default370 remains historical; broader fault/reboot/external acceptance remain open)
+**Last reconciled:** 2026-10-24 (final default31 suites/380 tests pass; actual startup-readiness16/16 and update-failure26/26 pass; persistent recovery failure remains next)
 
-**Current increment baseline:** branch `dev`, parent HEAD `2d60bf9`, VERSION `0.16.0-rc.1`.
+**Current increment baseline:** branch `dev`, parent HEAD `5a9bf86`, VERSION `0.16.0-rc.1`.
 
-**Current execution blocker:** production restore repair committed as `3c30512`.
-The host subsequently returned EROFS when the interrupted update-failure guest
-driver tried to save `boot-result.json`, then a new WSL invocation failed with
-`Wsl/Service/CreateInstance/E_FAIL`. Reusable harness changes remain uncommitted.
-Restore stable writable Debian WSL before rerunning checks or starting guests;
-also recheck the interrupted `771npvcc` scope/mount cleanup because its final
-report could not be persisted and the follow-up query did not complete. No host
+**Environment recheck:** the earlier host EIO/EROFS/CreateInstance failure is no
+longer reproduced: Debian root is writable, real `true`/`df` execute successfully
+and an owned temporary file passes write/read/removal. The interrupted `771npvcc`
+scope is now not-found and no fixture mounts remain. Its interrupted run remains
+invalid evidence. The initial resume recheck measured approximately6.3GiB free
+on C; capacity is rechecked before another retained guest and only one runs at
+a time. Fresh `/var/tmp/pnm-resume-full.tqz8e8l2` passes syntax/security/
+ShellCheck, eight offline guards and `make check` (31 suites/373 tests, exit0).
+Startup-failure acceptance is being rerun. No host
 remount, disk repair, WSL restart or retained-fixture deletion was performed.
 
 This page is a status snapshot, not a test report. Status must be refreshed from current source, test output, or host evidence before it is changed. Historical Phase 2 analysis is preserved in [PHASE2_GAP_ANALYSIS.md](PHASE2_GAP_ANALYSIS.md).
@@ -1280,15 +1282,57 @@ limits are now600 seconds for cases,690 for the cloned unit and720 for the host;
 the former300-second cases limit expired near the final link check of the larger
 update-failure scenario. Each CLI and owned socket/thread still has its own bound.
 
+## Startup readiness and actual update/rollback fault compensation — 2026-10-24
+
+Natural runs `k55gy846` and `viaq9o0_` failed at an Xray post-health check after
+otherwise successful update/rollback starts; both compensated completely. Their
+generic error messages alone do not establish which health condition failed.
+The deterministic `startup-readiness` RED guest `dpg_alxd` separately proves a
+Type=simple readiness window: real Xray's ExecStart is delayed3 seconds, the
+production gate returns78 after0.463 seconds with `Xray TCP listener is absent`,
+then returns0 for the same InvocationID without another restart or resource edit.
+Permissions/configuration consistency remain OK during the failed observation.
+
+The existing listener adapter now accepts a bounded optional probe count, default1.
+Startup health and hash-verified recovered-generation checks request26 samples
+with at most25 x0.2-second waits. Startup then independently repeats its complete
+health policy. Ordinary diagnostic/preflight probes stay immediate. Tool errors
+return2/UNKNOWN, never1/free: independent review caught an initial loop that lost
+this distinction. Two tests reproduced that regression before PIPESTATUS handling
+was repaired. Final focused listener/check suite passes **25/25**, renderer13/13.
+
+Fresh `mkmrfpdx` passes startup-readiness **16/16**, both real Core services under
+their original user/sandbox policies. Fresh `jkja5d_v` passes actual update-failure
+**26/26**: each Core's update and rollback start is rejected once, compensation
+restores resources/previous metadata/service/applied evidence, peer stays fixed,
+and normal distinct-version update/rollback/swap subsequently succeeds. These
+native runs exercise the waiting behavior before the final tool-error-only
+PIPESTATUS correction; positive ss results follow the same successful path.
+Both nspawn exits0, host databases stay unchanged, scopes are not-found and no
+fixture mounts remain. Raw CLI/journal output stays private.
+
+Eight offline guards pass. The command-group timeout fixture now waits for its
+own descendant PID marker before starting the short test timeout; concurrent
+process startup previously made that test race. Unexpected CLI failures retain
+a private bounded service-journal excerpt without replacing the original error.
+The first expanded full run exposed a renderer fixture lacking its isolated
+listener observer; that fixture is repaired and its13 tests pass. Final frozen
+source `/var/tmp/pnm-startup-checked.gdpgk2ro` passes syntax/security/ShellCheck,
+eight guards and `make check`: **31 suites/380 tests, exit0**. Seven Python files
+compile. Independent review's tool-error finding is repaired and re-reviewed;
+no further blocking issue remains.
+Persistent recovery failure, late publication/commit faults, kernel reboot,
+deployed source identity and external clients remain separate acceptance work.
+
 ## Verification already reported (historical host evidence)
 
 A prior user-provided `proxy-tokyo` read-only report stated that PNM 0.16.0-rc.1, both Core services/listeners, `pnm check`, and selected permissions were healthy, and that public client connections had succeeded. This report is historical and was not independently refreshed in this documentation task. It does not close the local failure-injection gaps above or prove the current installed source matches this HEAD.
 
 ## Immediate next steps
 
-First restore stable host WSL filesystem/command execution, retain the failed
-full-run evidence, and rerun full checks. Finish packaging the startup-failure
-scenarios and verify the enlarged update/rollback case before further guest work.
+Finish final source checks and commit the startup-readiness repair and reusable
+fault scenarios. Then follow the recovery-required plan: retain the initiating
+error code and prove that failed service compensation blocks later real commands.
 Successful main flow, update/rollback and late-deadline compensation cannot replace
 the following VM/reboot, deployed-host and external-client prerequisites.
 

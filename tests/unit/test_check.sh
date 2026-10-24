@@ -297,6 +297,57 @@ test_supported_platform_matrix() {
     done
 }
 
+check_listener_startup_budget() (
+    local policy="$1" counter delays=0 rc attempts=26 expected_rc=1 expected_probes=26 expected_delays=25
+    counter="$(mktemp -- "$CHECK_RUNTIME_DIR/listener.XXXXXXXX")"
+    printf '0\n' >"$counter"
+    ss() {
+        local count
+        count="$(<"$counter")"
+        printf '%s\n' "$((count + 1))" >"$counter"
+        if [[ "$policy" == delayed && $count -ge 2 ]]; then
+            printf 'LISTEN 0 128 0.0.0.0:10443 0.0.0.0:*\n'
+        fi
+        if [[ "$policy" == tool-error || "$policy" == tool-error-immediate ]]; then
+            printf 'LISTEN 0 128 0.0.0.0:10443 0.0.0.0:*\n'
+            return 2
+        fi
+    }
+    sleep() { [[ "$1" == 0.2 ]] || return 1; ((delays += 1)); }
+    case "$policy" in
+        delayed) expected_rc=0 expected_probes=3 expected_delays=2 ;;
+        immediate) attempts=1 expected_probes=1 expected_delays=0 ;;
+        unavailable)
+            pnm_command_exists() { return 1; }
+            expected_rc=2 expected_probes=0 expected_delays=0 ;;
+        invalid) attempts=27 expected_rc=2 expected_probes=0 expected_delays=0 ;;
+        tool-error) expected_rc=2 expected_probes=1 expected_delays=0 ;;
+        tool-error-immediate) attempts=1 expected_rc=2 expected_probes=1 expected_delays=0 ;;
+    esac
+    if [[ "$policy" == immediate ]]; then
+        if pnm_listener_present tcp 10443; then rc=0; else rc=$?; fi
+    else
+        if pnm_listener_present tcp 10443 "$attempts"; then rc=0; else rc=$?; fi
+    fi
+    assert_eq "$expected_rc" "$rc" || return 1
+    assert_eq "$expected_probes" "$(<"$counter")" || return 1
+    assert_eq "$expected_delays" "$delays"
+)
+test_listener_delayed_startup() { check_listener_startup_budget delayed; }
+test_listener_startup_exhaustion() { check_listener_startup_budget absent; }
+test_listener_diagnostic_is_immediate() { check_listener_startup_budget immediate; }
+test_listener_unavailable_does_not_wait() { check_listener_startup_budget unavailable; }
+test_listener_rejects_invalid_budget() { check_listener_startup_budget invalid; }
+test_listener_startup_tool_failure_is_unknown() { check_listener_startup_budget tool-error; }
+test_listener_immediate_tool_failure_is_unknown() { check_listener_startup_budget tool-error-immediate; }
+
+run_test 'startup listener probe permits delayed readiness' test_listener_delayed_startup
+run_test 'startup listener probe stops at its fixed maximum budget' test_listener_startup_exhaustion
+run_test 'ordinary listener diagnostics retain a single immediate probe' test_listener_diagnostic_is_immediate
+run_test 'unavailable listener tools do not consume the startup budget' test_listener_unavailable_does_not_wait
+run_test 'invalid listener retry budgets are refused before probing' test_listener_rejects_invalid_budget
+run_test 'startup listener tool failures stay unknown without retries' test_listener_startup_tool_failure_is_unknown
+run_test 'ordinary listener tool failures cannot become a free port' test_listener_immediate_tool_failure_is_unknown
 run_test 'Xray health tests the managed binary when PATH has no xray' test_xray_health_without_path_binary
 run_test 'Xray health ignores a competing PATH executable' test_xray_health_ignores_competing_path_binary
 run_test 'persisted custom ports are valid desired state' test_configured_custom_ports_are_valid
