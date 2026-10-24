@@ -1755,6 +1755,32 @@ image readback verifies, the loop is detached and cleanup errors are empty. The 
 dedicated status repair. Late post-rename SIGKILL remains the next local increment;
 hardware IO failure, independent VM/reboot, G-01 and external clients stay open.
 
+## Native late deployment marker interruption — 2026-10-25
+
+Marker observation repair is committed as `292b682`. T-17/T-19 now exercises the
+real publisher after successful rename and before the following directory-sync
+call executes. A narrowly scoped interpreter trace observes both real records,
+cleared temporary name and the exact call, writes only fixed safe booleans and
+pauses for at most30 seconds. A complete root0600 receipt, rather than existence
+alone, authorizes the existing owned live CLI SID/PGID SIGKILL watcher. Publisher
+stdin and filesystem APIs remain unchanged; PATH is restored before new commands.
+
+New entries first fail for the missing observer module, then11 offline guards
+and18 Python compilations pass. Syntax/security/ShellCheck pass. Independent
+pre-execution review finds no blocker in stdin, signal ownership, call timing,
+scope restoration or evidence boundaries. Native `kx7wcwuz` passes6/6 under
+`/var/tmp/pnm-late-commit-sigkill-volume.tsq9luc1`: actual CLI-9, unique terminal
+COMMIT_INTENT, both applied writes, valid product-verified marker and retained
+uncertainty, no commit/rollback, both enabled applied-bound real generations and
+listeners. Four new real writer/links/show/check commands refuse70 with exact
+unresolved deployment cause, no stdout and no receipt/resource/runtime changes.
+The intentional unresolved result reports mainflow_completed:false and
+expected_recovery_required:true. Native/Make0 leaves host DBs unchanged, scope
+not-found and no fixture mounts. Full encrypted image readback verifies, loop
+detaches and cleanup errors are empty. Product Bash is unchanged;31/391 remains the
+latest full baseline. This does not close fsync failure, hardware power loss,
+independent VM/reboot, G-01, upstream acquisition/platform or external clients.
+
 ## Immediate next steps
 
 Startup readiness/harness and initiating-error repairs are committed as

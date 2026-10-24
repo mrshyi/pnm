@@ -88,6 +88,9 @@ for entry in (
     lambda: io_fault.readonly_bind(None,None,None,None).__enter__(),
     lambda: commit_fault.readonly_deployment_commit(None,None).__enter__(),
     lambda: commit_fault.run_commit([],None),
+    lambda: __import__('guest_commit_signal').late_deployment_commit(None,None).__enter__(),
+    lambda: __import__('guest_commit_signal').run_late_commit([],None),
+    lambda: __import__('guest_commit_signal').run_late_interruption(None,None,forbidden,[]),
     lambda: readiness.run_restart_readiness(None,forbidden,forbidden,forbidden,forbidden,[]),
     lambda: preflight.run_dependencies(None,None,forbidden,forbidden,[]),
     lambda: deployment.run_startup_failures(None,forbidden,forbidden,[]),
@@ -122,6 +125,47 @@ for fault_mode in ('delay','delay-pre'):
         result=subprocess.run([sys.executable,'-B','-c',script,str(DRIVER.parent)],
                               capture_output=True,timeout=10)
         self.assertEqual(result.returncode,0,result.stderr.decode(errors='replace'))
+
+    @unittest.skipUnless(sys.platform=='linux','Python late publisher observer')
+    def test_late_commit_observer_filters_real_publication_window(self):
+        script='''import sys,json,tempfile,time
+from pathlib import Path
+sys.path.insert(0,sys.argv[1])
+from guest_commit_signal import TRACE_SOURCE
+with tempfile.TemporaryDirectory(prefix='pnm-late-observer.') as directory:
+    private=Path(directory)
+    transaction=private/'tx'
+    transaction.mkdir()
+    (private/'config.json').write_text(json.dumps({'transaction':str(transaction)}))
+    namespace={'__file__':str(private/'sitecustomize.py')}
+    pauses=[]
+    original=time.sleep
+    time.sleep=pauses.append
+    try:
+        exec(compile(TRACE_SOURCE,str(private/'sitecustomize.py'),'exec'),namespace)
+        program='temporary=None\\ndef sync_directory(path):\\n    pass\\nsync_directory(directory)\\n'
+        values={'directory':str(transaction),'temporary':None}
+        exec(compile(program,'<stdin>','exec'),values)
+        assert not (private/'ready.json').exists() and not pauses
+        (transaction/'commit.env').write_text('fixture marker')
+        exec(compile(program,'<stdin>','exec'),values)
+        assert not (private/'ready.json').exists() and not pauses
+        (transaction/'commit-uncertain.env').write_text('fixture uncertainty')
+        exec(compile(program,'other.py','exec'),values)
+        assert not (private/'ready.json').exists() and not pauses
+        exec(compile(program,'<stdin>','exec'),values)
+        assert json.loads((private/'ready.json').read_text())=={
+            'marker_present':True,'uncertainty_present':True,'before_directory_sync':True}
+        assert pauses==[30] and sys.gettrace() is None
+        print('flow-preserved')
+    finally:
+        time.sleep=original
+        sys.settrace(None)
+'''
+        result=subprocess.run([sys.executable,'-B','-c',script,str(DRIVER.parent)],
+                              capture_output=True,timeout=10)
+        self.assertEqual(result.returncode,0,result.stderr.decode(errors='replace'))
+        self.assertEqual(result.stdout,b'flow-preserved\n')
 
     @unittest.skipUnless(sys.platform=='linux','Python publisher observer')
     def test_commit_observer_preserves_flow_and_filters_exception_path(self):

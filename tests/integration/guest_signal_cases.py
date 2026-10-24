@@ -137,7 +137,7 @@ def run_restore_interruptions(logs, call, state, binding, links_ready, all_paths
 
 
 @contextmanager
-def signal_owned_command_on_start(fault, caught):
+def signal_owned_command_on_start(fault, caught, *, ready=None):
     require_guest()
     require(caught in (signal.SIGTERM,signal.SIGKILL),'unsupported owned command signal')
     slot=[]
@@ -150,7 +150,7 @@ def signal_owned_command_on_start(fault, caught):
         try:
             while not stop.wait(0.02):
                 require(time.monotonic()<deadline,'owned command signal observation timed out')
-                if not slot or fault['attempts']<1:
+                if not slot or not (ready() if ready is not None else fault['attempts']>=1):
                     continue
                 process=slot[0]
                 require(process.poll() is None and os.getsid(process.pid)==process.pid

@@ -283,3 +283,17 @@ then the complete healthy normal main flow. Only the creating child removes the
 bind; parent mounts remain unchanged. A separate restore-publication run checks
 the shared bind extraction's existing move path. This is before marker publication;
 later rename/fsync uncertainty and physical durability remain separate.
+
+`deployment-late-sigkill` requires a fresh guest. A scoped publisher interpreter
+trace pauses at the actual post-rename `sync_directory` call, before its body,
+only while both marker and uncertainty record exist and the temporary name has
+been cleared. A complete root0600 receipt authorizes the existing exact live
+CLI SID/PGID watcher to send SIGKILL; the pause expires after30 seconds if missed.
+No filesystem API or publisher stdin is replaced. Require real -9, unique final
+COMMIT_INTENT, both applied writes and no COMMIT/rollback, a marker verified by
+the real product helper and retained uncertainty. Both real enabled Core
+generations must match their applied configuration hashes/InvocationIDs and have
+listeners. After restoring PATH, four fresh protected commands must refuse70
+without output or persisted/runtime/resource changes. The fixture intentionally
+retains recovery state and reports `mainflow_completed:false` and
+`expected_recovery_required:true`; it is not fsync failure, power loss or VM reboot.
