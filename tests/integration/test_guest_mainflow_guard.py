@@ -48,6 +48,7 @@ class GuestGuardTests(unittest.TestCase):
 sys.path.insert(0,sys.argv[1])
 import guest_start_fault as fixture
 import guest_recovery_cases as recovery
+import guest_tls_access as tls
 def forbidden(*args,**kwargs):
     raise AssertionError('fixture acted before its namespace guard')
 fixture.socket.socket=forbidden
@@ -64,6 +65,7 @@ for entry in (
     lambda: recovery.run_core_recovery_failure(forbidden,forbidden,'xray',[]),
     lambda: recovery.run_restore_recovery_failure(None,forbidden,forbidden,forbidden,(),None,[]),
     lambda: recovery.require_commands_blocked(forbidden,forbidden,'xray',[]),
+    lambda: tls.run_tls_access(None,None,forbidden,forbidden,forbidden,forbidden,[]),
 ):
     try:
         entry()

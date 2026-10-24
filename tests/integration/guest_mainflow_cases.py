@@ -305,7 +305,7 @@ try:
     scenario=Path('/opt/pnm-test-scenario').read_text().strip()
     check(scenario in ('lifecycle','deployment-failure','core-update','core-update-failure','configured-ports',
           'runtime-evidence','restore-failure','startup-readiness','core-recovery-failure-xray',
-          'core-recovery-failure-hysteria2','restore-recovery-failure'),'unknown guest scenario')
+          'core-recovery-failure-hysteria2','restore-recovery-failure','tls-access'),'unknown guest scenario')
     if scenario=='configured-ports':
         ports={'xray':10443,'hysteria2':18443}
         for kind,port in ((socket.SOCK_STREAM,443),(socket.SOCK_DGRAM,8443)):
@@ -521,6 +521,10 @@ try:
         stage='actual restore service recovery failure'
         from guest_recovery_cases import run_restore_recovery_failure
         run_restore_recovery_failure(logs,call,core_state,binding,all_paths,archive,passed)
+    if scenario=='tls-access':
+        stage='actual managed-account TLS access failures'
+        from guest_tls_access import run_tls_access
+        run_tls_access(logs,env,call,core_state,binding,links_ready,passed)
     result={'passed':True,'checks':passed,'clock_diagnostic':checks.get('time_sync'),'uids_distinct':True,
             'expected_recovery_required':scenario.startswith('core-recovery-failure-') or scenario=='restore-recovery-failure'}
 except Exception as error:

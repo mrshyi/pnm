@@ -129,6 +129,14 @@ credential is involved. The backup digest is retained separately and checked
 before restore. This is local trusted-backup round-trip evidence, not a signature
 or adversarial provenance test.
 
+`PNM_GUEST_SCENARIO=tls-access` adds real hysteria-account read failures after
+the normal lifecycle. It checks wrong private-key ownership and a non-traversable
+TLS directory with correct leaf metadata. Actual check/startup gates must fail
+without changing either Core, receipts, NSS or managed file identity, or exposing
+credentials. Owned fixture metadata is restored in finally; an actual HY2 restart
+then refreshes its applied binding, with Xray unchanged and healthy links/checks.
+This does not prove a currently running process has reloaded TLS material.
+
 The parent prints a safe JSON summary and leaves `boot-result.json`, source
 hashes and protected evidence under the new fixture. Raw CLI/Core output,
 configuration and backups can contain secrets; do not print or publish them.

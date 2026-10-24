@@ -104,10 +104,10 @@ not close G-02 or prove systemd recovery, reboot or public client connectivity.
 |---|---|---|---|
 | G-01 — runtime/config/link state | BLOCKED for production acceptance | Current `lib/node.sh` source prints an HY2 runtime row. Prior production output reportedly omitted it despite the same VERSION; deployed executable/source identity has not been verified in this session. | On an authorized host, perform read-only path/version/source-hash comparison; do not apply or upgrade as diagnosis. |
 | G-02 — complete deployment rollback | Actual guest late-deadline rollback/retry PASS / broader failure matrix open | Real dual-Core post-health precedes a cause-qualified deadline failure; live services/accounts/resources/metadata and commit state compensate, then installation and lifecycle retry pass. | Continue interruption, other failure points, concurrent commands and independent VM reboot matrix; do not infer production readiness. |
-| G-03 — Core update transaction | Actual guest distinct-version update/rollback and checksum refusal PASS / broader failure matrix open | Both official Cores change real versions, retain paired previous state, rollback/swap forward and preserve peer resources/applied/previous metadata. Actual curl uses a private HTTPS transport fixture. | Extend restart/publication/commit failure and concurrent/interruption matrix; upstream acquisition and VM reboot remain separate. |
-| G-04 — backup/restore safety | Actual private-guest trusted round trip PASS / failure matrix open | Real CLI restores resource bytes/metadata and both Core applied bindings; trusted archive checksum is retained separately. Default input/compensation checks pass. | Accept interruption, injected restore failure, concurrent commands and reboot separately. |
+| G-03 — Core update transaction | Actual distinct-version operations and startup/recovery failure PASS / broader matrix open | Both official Cores change real versions, retain paired previous state and preserve peer evidence. Native start-once failures compensate; start-twice failures retain RECOVERY_REQUIRED and block protected commands. Curl uses a private HTTPS transport fixture. | Extend late publication/commit and interruption matrix; upstream acquisition and VM reboot remain separate. |
+| G-04 — backup/restore safety | Actual trusted round trip and startup/recovery failure PASS / broader matrix open | Real CLI restores bytes/metadata and applied bindings. Native startup failure compensates and retries; failed compensation retains uncertainty and blocks further protected operations. | Accept interruption, other publication failures and reboot separately. |
 | G-05 — dependency preflight | Actual guest missing-TLS-tool and repeat refusal PASS / remaining tools mocked | A private PATH hides only openssl: real CLI refuses for that cause before transaction/resource/account mutation. Repeat-install also preserves both running Cores. | Extend remaining dependency classes and supported distributions separately. |
-| G-06 — HY2 TLS permissions | Actual private-guest account/TLS loading PASS | Real hysteria NSS identity runs the official Core with no effective capabilities and NoNewPrivs; CLI TLS access checks, certificate pin and listener pass. Prior mapped-account local traffic is separate evidence. | Extend reuse/failure cases and external client acceptance; do not infer external reachability. |
+| G-06 — HY2 TLS permissions | Actual private-guest account/TLS loading and permission failures PASS | Real managed hysteria identity loads TLS. Wrong key owner and non-traversable parent fail actual diagnostics/startup health gates without mutation or credential output; permission recovery and real restart pass. | Extend existing-identity reuse and external client acceptance; do not infer external reachability. |
 
 ## G-02 deployment transaction — working-tree implementation
 
@@ -1380,6 +1380,22 @@ reviewed/error-injected fixed worker are explicitly distinguished in that plan.
 ## Verification already reported (historical host evidence)
 
 A prior user-provided `proxy-tokyo` read-only report stated that PNM 0.16.0-rc.1, both Core services/listeners, `pnm check`, and selected permissions were healthy, and that public client connections had succeeded. This report is historical and was not independently refreshed in this documentation task. It does not close the local failure-injection gaps above or prove the current installed source matches this HEAD.
+
+## Native managed-account TLS access failures — 2026-10-24
+
+Committed recovery-required coverage is `3ba94e3`. New `tls-access` reuses the
+14-case main flow, then proves wrong key ownership and a non-traversable parent
+fail actual hysteria-account reads, JSON health and the startup gate. Diagnostics
+leave Core/resource/receipt/NSS state unchanged and disclose no credentials.
+Finally restores fixture permissions; an actual HY2 restart refreshes applied
+binding and both links/health pass with Xray unchanged. Fresh `qktokjdj` passes
+17/17. Native/Make exit0, unchanged host databases, scope not-found, no mounts.
+Control/key/evidence: `/var/tmp/pnm-tls-green-volume.d1xlzf9b`; full encrypted
+image in the existing ignored D pool passes cipher/raw readback verification,
+loop detached, no cleanup errors. The first failed fixture is retained separately;
+its test expected WARN=1 instead of the established FAIL=2, then was corrected.
+Nine offline guards, nine Python compilations and syntax/security/ShellCheck pass.
+Independent review accepts this test-only increment. See the TLS access plan.
 
 ## Immediate next steps
 
