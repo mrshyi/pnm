@@ -66,12 +66,38 @@ and the exact release paths are accepted. Headers, connection count, total reque
 duration and thread/socket retirement are bounded. This transport substitution
 does not establish upstream DNS/PKI/download behavior or external clients.
 
+Set `PNM_GUEST_SCENARIO=core-update-failure` with the same previous-asset cache
+to add real startup-failure compensation for each Core's update and rollback.
+A guest-owned `ExecStartPre` talks to a bounded private lo probe: the first start
+fails and the compensation start succeeds. `Restart=no` prevents automatic
+restarts from consuming the probe. Binary/configuration/previous metadata,
+confirmed applied evidence, the unchanged peer and terminal rollback receipts
+are checked before continuing the successful update/rollback sequence. These
+failures precede previous-state publication; they do not test its late failure.
+
+Set `PNM_GUEST_SCENARIO=restore-failure` to reject HY2 startup after restoring
+the twelve archived resources and starting Xray. Both original generations,
+numeric file/directory metadata, identities, service policy and confirmed applied
+bindings must recover, then a trusted restore retry must succeed. The probe keeps
+the actual service account/capability/filesystem restrictions. Its uniquely owned
+drop-in, program, socket and thread are retired after the attempt. Persistent
+recovery failure and disk/commit/crash faults require separate scenarios.
+
+Set `PNM_GUEST_SCENARIO=startup-readiness` to wrap each real Core's `ExecStart`
+with a three-second delay, preserving its service account and sandbox. The test
+calls the production local startup gate and retains structured health results.
+The same InvocationID must later remain healthy without another restart or edit;
+managed resource/applied bytes and the peer stay unchanged. This intentionally
+does not promote evidence after the fixture's external restart. Ordinary
+diagnostics remain immediate. The wrapper uses ExecStart because ExecStartPre
+would delay systemctl's completion and could not expose this readiness window.
+
 Each invocation creates a new private `/var/tmp/pnm-install-guest.*` clone and
 unique native scope, rotates only that clone's machine ID, copies current PNM
 source and checked asset bytes, and compiles the guest scripts before boot.
-It replaces only the clone's dedicated test unit with a 390-second limit; the
+It replaces only the clone's dedicated test unit with a 690-second limit; the
 baseline's 80-second boot probe is too short for lifecycle cases. Guest cases
-have a separate 300-second timeout and the host deadline remains 420 seconds.
+have a separate 600-second timeout and the host deadline remains 720 seconds.
 Both guest identity checks and host observation of the owned payload cgroup
 must pass before a private one-use approval enables actual CLI writes.
 No production function or account lookup is mocked. The guest has only lo and
@@ -97,10 +123,11 @@ the current PNM check dispatcher. Distinct versions and the one deadline-failure
 case require their named scenarios above. VM/kernel reboot, other injected
 failure positions, deployed-source identity and external clients remain separate.
 
-`test_guest_mainflow_guard.py` runs seven offline checks before boot: explicit
+`test_guest_mainflow_guard.py` runs eight offline checks before boot: explicit
 opt-in, enabled assertions, protected regular-file/link behavior, nonblocking
 FIFO rejection, retirement of a PIPE-holding descendant on command timeout,
-asset header limits, and isolated-network asset/TLS positive/refusal/cleanup.
+asset header limits, guest-only start-fault refusal before host mutation/network,
+and isolated-network asset/TLS positive/refusal/cleanup.
 The latter proves a distinct network namespace before raising only that child's
 lo; no host socket/interface is created or changed. It covers incomplete CONNECT/
 TLS, wrong target/path, and a CA-verified fixed response with complete retirement.

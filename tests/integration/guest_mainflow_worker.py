@@ -50,7 +50,7 @@ try:
                 raise RuntimeError('host boundary approval was not received')
             stage='PNM installation cases'
             with Path('/var/tmp/pnm-install-cases.log').open('xb') as output:
-                case=subprocess.run(['/usr/bin/python3','/opt/pnm-install-cases.py'],stdout=output,stderr=subprocess.STDOUT,timeout=300)
+                case=subprocess.run(['/usr/bin/python3','/opt/pnm-install-cases.py'],stdout=output,stderr=subprocess.STDOUT,timeout=600)
             details=json.loads(Path('/var/tmp/pnm-install-result.json').read_text())
             result['installation']=details
             result['passed']=case.returncode==0 and details.get('passed') is True

@@ -18,6 +18,27 @@ DRIVER=Path(__file__).with_name('test_guest_mainflow.py')
 
 
 class GuestGuardTests(unittest.TestCase):
+    @unittest.skipUnless(sys.platform=='linux','Linux namespace guard')
+    def test_start_fault_refuses_host_before_mutation_or_network(self):
+        script='''import sys
+sys.path.insert(0,sys.argv[1])
+import guest_start_fault as fixture
+def forbidden(*args,**kwargs):
+    raise AssertionError('fixture acted before its namespace guard')
+fixture.socket.socket=forbidden
+fixture.subprocess.run=forbidden
+for name in ('open','mkdir','unlink','rmdir'):
+    setattr(fixture.os,name,forbidden)
+try:
+    with fixture.start_fault('xray'):
+        raise AssertionError('host entered guest fixture')
+except RuntimeError as error:
+    assert str(error)=='start fault requires mapped guest root'
+'''
+        result=subprocess.run([sys.executable,'-B','-c',script,str(DRIVER.parent)],
+                              capture_output=True,timeout=10)
+        self.assertEqual(result.returncode,0,result.stderr.decode(errors='replace'))
+
     def test_asset_headers_have_line_count_and_total_bounds(self):
         spec=importlib.util.spec_from_file_location('pnm_asset_guard',DRIVER.with_name('guest_update_cases.py'))
         module=importlib.util.module_from_spec(spec)
@@ -112,6 +133,16 @@ with tempfile.TemporaryDirectory(prefix='pnm-asset-guard.') as directory:
                 def __init__(self, _command, **kwargs):
                     super().__init__([sys.executable,'-c',fixture,str(marker)],**kwargs)
                     owned.append(self.pid)
+                    # Start the short PIPE timeout only after the fixture has
+                    # actually spawned its descendant; process startup can take
+                    # more than 0.5s under concurrent integration-test load.
+                    deadline=time.monotonic()+10
+                    while time.monotonic()<deadline:
+                        if marker.exists() and marker.read_text().isdigit():
+                            break
+                        time.sleep(0.02)
+                    else:
+                        raise RuntimeError('fixture descendant did not become ready')
                 def communicate(self, input=None, timeout=None):
                     return super().communicate(input,timeout=min(timeout or 1,0.5))
             class Commands:
@@ -120,6 +151,11 @@ with tempfile.TemporaryDirectory(prefix='pnm-asset-guard.') as directory:
                 PIPE=subprocess.PIPE
                 TimeoutExpired=subprocess.TimeoutExpired
                 CompletedProcess=subprocess.CompletedProcess
+                @staticmethod
+                def run(*_args, **_kwargs):
+                    # No host journal access. Diagnostic failure must preserve
+                    # the original timeout and still retire the command group.
+                    raise OSError('fixture journal unavailable')
             def check(condition,label):
                 if not condition:
                     raise RuntimeError(label)

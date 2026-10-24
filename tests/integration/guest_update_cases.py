@@ -133,7 +133,7 @@ class AssetRequest(socketserver.StreamRequestHandler):
 
 def run_updates(logs: Path, env: dict[str,str], call: Callable,
                 core_state: Callable, binding: Callable, links_ready: Callable,
-                passed: list[str]) -> None:
+                passed: list[str], *, inject_start_failure: bool = False) -> None:
     mapping=[int(x) for x in Path('/proc/self/uid_map').read_text().split()]
     require(os.geteuid()==0 and len(mapping)==3 and mapping[0]==0 and mapping[1]>0
             and mapping[2]==65536,'updates require isolated mapped guest root')
@@ -201,6 +201,38 @@ def run_updates(logs: Path, env: dict[str,str], call: Callable,
             require(count==1,'approval fixture field missing')
         versions.write_text(text)
 
+    def failed_start(operation: str, core: str, peer: str, baseline: dict,
+                     peer_before: dict, version: str) -> dict:
+        from guest_start_fault import start_fault
+        transactions=set(Path('/var/lib/pnm/transactions').iterdir())
+        with start_fault(core) as fault:
+            result=call(operation+'-start-failure-'+core,[operation,core],accepted=(1,))
+            require(('Core '+operation+' failed during service restart (rc=1); previous Core state was restored.').encode() in result.stderr,
+                    'Core failure/recovery cause differs from start fixture')
+            require(fault['attempts']==2 and fault['rejected']==1,'real failure and compensation starts were not both observed')
+            recovered=state(core)
+            require(recovered['resources']==baseline['resources'] and recovered['previous']==baseline['previous'],
+                    'start failure did not restore binary/config/previous resources')
+            require(actual_version(core)==version and recovered['invocation']!=baseline['invocation'],
+                    'start recovery did not activate the previous real version')
+            require(state(peer)==peer_before,'start failure compensation changed peer Core')
+            binding(core)
+            links_ready(operation+'-start-recovered-links-'+core)
+            health=json.loads(call(operation+'-start-recovered-health-'+core,
+                                   ['--json','check'],accepted=(0,1,2)).stdout)
+            require(not [x for x in health['checks'] if x['status'] in ('FAIL','UNKNOWN') and x['id']!='time_sync'],
+                    'recovered Core local health failed')
+            created=set(Path('/var/lib/pnm/transactions').iterdir())-transactions
+            require(len(created)==1,'start failure created unexpected transactions')
+            journal=(created.pop()/'journal.tsv').read_text().splitlines()
+            rows=[line.split('\t',2) for line in journal]
+            events=[row[1] for row in rows]
+            require(any(row[1:]==['WRITE','label=core_binary'] for row in rows)
+                    and 'ROLLBACK_COMPLETE' in events and events[-1]=='ROLLED_BACK'
+                    and 'RECOVERY_REQUIRED' not in events,'start failure did not complete binary compensation')
+        passed.append('actual '+core+' '+operation+' startup failure restores resources and confirmed service evidence')
+        return state(core)
+
     try:
         worker.start()
         env.update({'https_proxy':'http://127.0.0.1:'+str(server.server_address[1]),
@@ -222,6 +254,8 @@ def run_updates(logs: Path, env: dict[str,str], call: Callable,
             passed.append('actual '+core+' checksum refusal preserves both Cores before publication')
 
             approve(core,target[core]['sha256'])
+            if inject_start_failure:
+                old=failed_start('update',core,peer,old,peer_before,prior[core]['version'].removeprefix('v'))
             call('update-'+core,['update',core,'--version',target[core]['version']])
             updated=state(core)
             require(actual_version(core)==target[core]['version'].removeprefix('v'),'update did not change real binary version')
@@ -233,6 +267,9 @@ def run_updates(logs: Path, env: dict[str,str], call: Callable,
             binding(core)
             links_ready('links-updated-'+core)
             passed.append('actual '+core+' distinct-version update preserves peer and applied binding')
+
+            if inject_start_failure:
+                updated=failed_start('rollback',core,peer,updated,peer_before,target[core]['version'].removeprefix('v'))
 
             call('rollback-'+core,['rollback',core])
             reverted=state(core)
@@ -249,7 +286,8 @@ def run_updates(logs: Path, env: dict[str,str], call: Callable,
             binding(core)
             links_ready('links-rollback-forward-'+core)
             passed.append('actual '+core+' rollback swap forward retains confirmed links and peer')
-        require(all(server.requests.count(paths[c])==2 for c in paths),'unexpected asset fetch count')
+        expected_fetches=3 if inject_start_failure else 2
+        require(all(server.requests.count(paths[c])==expected_fetches for c in paths),'unexpected asset fetch count')
     finally:
         env.clear()
         env.update(original_env)

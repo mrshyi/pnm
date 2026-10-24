@@ -48,6 +48,16 @@ def call(label,args,accepted=(0,)):
         (logs/(label+'.stdout')).write_bytes(stdout)
         (logs/(label+'.stderr')).write_bytes(stderr)
         (logs/'operation.json').write_text(json.dumps({'label':label,'state':'timeout' if timed_out else 'finished'}))
+        if timed_out or process.returncode not in accepted:
+            # Journal entries may contain private configuration details. Retain
+            # them only in this mode-0700 guest evidence directory, never stdout.
+            try:
+                diagnostic=subprocess.run(['journalctl','--no-pager','-n','120',
+                    '-u','xray.service','-u','hysteria-server.service'],
+                    capture_output=True,timeout=10)
+                (logs/(label+'.service-journal')).write_bytes(diagnostic.stdout)
+            except (OSError,subprocess.TimeoutExpired):
+                pass # Diagnostics cannot replace the original command failure.
         check(not timed_out,label+' command timed out')
         check(process.returncode in accepted,label+' exit='+str(process.returncode))
         return subprocess.CompletedProcess(command,process.returncode,stdout,stderr)
@@ -164,6 +174,62 @@ def deployment_failure_cases() -> None:
     subprocess.run(['systemctl','daemon-reload'],check=True,timeout=15,capture_output=True)
     passed.append('late deployment deadline restores live services resources accounts and commit state')
 
+def restore_start_failure_case(core_state, binding, links_ready, all_paths, archive, backup_resources) -> None:
+    from guest_start_fault import start_fault
+    desired=Path('/etc/pnm/node.conf')
+    original=desired.read_text()
+    changed=original.replace('XRAY_TARGET=edge.example.net:443','XRAY_TARGET=recovery.example.net:443')
+    check(changed!=original,'restore failure fixture did not change desired target')
+    desired.write_text(changed)
+    call('apply-before-restore-failure',['apply','xray'])
+    before_resources={p:fingerprint(p) for p in all_paths}
+    before_services={core:core_state(core) for core in ('xray','hysteria2')}
+    directory_paths=('/etc/pnm','/etc/pnm/secrets','/usr/local/etc/xray','/etc/hysteria','/etc/hysteria/tls')
+    def directory_state(path: str) -> tuple[int,int,int,int,int]:
+        info=Path(path).stat()
+        return info.st_mode,info.st_uid,info.st_gid,info.st_dev,info.st_ino
+    before_directories={p:directory_state(p) for p in directory_paths}
+    identities={p:fingerprint(p) for p in ('/etc/passwd','/etc/group','/etc/shadow','/etc/gshadow')}
+    transactions=set(Path('/var/lib/pnm/transactions').iterdir())
+    check(hashlib.sha256(archive.read_bytes()).hexdigest()==(logs/'trusted-backup.sha256').read_text(),
+          'trusted archive changed before failure test')
+    with start_fault('hysteria2') as fault:
+        result=call('restore-start-failure',['restore',str(archive)],accepted=(1,))
+        (logs/'restore-start-failure-state.json').write_text(json.dumps({
+            'fault':fault,'services':{core:{field:show(unit,field) for field in
+                ('ActiveState','SubState','Result','MainPID','UnitFileState')}
+                for core,unit in (('xray','xray.service'),('hysteria2','hysteria-server.service'))}}))
+        check(b'Core restore failed (rc=1); prior resources and service policy were restored.' in result.stderr,
+              'restore failure or recovery cause differs from fixture')
+        check(fault['attempts']==2 and fault['rejected']==1,'restore did not execute failure and compensation starts')
+        check(before_resources=={p:fingerprint(p) for p in all_paths},'failed restore did not recover original resources')
+        check(before_directories=={p:directory_state(p) for p in directory_paths},'failed restore did not recover directory metadata/identity')
+        check(identities=={p:fingerprint(p) for p in identities},'restore compensation changed service identities')
+        for core in ('xray','hysteria2'):
+            binding(core)
+            check(core_state(core)['invocation']!=before_services[core]['invocation'],'restore compensation retained stale invocation')
+        links_ready('links-after-restore-compensation')
+        health=json.loads(call('check-after-restore-compensation',['--json','check'],accepted=(0,1,2)).stdout)
+        check(not [x for x in health['checks'] if x['status'] in ('FAIL','UNKNOWN') and x['id']!='time_sync'],
+              'restore compensation left failed local health')
+        created=set(Path('/var/lib/pnm/transactions').iterdir())-transactions
+        check(len(created)==1,'unexpected failed restore transaction count')
+        journal=(created.pop()/'journal.tsv').read_text().splitlines()
+        events=[line.split('\t')[1] for line in journal]
+        check(sum(event=='WRITE' for event in events)>=12 and 'ROLLBACK_COMPLETE' in events
+              and events[-1]=='ROLLED_BACK' and 'RECOVERY_REQUIRED' not in events,
+              'restore did not fail after publication with completed compensation')
+    passed.append('actual HY2 startup failure after restore publication recovers both original generations')
+    check(hashlib.sha256(archive.read_bytes()).hexdigest()==(logs/'trusted-backup.sha256').read_text(),
+          'trusted archive changed before restore retry')
+    call('restore-retry-after-start-failure',['restore',str(archive)])
+    check(backup_resources=={p:fingerprint(p) for p in all_paths},'restore retry did not reproduce trusted archive resources')
+    for core in ('xray','hysteria2'):
+        binding(core)
+    links_ready('links-restored-after-start-failure')
+    passed.append('actual restore retries successfully after completed startup-failure compensation')
+
+
 def runtime_evidence_cases(core_state, binding, links_ready) -> None:
     units={'xray':'xray.service','hysteria2':'hysteria-server.service'}
     uri_keys={'xray':'xray_vless_reality','hysteria2':'hysteria2'}
@@ -237,7 +303,7 @@ try:
     absent()
     passed.append('fresh guest has no managed accounts or resources')
     scenario=Path('/opt/pnm-test-scenario').read_text().strip()
-    check(scenario in ('lifecycle','deployment-failure','core-update','configured-ports','runtime-evidence'),'unknown guest scenario')
+    check(scenario in ('lifecycle','deployment-failure','core-update','core-update-failure','configured-ports','runtime-evidence','restore-failure','startup-readiness'),'unknown guest scenario')
     if scenario=='configured-ports':
         ports={'xray':10443,'hysteria2':18443}
         for kind,port in ((socket.SOCK_STREAM,443),(socket.SOCK_DGRAM,8443)):
@@ -429,10 +495,11 @@ try:
     final_checks={item['id']:item['status'] for item in json.loads(call('check-restored',['--json','check'],accepted=(0,1,2)).stdout)['checks']}
     check(not [k for k,v in final_checks.items() if v in ('FAIL','UNKNOWN') and k!='time_sync'],'restored diagnostics not healthy')
     passed.append('protected trusted backup restores all resources and real applied bindings')
-    if scenario=='core-update':
+    if scenario in ('core-update','core-update-failure'):
         stage='actual distinct-version Core update and rollback'
         from guest_update_cases import run_updates
-        run_updates(logs,env,call,core_state,binding,links_ready,passed)
+        run_updates(logs,env,call,core_state,binding,links_ready,passed,
+                    inject_start_failure=scenario=='core-update-failure')
     if scenario=='configured-ports':
         check(len(default_sockets)==2 and all(fixture.fileno()>=0 and fixture.getsockname()==('127.0.0.1',port)
               for fixture,port in zip(default_sockets,(443,8443))), 'unrelated default listeners changed')
@@ -440,6 +507,13 @@ try:
     if scenario=='runtime-evidence':
         stage='external restart and real consistency lock'
         runtime_evidence_cases(core_state,binding,links_ready)
+    if scenario=='restore-failure':
+        stage='actual restore startup failure compensation'
+        restore_start_failure_case(core_state,binding,links_ready,all_paths,archive,backup_resources)
+    if scenario=='startup-readiness':
+        stage='actual delayed Core listener readiness'
+        from guest_readiness_cases import run_readiness
+        run_readiness(logs,env,core_state,show,passed)
     result={'passed':True,'checks':passed,'clock_diagnostic':checks.get('time_sync'),'uids_distinct':True}
 except Exception as error:
     result={'passed':False,'checks':passed,'stage':stage,'error_class':type(error).__name__}

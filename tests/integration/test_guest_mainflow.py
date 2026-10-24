@@ -14,10 +14,11 @@ parser=argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--baseline',type=Path,required=True,help='private verified boot fixture parent')
 parser.add_argument('--nspawn',type=Path,required=True,help='trusted native systemd-nspawn executable')
 parser.add_argument('--asset-cache',type=Path,required=True,help='verified pinned Core asset cache')
-parser.add_argument('--scenario',choices=('lifecycle','deployment-failure','core-update','configured-ports','runtime-evidence'),default='lifecycle')
+parser.add_argument('--scenario',choices=('lifecycle','deployment-failure','core-update','core-update-failure','configured-ports','runtime-evidence','restore-failure','startup-readiness'),default='lifecycle')
 parser.add_argument('--previous-asset-cache',type=Path)
 options=parser.parse_args()
-if options.scenario=='core-update' and options.previous_asset_cache is None:
+is_update=options.scenario in ('core-update','core-update-failure')
+if is_update and options.previous_asset_cache is None:
     parser.error('core-update requires --previous-asset-cache')
 for location in (options.baseline,options.nspawn):
     assert location.is_absolute() and location==location.resolve(), 'canonical trusted paths required'
@@ -47,7 +48,7 @@ assets=verified_assets(options.asset_cache)
 manifest=json.loads((repo/'tests/integration/real_core_versions.json').read_text())
 current_assets=assets
 target_manifest=manifest
-if options.scenario=='core-update':
+if is_update:
     previous_manifest=repo/'tests/integration/previous_core_versions.json'
     assets=verified_assets(options.previous_asset_cache,manifest_path=previous_manifest)
     manifest=json.loads(previous_manifest.read_text())
@@ -99,7 +100,7 @@ for core,extension in (('xray','zip'),('hysteria2','bin')):
     path.chmod(0o600)
 write_clone_file(root/'opt/pnm-test-versions.json',json.dumps(manifest))
 write_clone_file(root/'opt/pnm-test-scenario',options.scenario)
-if options.scenario=='core-update':
+if is_update:
     update_assets=root/'opt/pnm-update-assets'
     assert not update_assets.exists() and not update_assets.is_symlink()
     update_assets.mkdir(mode=0o700)
@@ -126,22 +127,34 @@ for name,target in (('guest_mainflow_cases.py','pnm-install-cases.py'),
     destination.chmod(0o700)
     import py_compile
     py_compile.compile(str(destination),cfile=str(base/(name+'.pyc')),doraise=True)
-if options.scenario=='core-update':
+if is_update:
     destination=root/'opt/guest_update_cases.py'
     assert not destination.exists() and not destination.is_symlink()
     shutil.copyfile(repo/'tests/integration/guest_update_cases.py',destination)
     destination.chmod(0o700)
     py_compile.compile(str(destination),cfile=str(base/'guest_update_cases.pyc'),doraise=True)
+if options.scenario in ('core-update-failure','restore-failure','startup-readiness'):
+    destination=root/'opt/guest_start_fault.py'
+    assert not destination.exists() and not destination.is_symlink()
+    shutil.copyfile(repo/'tests/integration/guest_start_fault.py',destination)
+    destination.chmod(0o700)
+    py_compile.compile(str(destination),cfile=str(base/'guest_start_fault.pyc'),doraise=True)
+if options.scenario=='startup-readiness':
+    destination=root/'opt/guest_readiness_cases.py'
+    assert not destination.exists() and not destination.is_symlink()
+    shutil.copyfile(repo/'tests/integration/guest_readiness_cases.py',destination)
+    destination.chmod(0o700)
+    py_compile.compile(str(destination),cfile=str(base/'guest_readiness_cases.pyc'),doraise=True)
 unit=root/'etc/systemd/system/pnm-boot-probe.service'
 assert unit.is_file() and not unit.is_symlink()
 assert 'ExecStart=/usr/bin/python3 /opt/pnm-boot-worker.py' in unit.read_text(), 'dedicated boot fixture unit required'
 assert (root/'etc/systemd/system/multi-user.target.wants/pnm-boot-probe.service').is_symlink()
 # The baseline's 80-second boot-only watchdog cannot cover CLI lifecycle work.
 # Replace only its cloned dedicated test unit; guest cases retain their own
-# 300-second limit and the host keeps the independent 420-second deadline.
+# 600-second limit and the host keeps the independent 720-second deadline.
 write_clone_file(unit,'[Unit]\nDescription=Private PNM guest main-flow test\nAfter=basic.target\n'
     '[Service]\nType=simple\nExecStart=/usr/bin/python3 /opt/pnm-boot-worker.py\n'
-    'NoNewPrivileges=yes\nRuntimeMaxSec=390\n[Install]\nWantedBy=multi-user.target\n')
+    'NoNewPrivileges=yes\nRuntimeMaxSec=690\n[Install]\nWantedBy=multi-user.target\n')
 from pathlib import Path
 import hashlib,json,os,signal,subprocess,time,uuid
 root=base/'rootfs'
@@ -180,7 +193,7 @@ with (base/'boot.log').open('wb') as log:
     args=[s for s in prefix if s!='--as-pid2']+['--boot','--','systemd.unit=multi-user.target','systemd.log_level=notice','systemd.show_status=no']
     proc=subprocess.Popen(args,stdout=log,stderr=subprocess.STDOUT,start_new_session=True)
     try:
-        deadline=time.monotonic()+420
+        deadline=time.monotonic()+720
         seen_at=None
         while proc.poll() is None and time.monotonic()<deadline:
             if interrupted_signal:
@@ -244,8 +257,10 @@ else:
 outcome['host_databases_unchanged']=all(hashlib.sha256(Path(n).read_bytes()).hexdigest()==before[n] for n in names)
 outcome['scope_after']=value('LoadState')
 outcome['remaining_fixture_mounts']=any(str(base) in line for line in Path('/proc/self/mountinfo').read_text().splitlines())
+# Keep the safe cleanup/result summary observable even if the host filesystem
+# becomes read-only and cannot persist its report. Persistence errors still fail.
+print(json.dumps(outcome),flush=True)
 (base/'boot-result.json').write_text(json.dumps(outcome))
-print(json.dumps(outcome))
 assert outcome['host_databases_unchanged'] and outcome['scope_after']=='not-found' and not outcome['remaining_fixture_mounts']
 assert interrupted_signal==0, 'guest test interrupted; owned resources retired'
 
