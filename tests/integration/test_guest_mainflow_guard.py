@@ -83,6 +83,13 @@ for entry in (
         raise AssertionError('host entered recovery fixture')
     except RuntimeError as error:
         assert str(error)=='start fault requires mapped guest root'
+fixture.require_guest=lambda: None
+for delay in (0,16,'3',True,3.0,None):
+    try:
+        with fixture.start_fault('xray',mode='delay',delay_seconds=delay):
+            raise AssertionError('invalid delay entered fault fixture')
+    except RuntimeError as error:
+        assert str(error)=='bounded integer startup delay required'
 '''
         result=subprocess.run([sys.executable,'-B','-c',script,str(DRIVER.parent)],
                               capture_output=True,timeout=10)

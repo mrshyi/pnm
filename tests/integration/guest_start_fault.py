@@ -7,6 +7,7 @@ from pathlib import Path
 import socket
 import subprocess
 import threading
+import time
 import uuid
 
 
@@ -25,11 +26,12 @@ def require_guest() -> None:
 
 
 @contextmanager
-def start_fault(core: str, *, mode: str = 'reject-once'):
+def start_fault(core: str, *, mode: str = 'reject-once', delay_seconds: int = 3):
     require_guest()
     units={'xray':'xray.service','hysteria2':'hysteria-server.service'}
     require(core in units,'unknown start-fault Core')
     require(mode in ('reject-once','reject-twice','delay'),'unknown start-fault mode')
+    require(type(delay_seconds) is int and 1<=delay_seconds<=15,'bounded integer startup delay required')
     unit=units[core]
     show=subprocess.run(['systemctl','show',unit,'--property=DropInPaths','--value'],
                         capture_output=True,text=True,timeout=10)
@@ -42,10 +44,10 @@ def start_fault(core: str, *, mode: str = 'reject-once'):
           "    answer=connection.recv(1)\n"
           "if answer!=b'.': raise SystemExit(1 if answer==b'!' else 70)\n")
     if mode=='delay':
-        code+="time.sleep(3)\nos.execv(sys.argv[2],sys.argv[2:])\n"
+        code+=f"time.sleep({delay_seconds})\nos.execv(sys.argv[2],sys.argv[2:])\n"
     stop=threading.Event()
     lock=threading.Lock()
-    state={'attempts':0,'rejected':0,'errors':[]}
+    state={'attempts':0,'rejected':0,'errors':[],'first_attempt_at':None}
     listener=socket.socket(socket.AF_INET,socket.SOCK_STREAM)
     worker=None
     published=False
@@ -68,6 +70,8 @@ def start_fault(core: str, *, mode: str = 'reject-once'):
             with connection:
                 connection.settimeout(2)
                 with lock:
+                    if state['attempts']==0:
+                        state['first_attempt_at']=time.monotonic()
                     state['attempts']+=1
                     reject=(mode!='delay' and state['attempts']<=(2 if mode=='reject-twice' else 1))
                     state['rejected']+=int(reject)

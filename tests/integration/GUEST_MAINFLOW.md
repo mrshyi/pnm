@@ -62,6 +62,13 @@ rollback receipts. Safe structured observations are retained before assertions.
 The fault fixture never resets failed units itself. The normal14-case lifecycle
 then proves a clean retry after both completed compensations.
 
+`PNM_GUEST_SCENARIO=deployment-listener-failure` uses a validated12-second
+managed-start delay for each Core. A bounded observer confirms active state and
+absent TCP/UDP listening; the failure must return before that managed wrapper
+could exec the Core. Both lifecycle phases must complete, then the target Core's
+own check and post-health phase fail78. The same full compensation assertions
+and subsequent normal14-case lifecycle apply. Probe default delay remains3 seconds.
+
 `PNM_GUEST_SCENARIO=runtime-evidence` restarts each actual Core outside PNM,
 requires show/links to retain unconfirmed applied state and withhold only that
 Core's URI, and checks that PNM restart cannot promote it. Fully validated apply

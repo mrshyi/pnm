@@ -2,7 +2,7 @@
 
 **Last reconciled:** 2026-10-24 (default31/389; native initial-start compensation16/16, dependency matrix33/33, ordinary restart16/16 and prior recovery/TLS/account/interruption slices pass; broader VM/external acceptance remains open)
 
-**Current increment baseline:** branch `dev`, parent HEAD `e726f17`, VERSION `0.16.0-rc.1`.
+**Current increment baseline:** branch `dev`, parent HEAD `08b4a6c`, VERSION `0.16.0-rc.1`.
 
 **Environment recheck:** the earlier host EIO/EROFS/CreateInstance failure is no
 longer reproduced: Debian root is writable, real `true`/`df` execute successfully
@@ -103,7 +103,7 @@ not close G-02 or prove systemd recovery, reboot or public client connectivity.
 | Item | Current status | Evidence / blocker | Next action |
 |---|---|---|---|
 | G-01 — runtime/config/link state | BLOCKED for production acceptance | Current `lib/node.sh` source prints an HY2 runtime row. Prior production output reportedly omitted it despite the same VERSION; deployed executable/source identity has not been verified in this session. | On an authorized host, perform read-only path/version/source-hash comparison; do not apply or upgrade as diagnosis. |
-| G-02 — complete deployment rollback | Actual first-start and late-deadline rollback/retry PASS / broader matrix open | Xray/HY2 first-start failures and real post-health deadline failure compensate services/accounts/resources/metadata without commit/applied promotion, then retry passes. Failed units are normalized and absent units independently require inactive/PID0 before recovery is certified. | Continue actual post-health listener absence, interruption, other publication failures and independent VM reboot; do not infer production readiness. |
+| G-02 — complete deployment rollback | Actual first-start, absent-listener post-health and late-deadline rollback/retry PASS / broader matrix open | Both Core startup and active-without-listener failures compensate services/accounts/resources/metadata without commit/applied promotion, then retry passes. Failed units are normalized and absent units require inactive/PID0. | Continue deployment interruption, other publication failures and independent VM reboot; do not infer production readiness. |
 | G-03 — Core update transaction | Actual distinct-version operations and startup/recovery failure PASS / broader matrix open | Both official Cores change real versions, retain paired previous state and preserve peer evidence. Native start-once failures compensate; start-twice failures retain RECOVERY_REQUIRED and block protected commands. Curl uses a private HTTPS transport fixture. | Extend late publication/commit and interruption matrix; upstream acquisition and VM reboot remain separate. |
 | G-04 — backup/restore safety | Actual trusted round trip and startup/recovery failure PASS / broader matrix open | Real CLI restores bytes/metadata and applied bindings. Native startup failure compensates and retries; failed compensation retains uncertainty and blocks further protected operations. | Accept interruption, other publication failures and reboot separately. |
 | G-05 — dependency preflight | Actual Debian guest19-tool refusal and repeat refusal PASS | A private PATH individually hides all19 declared preflight prerequisites. Actual JSON install returns2 with the matching FAIL class and preserves authority/NSS fingerprints, PNM inventory/transactions and absent Core/service/account state; normal lifecycle then passes. | Upstream acquisition failures, other distributions and remaining fault positions stay separate. |
@@ -1508,6 +1508,26 @@ full-image archive pass cipher/raw readback verification, loop detached, cleanup
 errors empty. The failed RED image and safe observations remain separately retained.
 No production host, independent VM reboot or external client was exercised.
 
+## Actual deployment post-health listener failures — 2026-10-24
+
+Initial-start recovery is committed as `08b4a6c`. New listener-failure mode uses
+a validated12-second managed-start delay without replacing Core binaries or
+validators. A bounded observer directly confirms active and no target TCP/UDP
+listener; return before first-accept+11.75 seconds proves that managed startup
+never reached exec before failure completion. Both lifecycle phases precede the
+specific Core check and post-health failure78. Full authority/NSS/directory/unit
+compensation, no applied/commit promotion and a normal main-flow retry follow.
+
+Final fresh `yex496qc` passes16/16. Native/Make exit0, unchanged host databases,
+scope not-found, no mounts. Control/key/results
+`/var/tmp/pnm-deploy-listener-final-volume.eilh3c60` and ignored D full image pass
+cipher/raw readback verification, detached loop, cleanup errors empty. Earlier
+phase-only evidence is retained separately. Nine guards (including invalid-delay
+types/bounds), thirteen Python compilations and syntax/security/ShellCheck pass;
+independent review accepts the final causal evidence and thread cleanup. Product
+source remains31 suites/389 tests; this test-only slice does not prove VM reboot
+or external connectivity.
+
 ## Immediate next steps
 
 Startup readiness/harness and initiating-error repairs are committed as
@@ -1515,8 +1535,8 @@ Startup readiness/harness and initiating-error repairs are committed as
 recovery-required plan. TLS access, valid-account reuse and per-Core process
 interruption now also pass. Ordinary restart's forward readiness gate is repaired.
 All19 declared dependency classes and first-deployment Core startup failures now
-pass real checks. Continue actual post-health listener absence, deployment process
-interruption and other fault-position acceptance,
+pass real checks. Actual post-health listener absence now passes as well. Continue
+deployment process interruption and other fault-position acceptance,
 together with the following external prerequisites;
 the earlier cleanup proposal is unnecessary and all original roots are retained.
 Successful main flow, update/rollback and late-deadline compensation cannot replace
