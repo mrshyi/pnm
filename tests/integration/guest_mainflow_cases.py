@@ -353,7 +353,7 @@ try:
           'core-recovery-failure-hysteria2','restore-recovery-failure','tls-access','account-reuse',
           'core-interruption','core-interruption-hysteria2','restart-readiness','dependency-refusal',
           'deployment-startup-failure','deployment-listener-failure','deployment-term',
-          'deployment-sigkill')+update_interruptions+restore_interruptions+publication_cases,'unknown guest scenario')
+          'deployment-sigkill','deployment-commit-readonly')+update_interruptions+restore_interruptions+publication_cases,'unknown guest scenario')
     if scenario=='account-reuse':
         from guest_account_cases import prepare_accounts, require_preserved
         reused_accounts=prepare_accounts()
@@ -405,12 +405,12 @@ try:
         stage='actual installation dependency refusal matrix'
         from guest_preflight_cases import run_dependencies
         run_dependencies(logs,env,call,absent,passed)
-    if scenario in ('deployment-startup-failure','deployment-listener-failure','deployment-term','deployment-sigkill'):
+    if scenario in ('deployment-startup-failure','deployment-listener-failure','deployment-term','deployment-sigkill','deployment-commit-readonly'):
         stage='actual first-deployment Core startup failure compensation'
         from guest_deployment_cases import run_startup_failures
         failure={'deployment-startup-failure':'start','deployment-listener-failure':'listener',
-                 'deployment-term':'term','deployment-sigkill':'kill'}[scenario]
-        run_startup_failures(logs,call,absent,passed,failure=failure)
+                 'deployment-term':'term','deployment-sigkill':'kill','deployment-commit-readonly':'commit'}[scenario]
+        run_startup_failures(logs,call,absent,passed,failure=failure,env=env)
         if scenario=='deployment-sigkill':
             # This fixture intentionally retains an interrupted deployment.
             # Its protected result is still written by the shared finally block.

@@ -203,11 +203,13 @@ the current PNM check dispatcher. Distinct versions and the one deadline-failure
 case require their named scenarios above. VM/kernel reboot, other injected
 failure positions, deployed-source identity and external clients remain separate.
 
-`test_guest_mainflow_guard.py` runs nine offline checks before boot: explicit
+`test_guest_mainflow_guard.py` runs ten offline checks before boot: explicit
 opt-in, enabled assertions, protected regular-file/link behavior, nonblocking
 FIFO rejection, retirement of a PIPE-holding descendant on command timeout,
 asset header limits, guest-only start-fault refusal before host mutation/network,
 custom work-directory safety, and isolated-network asset/TLS positive/refusal/cleanup.
+It also checks the scoped publisher observer's path/errno filtering and unchanged
+control flow with synthetic exceptions; those checks are not real IO acceptance.
 The latter proves a distinct network namespace before raising only that child's
 lo; no host socket/interface is created or changed. It covers incomplete CONNECT/
 TLS, wrong target/path, and a CA-verified fixed response with complete retirement.
@@ -269,3 +271,15 @@ Safe `restore-partial-publication.json` records counts and the retired EROFS
 receipt. This adds partial-publication coverage; the existing `restore-failure`
 startup mode remains separate, and physical/persistent storage or commit faults
 are not inferred from this transient refusal.
+
+`deployment-commit-readonly` delegates Python invocations unchanged until the
+exact protected deployment publisher follows COMMIT_INTENT and both applied
+writes. The original stdin program then runs in a private child namespace with
+its transaction directory bound read-only. A scoped interpreter trace observes
+the real pending-file EROFS without replacing file APIs or program results.
+Require the real publisher/CLI73, completed post-health and whole original
+resource/NSS/directory/unit compensation, no marker/uncertainty/applied residue,
+then the complete healthy normal main flow. Only the creating child removes the
+bind; parent mounts remain unchanged. A separate restore-publication run checks
+the shared bind extraction's existing move path. This is before marker publication;
+later rename/fsync uncertainty and physical durability remain separate.

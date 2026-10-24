@@ -2,7 +2,7 @@
 
 **Last reconciled:** 2026-10-25 (default31/389; native partial restore EROFS16/16, Core publication each26/26 and restore interruption pass; commit/VM/external acceptance remains open)
 
-**Current increment baseline:** branch `dev`, parent HEAD `d475c80`, VERSION `0.16.0-rc.1`.
+**Current increment baseline:** branch `dev`, parent HEAD `4206f2e`, VERSION `0.16.0-rc.1`.
 
 **Environment recheck:** the earlier host EIO/EROFS/CreateInstance failure is no
 longer reproduced: Debian root is writable, real `true`/`df` execute successfully
@@ -1690,6 +1690,36 @@ readback, detached loop and empty cleanup errors. Final review finds no blocker.
 Product Bash is unchanged; the31/389 baseline was not repeated for this test-only
 stage. Commit/marker, persistent storage, VM/reboot, deployed identity and clients stay
 separate.
+
+## Native deployment publisher precommit refusal — 2026-10-25
+
+Partial restore refusal is committed as `4206f2e`. T-15 now targets the unchanged
+real python publisher after unique COMMIT_INTENT and both applied writes. The
+launcher validates canonical protected deployment transaction metadata, delegates
+other Python calls unchanged, and uses a new private child namespace with the
+shared guarded read-only bind. A scoped interpreter observer records only the
+real pending-file EROFS errno/path match; it does not replace IO APIs, exceptions
+or return values. Parent namespace/mounts are compared only, never unmounted with
+child IDs. Full original deployment/NSS/directory/unit recovery and a healthy
+normal-flow retry remain required, with no marker or uncertainty residue.
+
+New entries first fail offline; then10 guards pass, including observer filtering
+and unchanged control flow. Seventeen Python sources compile and static gates
+pass. Independent pre-execution review accepts stdin/observer scope, dynamic path
+validation, mount ownership and existing move/startup behavior. Native publisher
+control `/var/tmp/pnm-deployment-commit-readonly-volume.3yn9k7x9` runs `fkorwxid`,
+now15/15: actual pending-file EROFS30 and publisher73 after COMMIT_INTENT, both
+applied writes and post-health; full resource/NSS/directory/unit recovery, no
+marker/uncertainty/applied residue and a complete healthy main-flow retry.
+Native/Make0 leaves host DBs unchanged, scope not-found and no mounts. The control
+verifies full encrypted-image readback, detached loop and empty cleanup errors.
+Shared-bind move regression `mtixk7f7` also passes16/16, again4 of12 resources
+published before the actual restore EROFS and a successful trusted retry. Control
+`/var/tmp/pnm-restore-publication-volume.50mysyr7` verifies the same full-image
+retention and cleanup, with unchanged host DBs/not-found scope/no mounts.
+Product Bash is
+unchanged; later marker/rename/fsync uncertainty, persistent media, VM/reboot,
+G-01 and external clients stay separate.
 
 ## Immediate next steps
 

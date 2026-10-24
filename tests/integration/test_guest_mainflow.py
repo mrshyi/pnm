@@ -23,7 +23,7 @@ parser.add_argument('--scenario',choices=('lifecycle','deployment-failure','core
     'core-recovery-failure-xray','core-recovery-failure-hysteria2','restore-recovery-failure','tls-access',
     'account-reuse','core-interruption','core-interruption-hysteria2','restart-readiness',
     'dependency-refusal','deployment-startup-failure','deployment-listener-failure',
-    'deployment-term','deployment-sigkill')+update_interruptions+restore_interruptions+publication_cases,default='lifecycle')
+    'deployment-term','deployment-sigkill','deployment-commit-readonly')+update_interruptions+restore_interruptions+publication_cases,default='lifecycle')
 parser.add_argument('--previous-asset-cache',type=Path)
 parser.add_argument('--work-dir',type=Path,help='optional canonical private root-owned POSIX fixture directory')
 options=parser.parse_args()
@@ -152,25 +152,31 @@ if options.scenario in ('core-update-failure','restore-failure','restore-publica
                         'core-recovery-failure-xray','core-recovery-failure-hysteria2','restore-recovery-failure',
                         'tls-access','account-reuse','core-interruption','core-interruption-hysteria2',
                         'restart-readiness','dependency-refusal','deployment-startup-failure','deployment-listener-failure',
-                          'deployment-term','deployment-sigkill')+update_interruptions+restore_interruptions+publication_cases:
+                          'deployment-term','deployment-sigkill','deployment-commit-readonly')+update_interruptions+restore_interruptions+publication_cases:
     destination=root/'opt/guest_start_fault.py'
     assert not destination.exists() and not destination.is_symlink()
     shutil.copyfile(repo/'tests/integration/guest_start_fault.py',destination)
     destination.chmod(0o700)
     py_compile.compile(str(destination),cfile=str(base/'guest_start_fault.pyc'),doraise=True)
-if options.scenario in publication_cases+('restore-publication',):
+if options.scenario in publication_cases+('restore-publication','deployment-commit-readonly'):
     destination=root/'opt/guest_io_fault.py'
     assert not destination.exists() and not destination.is_symlink()
     shutil.copyfile(repo/'tests/integration/guest_io_fault.py',destination)
     destination.chmod(0o700)
     py_compile.compile(str(destination),cfile=str(base/'guest_io_fault.pyc'),doraise=True)
+if options.scenario=='deployment-commit-readonly':
+    destination=root/'opt/guest_commit_fault.py'
+    assert not destination.exists() and not destination.is_symlink()
+    shutil.copyfile(repo/'tests/integration/guest_commit_fault.py',destination)
+    destination.chmod(0o700)
+    py_compile.compile(str(destination),cfile=str(base/'guest_commit_fault.pyc'),doraise=True)
 if options.scenario in ('startup-readiness','restart-readiness'):
     destination=root/'opt/guest_readiness_cases.py'
     assert not destination.exists() and not destination.is_symlink()
     shutil.copyfile(repo/'tests/integration/guest_readiness_cases.py',destination)
     destination.chmod(0o700)
     py_compile.compile(str(destination),cfile=str(base/'guest_readiness_cases.pyc'),doraise=True)
-if options.scenario.startswith('core-recovery-failure-') or options.scenario in ('restore-recovery-failure','tls-access','account-reuse','core-interruption','core-interruption-hysteria2','dependency-refusal','deployment-startup-failure','deployment-listener-failure','deployment-term','deployment-sigkill')+update_interruptions+restore_interruptions:
+if options.scenario.startswith('core-recovery-failure-') or options.scenario in ('restore-recovery-failure','tls-access','account-reuse','core-interruption','core-interruption-hysteria2','dependency-refusal','deployment-startup-failure','deployment-listener-failure','deployment-term','deployment-sigkill','deployment-commit-readonly')+update_interruptions+restore_interruptions:
     destination=root/'opt/guest_recovery_cases.py'
     assert not destination.exists() and not destination.is_symlink()
     shutil.copyfile(repo/'tests/integration/guest_recovery_cases.py',destination)
@@ -200,7 +206,7 @@ if options.scenario=='dependency-refusal':
     shutil.copyfile(repo/'tests/integration/guest_preflight_cases.py',destination)
     destination.chmod(0o700)
     py_compile.compile(str(destination),cfile=str(base/'guest_preflight_cases.pyc'),doraise=True)
-if options.scenario in ('deployment-startup-failure','deployment-listener-failure','deployment-term','deployment-sigkill'):
+if options.scenario in ('deployment-startup-failure','deployment-listener-failure','deployment-term','deployment-sigkill','deployment-commit-readonly'):
     destination=root/'opt/guest_deployment_cases.py'
     assert not destination.exists() and not destination.is_symlink()
     shutil.copyfile(repo/'tests/integration/guest_deployment_cases.py',destination)

@@ -58,6 +58,7 @@ import guest_preflight_cases as preflight
 import guest_deployment_cases as deployment
 import guest_update_cases as updates
 import guest_io_fault as io_fault
+import guest_commit_fault as commit_fault
 def forbidden(*args,**kwargs):
     raise AssertionError('fixture acted before its namespace guard')
 fixture.socket.socket=forbidden
@@ -84,6 +85,9 @@ for entry in (
     lambda: io_fault.run_move([],None),
     lambda: io_fault.run_move([],None,isolated=True),
     lambda: io_fault.unmount_owned(None,None,None),
+    lambda: io_fault.readonly_bind(None,None,None,None).__enter__(),
+    lambda: commit_fault.readonly_deployment_commit(None,None).__enter__(),
+    lambda: commit_fault.run_commit([],None),
     lambda: readiness.run_restart_readiness(None,forbidden,forbidden,forbidden,forbidden,[]),
     lambda: preflight.run_dependencies(None,None,forbidden,forbidden,[]),
     lambda: deployment.run_startup_failures(None,forbidden,forbidden,[]),
@@ -117,6 +121,38 @@ for fault_mode in ('delay','delay-pre'):
 '''
         result=subprocess.run([sys.executable,'-B','-c',script,str(DRIVER.parent)],
                               capture_output=True,timeout=10)
+        self.assertEqual(result.returncode,0,result.stderr.decode(errors='replace'))
+
+    @unittest.skipUnless(sys.platform=='linux','Python publisher observer')
+    def test_commit_observer_preserves_flow_and_filters_exception_path(self):
+        script='''import sys,json,os,subprocess,tempfile
+from pathlib import Path
+sys.path.insert(0,sys.argv[1])
+from guest_commit_fault import TRACE_SOURCE
+with tempfile.TemporaryDirectory(prefix='pnm-trace-guard.') as directory:
+    private=Path(directory)
+    (private/'sitecustomize.py').write_text(TRACE_SOURCE)
+    (private/'config.json').write_text(json.dumps({'transaction':str(private/'tx')}))
+    program='\\n'.join([
+        'import errno,sys',
+        'from pathlib import Path',
+        'receipt=Path(sys.argv[2])',
+        'for number,path in ((errno.EROFS,sys.argv[1]+".other"),(errno.EACCES,sys.argv[1])):',
+        '    try: raise OSError(number,"observer fixture",path)',
+        '    except OSError: pass',
+        'assert not receipt.exists()',
+        'try: raise OSError(errno.EROFS,"observer fixture",sys.argv[1])',
+        'except OSError: pass',
+        'print("flow-preserved")'])
+    result=subprocess.run([sys.executable,'-B','-',str(private/'tx/commit-uncertain.env'),
+        str(private/'observed-exception.json')],input=program.encode(),capture_output=True,
+        env={**os.environ,'PYTHONPATH':str(private)},timeout=10)
+    assert result.returncode==0 and result.stdout==b'flow-preserved\\n' and not result.stderr
+    assert json.loads((private/'observed-exception.json').read_text())=={
+        'actual_errno':30,'pending_creation_refused':True}
+'''
+        result=subprocess.run([sys.executable,'-B','-c',script,str(DRIVER.parent)],
+                              capture_output=True,timeout=15)
         self.assertEqual(result.returncode,0,result.stderr.decode(errors='replace'))
 
     def test_asset_headers_have_line_count_and_total_bounds(self):

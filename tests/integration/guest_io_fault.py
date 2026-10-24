@@ -39,41 +39,22 @@ def unmount_owned(parent, mount_id, identity):
     require(not any(row[4]==str(parent) for row in mounts()),'owned publication mount remains')
 
 
-def run_move(arguments, wrapper, *, isolated=False):
+@contextmanager
+def readonly_bind(parent, private, identity, parent_namespace):
     require_guest()
-    private=Path(wrapper).parent
     info=private.lstat()
     require(private.resolve()==private and info.st_uid==0 and stat.S_IMODE(info.st_mode)==0o700,
-            'private move launcher required')
-    config=json.loads((private/'config.json').read_text())
-    target=config['target']
-    require(target in TARGETS,'unexpected publication target')
-    if (len(arguments)!=4 or arguments[:2]!=['-f','--'] or arguments[-1]!=target
-            or (private/'attempted').exists()):
-        return subprocess.run(['/usr/bin/mv',*arguments],timeout=20).returncode
-    source=Path(arguments[-2])
-    parent=Path(target).parent
-    require(source.parent==parent and source.name.startswith('.pnm-write.')
-            and source.is_file() and not source.is_symlink(),'unexpected publication candidate')
-    if not isolated:
-        # nspawn's guest root can be slave-mounted. Make only this exact move's
-        # child namespace private; never change the guest/host mount propagation.
-        return subprocess.run(['/usr/bin/unshare','--mount','--propagation','private',
-            '/usr/bin/python3','-B','/opt/guest_io_fault.py',wrapper,*arguments],timeout=90).returncode
-    require(os.stat('/proc/self/ns/mnt').st_ino!=config['mount_namespace'],
+            'private publication bind required')
+    require(os.stat('/proc/self/ns/mnt').st_ino!=parent_namespace,
             'publication move did not enter a new mount namespace')
-    identity=parent_identity(parent)
-    require(identity==config['parent_identity'],'publication parent identity changed')
+    require(parent_identity(parent)==identity,'publication parent identity changed')
     rows=mounts()
     require(not any(row[4]==str(parent) for row in rows),'publication parent is already mounted')
     covering=max((row for row in rows if str(parent).startswith(row[4].rstrip('/')+'/')),
                  key=lambda row:len(row[4]))
     require(not any(value.startswith(('shared:','master:'))
                     for value in covering[6:covering.index('-')]),'publication mount propagation is not private')
-    with (private/'attempted').open('x') as stream:
-        stream.write('one owned attempt\n')
     mount_id=None
-    result=None
     observed={'private_namespace':True}
     try:
         subprocess.run(['/usr/bin/mount','--bind',str(parent),str(parent)],
@@ -101,15 +82,41 @@ def run_move(arguments, wrapper, *, isolated=False):
             require(probe.lstat().st_ino==identity_probe.st_ino,'unexpected writable probe replacement')
             probe.unlink()
             raise RuntimeError('publication bind unexpectedly allowed a write')
-        result=subprocess.run(['/usr/bin/mv',*arguments],capture_output=True,timeout=20)
-        observed.update({'move_rc':result.returncode,
-                         'readonly_error':b'Read-only file system' in result.stderr})
+        yield observed
     finally:
         if mount_id is not None:
             unmount_owned(parent,mount_id,identity)
+            observed['mount_removed']=True
+
+
+def run_move(arguments, wrapper, *, isolated=False):
+    require_guest()
+    private=Path(wrapper).parent
+    info=private.lstat()
+    require(private.resolve()==private and info.st_uid==0 and stat.S_IMODE(info.st_mode)==0o700,
+            'private move launcher required')
+    config=json.loads((private/'config.json').read_text())
+    target=config['target']
+    require(target in TARGETS,'unexpected publication target')
+    if (len(arguments)!=4 or arguments[:2]!=['-f','--'] or arguments[-1]!=target
+            or (private/'attempted').exists()):
+        return subprocess.run(['/usr/bin/mv',*arguments],timeout=20).returncode
+    source=Path(arguments[-2])
+    parent=Path(target).parent
+    require(source.parent==parent and source.name.startswith('.pnm-write.')
+            and source.is_file() and not source.is_symlink(),'unexpected publication candidate')
+    if not isolated:
+        # Only the matching move gets a new private mount namespace.
+        return subprocess.run(['/usr/bin/unshare','--mount','--propagation','private',
+            '/usr/bin/python3','-B','/opt/guest_io_fault.py',wrapper,*arguments],timeout=90).returncode
+    with (private/'attempted').open('x') as stream:
+        stream.write('one owned attempt\n')
+    with readonly_bind(parent,private,config['parent_identity'],config['mount_namespace']) as observed:
+        result=subprocess.run(['/usr/bin/mv',*arguments],capture_output=True,timeout=20)
+        observed.update({'move_rc':result.returncode,
+                         'readonly_error':b'Read-only file system' in result.stderr})
     require(result is not None and result.returncode==1 and observed['readonly_error'],
             'real publication move did not fail with EROFS')
-    observed['mount_removed']=True
     (private/'result.json').write_text(json.dumps(observed))
     sys.stdout.buffer.write(result.stdout)
     sys.stderr.buffer.write(result.stderr)
