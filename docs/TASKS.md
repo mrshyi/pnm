@@ -1,8 +1,8 @@
 # PNM Current Tasks
 
-**Last reconciled:** 2026-10-24 (default31/389; native initial-start compensation16/16, dependency matrix33/33, ordinary restart16/16 and prior recovery/TLS/account/interruption slices pass; broader VM/external acceptance remains open)
+**Last reconciled:** 2026-10-25 (default31/389; native update/rollback TERM26/26 and four SIGKILL slices pass; broader fault-position/VM/external acceptance remains open)
 
-**Current increment baseline:** branch `dev`, parent HEAD `3336d92`, VERSION `0.16.0-rc.1`.
+**Current increment baseline:** branch `dev`, parent HEAD `2d26132`, VERSION `0.16.0-rc.1`.
 
 **Environment recheck:** the earlier host EIO/EROFS/CreateInstance failure is no
 longer reproduced: Debian root is writable, real `true`/`df` execute successfully
@@ -1553,6 +1553,39 @@ rerun; later continuation was approved and no approval check was bypassed.
 Product source remains31 suites/389 tests. Update/restore interruption and other
 fault-position matrices remain necessary local work before external closure.
 
+## Actual Core update/rollback process interruption — 2026-10-25
+
+Whole-deployment interruption is committed as `2d26132`. The distinct-version
+fixture now shares the exact owned CLI watcher for each Core's update and
+rollback after binary publication. TERM `7j76s5tp` passes26/26: preserve143,
+restore original binary/config/previous bytes and metadata, reactivate the actual
+prior version, refresh applied binding, preserve peer and finish the normal matrix.
+Native/Make exit0, unchanged host databases, scope not-found and no mounts.
+Control/key/results `/var/tmp/pnm-update-term-volume.t4khgkre` and the ignored D
+full encrypted image pass readback, loop detached, cleanup errors empty.
+
+Independent SIGKILL update Xray `3dpcxgms` passes17/17, update HY2 `_cqcdl7y`
+passes21/21, and rollback Xray `2r8p2l7r` passes18/18. Their controls
+`/var/tmp/pnm-core-update-sigkill-xray-volume.qd0i2b31`,
+`/var/tmp/pnm-core-update-sigkill-hysteria2-volume.qqg8cyxp` and
+`/var/tmp/pnm-core-rollback-sigkill-xray-volume.h2akq7k8` verify full-image
+readback, detached loops and empty cleanup errors. Rollback HY2 `ht89ott5`
+passes22/22; control `/var/tmp/pnm-core-rollback-sigkill-hysteria2-volume.vhsoaqxh`
+also verifies full encrypted-image readback, detached loop and empty cleanup errors.
+All four native/Make exits0 retain unchanged host databases, not-found scopes
+and no fixture mounts. SIGKILL retains the candidate generation and prior
+applied/previous records without a commit. After the owned HTTPS server retires,
+actual writer/links/show/check refuse70 with the exact unresolved operation,
+empty stdout and unchanged persisted/runtime state. Reports separate the
+completed initial lifecycle from an incomplete update matrix.
+Nine guards, fifteen Python compilations and syntax/security/ShellCheck
+pass. Static independent review has no blocker. Product source remains31/389;
+late previous/metadata/commit positions, restore interruption and VM/external
+acceptance are separate. The user currently has no deployed target for G-01.
+The task runner reports `usageLimited`; this increment is closed without starting
+another stage. Restore interruption and late fault-position work remain local
+next actions, rather than being reclassified as external acceptance blockers.
+
 ## Immediate next steps
 
 Startup readiness/harness and initiating-error repairs are committed as
@@ -1560,8 +1593,9 @@ Startup readiness/harness and initiating-error repairs are committed as
 recovery-required plan. TLS access, valid-account reuse and per-Core process
 interruption now also pass. Ordinary restart's forward readiness gate is repaired.
 All19 declared prerequisite tools and first-deployment Core startup failures now
-pass real checks. Actual post-health listener absence now passes as well. Continue
-actual update/rollback and restore process interruption, late previous/metadata/
+pass real checks. Actual post-health listener absence now passes as well.
+Update/rollback startup interruption now passes; continue actual restore process
+interruption, late previous/metadata/
 commit and other fault-position acceptance,
 together with the following external prerequisites;
 the earlier cleanup proposal is unnecessary and all original roots are retained.

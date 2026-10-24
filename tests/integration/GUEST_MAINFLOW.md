@@ -213,3 +213,17 @@ lo; no host socket/interface is created or changed. It covers incomplete CONNECT
 TLS, wrong target/path, and a CA-verified fixed response with complete retirement.
 Each CLI call owns a new session; bounded TERM/KILL retires that command group
 on timeout, while its Core services remain under the guest systemd manager.
+
+`PNM_GUEST_SCENARIO=core-update-term` adds TERM at actual service startup after
+binary publication for each Core's update and rollback. It requires143, restored
+binary/config/previous bytes and metadata, the original actual version, refreshed
+applied binding, completed compensation and an unchanged peer; the normal
+distinct-version matrix then continues. Four separate fresh-guest variants,
+`core-update-sigkill-xray`, `core-update-sigkill-hysteria2`,
+`core-rollback-sigkill-xray` and `core-rollback-sigkill-hysteria2`, retain the
+candidate version and prior applied/previous records without a commit. After
+retiring the owned HTTPS asset server, actual writer/links/show/check must refuse70
+with the exact unresolved operation and preserve resource identities and runtime
+state. These variants report the completed initial main flow separately from
+`update_matrix_completed:false` and `expected_recovery_required:true`.
+They do not cover late previous/metadata/commit publication or restore interruption.

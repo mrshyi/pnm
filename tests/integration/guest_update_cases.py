@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import re
+import signal
 import socket
 import socketserver
 import ssl
@@ -134,13 +135,16 @@ class AssetRequest(socketserver.StreamRequestHandler):
 def run_updates(logs: Path, env: dict[str,str], call: Callable,
                 core_state: Callable, binding: Callable, links_ready: Callable,
                 passed: list[str], *, inject_start_failure: bool = False,
-                recovery_failure_core: str | None = None) -> None:
+                recovery_failure_core: str | None = None,
+                interruption: str = 'none') -> dict[str,str] | None:
     mapping=[int(x) for x in Path('/proc/self/uid_map').read_text().split()]
     require(os.geteuid()==0 and len(mapping)==3 and mapping[0]==0 and mapping[1]>0
             and mapping[2]==65536,'updates require isolated mapped guest root')
     require(Path('/run/host/container-manager').read_text().strip()=='systemd-nspawn',
             'updates require native guest')
     require({p.name for p in Path('/sys/class/net').iterdir()}=={'lo'},'updates require private lo')
+    require(interruption in ('none','term','kill-update-xray','kill-update-hysteria2',
+                             'kill-rollback-xray','kill-rollback-hysteria2'),'unknown update interruption mode')
     target=json.loads(Path('/opt/pnm-update-targets.json').read_text())
     prior=json.loads(Path('/opt/pnm-test-versions.json').read_text())
     assets=Path('/opt/pnm-update-assets')
@@ -234,6 +238,57 @@ def run_updates(logs: Path, env: dict[str,str], call: Callable,
         passed.append('actual '+core+' '+operation+' startup failure restores resources and confirmed service evidence')
         return state(core)
 
+    def interrupted_operation(operation: str, core: str, peer: str, baseline: dict,
+                              peer_before: dict, version: str, *, hard: bool = False) -> dict:
+        from guest_start_fault import start_fault
+        from guest_signal_cases import signal_owned_command_on_start
+        before=set(Path('/var/lib/pnm/transactions').iterdir())
+        with start_fault(core,mode='delay') as fault:
+            with signal_owned_command_on_start(fault,signal.SIGKILL if hard else signal.SIGTERM) as slot:
+                call(operation+'-signal-'+core,[operation,core],accepted=(-9 if hard else 143,),process_slot=slot)
+            created=set(Path('/var/lib/pnm/transactions').iterdir())-before
+            require(len(created)==1,'Core interruption created an unexpected transaction count')
+            transaction=created.pop()
+            rows=[line.split('\t',2) for line in (transaction/'journal.tsv').read_text().splitlines()]
+            events=[row[1] for row in rows]
+            require(any(row[1:]==['WRITE','label=core_binary'] for row in rows)
+                    and 'COMMIT' not in events and not (transaction/'commit.env').exists()
+                    and not (transaction/'commit.env').is_symlink(),'Core interruption did not follow uncommitted binary publication')
+            if hard:
+                flag,port=('-lnt',443) if core=='xray' else ('-lnu',8443)
+                deadline=time.monotonic()+10
+                while True:
+                    sockets=subprocess.check_output(['ss','-H',flag],text=True,timeout=3)
+                    if any(line.split()[3].endswith(':'+str(port)) for line in sockets.splitlines()):
+                        break
+                    require(time.monotonic()<deadline,'interrupted candidate listener did not stabilize')
+                    time.sleep(0.1)
+                after=state(core)
+                candidate=target[core]['version'] if operation=='update' else prior[core]['version']
+                require(fault['attempts']==1 and fault['rejected']==0
+                        and actual_version(core)==candidate.removeprefix('v')
+                        and after['resources'][binaries[core]][0]!=baseline['resources'][binaries[core]][0]
+                        and after['previous']==baseline['previous'] and after['applied']==baseline['applied']
+                        and after['invocation']!=baseline['invocation']
+                        and all(value==after['resources'][path] for path,value in baseline['resources'].items()
+                                if path!=binaries[core]),'SIGKILL candidate or prior evidence differs from the interrupted generation')
+                require('ROLLBACK_COMPLETE' not in events and 'ROLLED_BACK' not in events,
+                        'SIGKILL binary operation was falsely recovered')
+            else:
+                after=state(core)
+                require(fault['attempts']==2 and fault['rejected']==0
+                        and after['resources']==baseline['resources'] and after['previous']==baseline['previous']
+                        and actual_version(core)==version and after['invocation']!=baseline['invocation'],
+                        'TERM did not restore the original binary/previous/service generation')
+                require('ROLLBACK_COMPLETE' in events and events[-1]=='ROLLED_BACK'
+                        and 'RECOVERY_REQUIRED' not in events,'TERM binary recovery did not finish')
+                binding(core)
+                links_ready(operation+'-TERM-recovered-'+core)
+            require(state(peer)==peer_before,'interrupted binary operation changed peer Core')
+        passed.append('actual '+core+' '+operation+' '+('SIGKILL retains unfinished candidate and prior evidence'
+                      if hard else 'TERM preserves143 and restores the original binary and binding'))
+        return state(core)
+
     try:
         worker.start()
         env.update({'https_proxy':'http://127.0.0.1:'+str(server.server_address[1]),
@@ -255,6 +310,11 @@ def run_updates(logs: Path, env: dict[str,str], call: Callable,
             passed.append('actual '+core+' checksum refusal preserves both Cores before publication')
 
             approve(core,target[core]['sha256'])
+            if interruption=='term' or interruption=='kill-update-'+core:
+                old=interrupted_operation('update',core,peer,old,peer_before,
+                    prior[core]['version'].removeprefix('v'),hard=interruption!='term')
+                if interruption!='term':
+                    return {'core':core,'operation':'update'}
             if inject_start_failure:
                 old=failed_start('update',core,peer,old,peer_before,prior[core]['version'].removeprefix('v'))
             call('update-'+core,['update',core,'--version',target[core]['version']])
@@ -271,6 +331,11 @@ def run_updates(logs: Path, env: dict[str,str], call: Callable,
 
             if inject_start_failure:
                 updated=failed_start('rollback',core,peer,updated,peer_before,target[core]['version'].removeprefix('v'))
+            if interruption=='term' or interruption=='kill-rollback-'+core:
+                updated=interrupted_operation('rollback',core,peer,updated,peer_before,
+                    target[core]['version'].removeprefix('v'),hard=interruption!='term')
+                if interruption!='term':
+                    return {'core':core,'operation':'rollback'}
 
             call('rollback-'+core,['rollback',core])
             reverted=state(core)
@@ -287,7 +352,7 @@ def run_updates(logs: Path, env: dict[str,str], call: Callable,
             binding(core)
             links_ready('links-rollback-forward-'+core)
             passed.append('actual '+core+' rollback swap forward retains confirmed links and peer')
-        expected_fetches=3 if inject_start_failure else 2
+        expected_fetches=3 if inject_start_failure or interruption=='term' else 2
         require(all(server.requests.count(paths[c])==expected_fetches for c in paths),'unexpected asset fetch count')
     finally:
         env.clear()
@@ -297,7 +362,7 @@ def run_updates(logs: Path, env: dict[str,str], call: Callable,
         server.server_close()
         if worker.ident is not None:
             worker.join(timeout=2)
-    require(not worker.is_alive() and not server.errors,'asset fixture failed or did not retire')
+        require(not worker.is_alive() and not server.errors,'asset fixture failed or did not retire')
     report=json.loads(call('check-updated',['--json','check'],accepted=(0,1,2)).stdout)
     require(not [x for x in report['checks'] if x['status'] in ('FAIL','UNKNOWN') and x['id']!='time_sync'],
             'final updated Core health failed')

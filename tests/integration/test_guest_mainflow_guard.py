@@ -54,6 +54,7 @@ import guest_signal_cases as interruption
 import guest_readiness_cases as readiness
 import guest_preflight_cases as preflight
 import guest_deployment_cases as deployment
+import guest_update_cases as updates
 def forbidden(*args,**kwargs):
     raise AssertionError('fixture acted before its namespace guard')
 fixture.socket.socket=forbidden
@@ -85,6 +86,11 @@ for entry in (
         raise AssertionError('host entered recovery fixture')
     except RuntimeError as error:
         assert str(error)=='start fault requires mapped guest root'
+try:
+    updates.run_updates(None,None,forbidden,forbidden,forbidden,forbidden,[],interruption='term')
+    raise AssertionError('host entered update interruption fixture')
+except RuntimeError as error:
+    assert str(error)=='updates require isolated mapped guest root'
 fixture.require_guest=lambda: None
 for delay in (0,16,'3',True,3.0,None):
     try:

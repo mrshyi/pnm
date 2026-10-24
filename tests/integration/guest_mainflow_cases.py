@@ -311,12 +311,14 @@ try:
     absent()
     passed.append('fresh guest has no managed accounts or resources')
     scenario=Path('/opt/pnm-test-scenario').read_text().strip()
+    update_interruptions=('core-update-term','core-update-sigkill-xray','core-update-sigkill-hysteria2',
+                          'core-rollback-sigkill-xray','core-rollback-sigkill-hysteria2')
     check(scenario in ('lifecycle','deployment-failure','core-update','core-update-failure','configured-ports',
           'runtime-evidence','restore-failure','startup-readiness','core-recovery-failure-xray',
           'core-recovery-failure-hysteria2','restore-recovery-failure','tls-access','account-reuse',
           'core-interruption','core-interruption-hysteria2','restart-readiness','dependency-refusal',
           'deployment-startup-failure','deployment-listener-failure','deployment-term',
-          'deployment-sigkill'),'unknown guest scenario')
+          'deployment-sigkill')+update_interruptions,'unknown guest scenario')
     if scenario=='account-reuse':
         from guest_account_cases import prepare_accounts, require_preserved
         reused_accounts=prepare_accounts()
@@ -530,12 +532,26 @@ try:
     final_checks={item['id']:item['status'] for item in json.loads(call('check-restored',['--json','check'],accepted=(0,1,2)).stdout)['checks']}
     check(not [k for k,v in final_checks.items() if v in ('FAIL','UNKNOWN') and k!='time_sync'],'restored diagnostics not healthy')
     passed.append('protected trusted backup restores all resources and real applied bindings')
-    if scenario in ('core-update','core-update-failure','core-recovery-failure-xray','core-recovery-failure-hysteria2'):
+    update_interrupted=False
+    if scenario in ('core-update','core-update-failure','core-recovery-failure-xray','core-recovery-failure-hysteria2')+update_interruptions:
         stage='actual distinct-version Core update and rollback'
         from guest_update_cases import run_updates
-        run_updates(logs,env,call,core_state,binding,links_ready,passed,
+        interruption='none'
+        if scenario=='core-update-term':
+            interruption='term'
+        elif scenario in update_interruptions:
+            operation,core=scenario.removeprefix('core-').split('-sigkill-')
+            interruption='kill-'+operation+'-'+core
+        interrupted=run_updates(logs,env,call,core_state,binding,links_ready,passed,
                     inject_start_failure=scenario=='core-update-failure',
-                    recovery_failure_core=scenario.rsplit('-',1)[-1] if scenario.startswith('core-recovery-failure-') else None)
+                    recovery_failure_core=scenario.rsplit('-',1)[-1] if scenario.startswith('core-recovery-failure-') else None,
+                    interruption=interruption)
+        if interrupted is not None:
+            from guest_recovery_cases import require_commands_blocked
+            peer='hysteria2' if interrupted['core']=='xray' else 'xray'
+            require_commands_blocked(call,core_state,peer,passed,
+                operation='core-'+interrupted['operation']+'-'+interrupted['core'])
+            update_interrupted=True
     if scenario=='configured-ports':
         check(len(default_sockets)==2 and all(fixture.fileno()>=0 and fixture.getsockname()==('127.0.0.1',port)
               for fixture,port in zip(default_sockets,(443,8443))), 'unrelated default listeners changed')
@@ -573,7 +589,8 @@ try:
                           core='hysteria2' if scenario.endswith('-hysteria2') else 'xray')
     result={'passed':True,'checks':passed,'clock_diagnostic':checks.get('time_sync'),'uids_distinct':True,
             'mainflow_completed':True,
-            'expected_recovery_required':scenario.startswith('core-recovery-failure-')
+            'update_matrix_completed':not update_interrupted if scenario in update_interruptions else None,
+            'expected_recovery_required':update_interrupted or scenario.startswith('core-recovery-failure-')
             or scenario in ('restore-recovery-failure','core-interruption','core-interruption-hysteria2')}
 except Exception as error:
     result={'passed':False,'checks':passed,'stage':stage,'error_class':type(error).__name__}

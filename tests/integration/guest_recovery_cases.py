@@ -42,7 +42,7 @@ def require_uncertain(transaction: Path, *, minimum_writes: int) -> None:
     require(not marker.exists() and not marker.is_symlink(),'uncertain operation has a commit marker')
 
 
-def require_commands_blocked(call, state, healthy_core: str, passed: list) -> None:
+def require_commands_blocked(call, state, healthy_core: str, passed: list, *, operation: str | None = None) -> None:
     require_guest()
     before={core:state(core) for core in ('xray','hysteria2')}
     receipts=receipt_state()
@@ -53,6 +53,8 @@ def require_commands_blocked(call, state, healthy_core: str, passed: list) -> No
     for label,arguments in commands:
         refused=call('uncertain-'+label,arguments,accepted=(70,))
         require(not refused.stdout,'uncertain operation disclosed protected output')
+        require(operation is None or ('Unresolved '+operation+' transaction ').encode() in refused.stderr,
+                'uncertain command refusal did not identify the interrupted operation')
     require(before=={core:state(core) for core in before},'refused command changed a Core')
     require(receipts==receipt_state(),'refused command changed persisted state or identities')
     require(managed=={str(path):fingerprint(path) for path in managed_paths},

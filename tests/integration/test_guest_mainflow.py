@@ -11,6 +11,8 @@ if sys.flags.optimize or os.environ.get('PNM_RUN_GUEST_TESTS')!='1':
 if sys.platform!='linux' or os.geteuid()!=0:
     raise SystemExit('Linux root required')
 parser=argparse.ArgumentParser(description=__doc__)
+update_interruptions=('core-update-term','core-update-sigkill-xray','core-update-sigkill-hysteria2',
+                      'core-rollback-sigkill-xray','core-rollback-sigkill-hysteria2')
 parser.add_argument('--baseline',type=Path,required=True,help='private verified boot fixture parent')
 parser.add_argument('--nspawn',type=Path,required=True,help='trusted native systemd-nspawn executable')
 parser.add_argument('--asset-cache',type=Path,required=True,help='verified pinned Core asset cache')
@@ -19,7 +21,7 @@ parser.add_argument('--scenario',choices=('lifecycle','deployment-failure','core
     'core-recovery-failure-xray','core-recovery-failure-hysteria2','restore-recovery-failure','tls-access',
     'account-reuse','core-interruption','core-interruption-hysteria2','restart-readiness',
     'dependency-refusal','deployment-startup-failure','deployment-listener-failure',
-    'deployment-term','deployment-sigkill'),default='lifecycle')
+    'deployment-term','deployment-sigkill')+update_interruptions,default='lifecycle')
 parser.add_argument('--previous-asset-cache',type=Path)
 parser.add_argument('--work-dir',type=Path,help='optional canonical private root-owned POSIX fixture directory')
 options=parser.parse_args()
@@ -28,7 +30,7 @@ if options.work_dir is not None:
     assert work_dir.is_absolute() and work_dir==work_dir.resolve() and work_dir.is_dir(), 'canonical work directory required'
     info=work_dir.stat()
     assert info.st_uid==0 and stat.S_IMODE(info.st_mode)==0o700, 'private root-owned work directory required'
-is_update=options.scenario in ('core-update','core-update-failure','core-recovery-failure-xray','core-recovery-failure-hysteria2')
+is_update=options.scenario in ('core-update','core-update-failure','core-recovery-failure-xray','core-recovery-failure-hysteria2')+update_interruptions
 if is_update and options.previous_asset_cache is None:
     parser.error('core-update requires --previous-asset-cache')
 for location in (options.baseline,options.nspawn):
@@ -148,7 +150,7 @@ if options.scenario in ('core-update-failure','restore-failure','startup-readine
                         'core-recovery-failure-xray','core-recovery-failure-hysteria2','restore-recovery-failure',
                         'tls-access','account-reuse','core-interruption','core-interruption-hysteria2',
                         'restart-readiness','dependency-refusal','deployment-startup-failure','deployment-listener-failure',
-                        'deployment-term','deployment-sigkill'):
+                          'deployment-term','deployment-sigkill')+update_interruptions:
     destination=root/'opt/guest_start_fault.py'
     assert not destination.exists() and not destination.is_symlink()
     shutil.copyfile(repo/'tests/integration/guest_start_fault.py',destination)
@@ -160,7 +162,7 @@ if options.scenario in ('startup-readiness','restart-readiness'):
     shutil.copyfile(repo/'tests/integration/guest_readiness_cases.py',destination)
     destination.chmod(0o700)
     py_compile.compile(str(destination),cfile=str(base/'guest_readiness_cases.pyc'),doraise=True)
-if options.scenario.startswith('core-recovery-failure-') or options.scenario in ('restore-recovery-failure','tls-access','account-reuse','core-interruption','core-interruption-hysteria2','dependency-refusal','deployment-startup-failure','deployment-listener-failure','deployment-term','deployment-sigkill'):
+if options.scenario.startswith('core-recovery-failure-') or options.scenario in ('restore-recovery-failure','tls-access','account-reuse','core-interruption','core-interruption-hysteria2','dependency-refusal','deployment-startup-failure','deployment-listener-failure','deployment-term','deployment-sigkill')+update_interruptions:
     destination=root/'opt/guest_recovery_cases.py'
     assert not destination.exists() and not destination.is_symlink()
     shutil.copyfile(repo/'tests/integration/guest_recovery_cases.py',destination)
@@ -178,7 +180,7 @@ if options.scenario=='account-reuse':
     shutil.copyfile(repo/'tests/integration/guest_account_cases.py',destination)
     destination.chmod(0o700)
     py_compile.compile(str(destination),cfile=str(base/'guest_account_cases.pyc'),doraise=True)
-if options.scenario in ('core-interruption','core-interruption-hysteria2','deployment-term','deployment-sigkill'):
+if options.scenario in ('core-interruption','core-interruption-hysteria2','deployment-term','deployment-sigkill')+update_interruptions:
     destination=root/'opt/guest_signal_cases.py'
     assert not destination.exists() and not destination.is_symlink()
     shutil.copyfile(repo/'tests/integration/guest_signal_cases.py',destination)
