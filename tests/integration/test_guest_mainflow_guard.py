@@ -61,7 +61,7 @@ fixture.socket.socket=forbidden
 fixture.subprocess.run=forbidden
 for name in ('open','mkdir','unlink','rmdir'):
     setattr(fixture.os,name,forbidden)
-for mode in ('reject-once','reject-twice','delay'):
+for mode in ('reject-once','reject-twice','delay','delay-pre'):
     try:
         with fixture.start_fault('xray',mode=mode):
             raise AssertionError('host entered guest fixture')
@@ -75,6 +75,7 @@ for entry in (
     lambda: accounts.prepare_accounts(),
     lambda: accounts.require_preserved({}),
     lambda: interruption.run_interruptions(None,forbidden,forbidden,forbidden,forbidden,[]),
+    lambda: interruption.run_restore_interruptions(None,forbidden,forbidden,forbidden,forbidden,(),None,{},[]),
     lambda: interruption.signal_owned_command_on_start({},15).__enter__(),
     lambda: readiness.run_restart_readiness(None,forbidden,forbidden,forbidden,forbidden,[]),
     lambda: preflight.run_dependencies(None,None,forbidden,forbidden,[]),
@@ -92,12 +93,13 @@ try:
 except RuntimeError as error:
     assert str(error)=='updates require isolated mapped guest root'
 fixture.require_guest=lambda: None
-for delay in (0,16,'3',True,3.0,None):
-    try:
-        with fixture.start_fault('xray',mode='delay',delay_seconds=delay):
-            raise AssertionError('invalid delay entered fault fixture')
-    except RuntimeError as error:
-        assert str(error)=='bounded integer startup delay required'
+for fault_mode in ('delay','delay-pre'):
+    for delay in (0,16,'3',True,3.0,None):
+        try:
+            with fixture.start_fault('xray',mode=fault_mode,delay_seconds=delay):
+                raise AssertionError('invalid delay entered fault fixture')
+        except RuntimeError as error:
+            assert str(error)=='bounded integer startup delay required'
 '''
         result=subprocess.run([sys.executable,'-B','-c',script,str(DRIVER.parent)],
                               capture_output=True,timeout=10)

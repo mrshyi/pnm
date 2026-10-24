@@ -313,12 +313,13 @@ try:
     scenario=Path('/opt/pnm-test-scenario').read_text().strip()
     update_interruptions=('core-update-term','core-update-sigkill-xray','core-update-sigkill-hysteria2',
                           'core-rollback-sigkill-xray','core-rollback-sigkill-hysteria2')
+    restore_interruptions=('restore-term','restore-sigkill-xray','restore-sigkill-hysteria2')
     check(scenario in ('lifecycle','deployment-failure','core-update','core-update-failure','configured-ports',
           'runtime-evidence','restore-failure','startup-readiness','core-recovery-failure-xray',
           'core-recovery-failure-hysteria2','restore-recovery-failure','tls-access','account-reuse',
           'core-interruption','core-interruption-hysteria2','restart-readiness','dependency-refusal',
           'deployment-startup-failure','deployment-listener-failure','deployment-term',
-          'deployment-sigkill')+update_interruptions,'unknown guest scenario')
+          'deployment-sigkill')+update_interruptions+restore_interruptions,'unknown guest scenario')
     if scenario=='account-reuse':
         from guest_account_cases import prepare_accounts, require_preserved
         reused_accounts=prepare_accounts()
@@ -587,10 +588,17 @@ try:
         from guest_signal_cases import run_interruptions
         run_interruptions(logs,call,core_state,binding,links_ready,passed,
                           core='hysteria2' if scenario.endswith('-hysteria2') else 'xray')
+    if scenario in restore_interruptions:
+        stage='actual trusted restore process interruption'
+        from guest_signal_cases import run_restore_interruptions
+        run_restore_interruptions(logs,call,core_state,binding,links_ready,all_paths,archive,
+            backup_resources,passed,hard_core=scenario.rsplit('-',1)[-1] if '-sigkill-' in scenario else None)
+    restore_interrupted=scenario.startswith('restore-sigkill-')
     result={'passed':True,'checks':passed,'clock_diagnostic':checks.get('time_sync'),'uids_distinct':True,
             'mainflow_completed':True,
             'update_matrix_completed':not update_interrupted if scenario in update_interruptions else None,
-            'expected_recovery_required':update_interrupted or scenario.startswith('core-recovery-failure-')
+            'restore_matrix_completed':not restore_interrupted if scenario in restore_interruptions else None,
+            'expected_recovery_required':update_interrupted or restore_interrupted or scenario.startswith('core-recovery-failure-')
             or scenario in ('restore-recovery-failure','core-interruption','core-interruption-hysteria2')}
 except Exception as error:
     result={'passed':False,'checks':passed,'stage':stage,'error_class':type(error).__name__}

@@ -30,7 +30,7 @@ def start_fault(core: str, *, mode: str = 'reject-once', delay_seconds: int = 3)
     require_guest()
     units={'xray':'xray.service','hysteria2':'hysteria-server.service'}
     require(core in units,'unknown start-fault Core')
-    require(mode in ('reject-once','reject-twice','delay'),'unknown start-fault mode')
+    require(mode in ('reject-once','reject-twice','delay','delay-pre'),'unknown start-fault mode')
     require(type(delay_seconds) is int and 1<=delay_seconds<=15,'bounded integer startup delay required')
     unit=units[core]
     show=subprocess.run(['systemctl','show',unit,'--property=DropInPaths','--value'],
@@ -45,6 +45,10 @@ def start_fault(core: str, *, mode: str = 'reject-once', delay_seconds: int = 3)
           "if answer!=b'.': raise SystemExit(1 if answer==b'!' else 70)\n")
     if mode=='delay':
         code+=f"time.sleep({delay_seconds})\nos.execv(sys.argv[2],sys.argv[2:])\n"
+    elif mode=='delay-pre':
+        # Keep systemctl waiting in ExecStartPre so the CLI cannot advance to
+        # the next Core before its exact owned session has been signalled.
+        code+=f"time.sleep({delay_seconds})\n"
     stop=threading.Event()
     lock=threading.Lock()
     state={'attempts':0,'rejected':0,'errors':[],'first_attempt_at':None}
@@ -73,7 +77,8 @@ def start_fault(core: str, *, mode: str = 'reject-once', delay_seconds: int = 3)
                     if state['attempts']==0:
                         state['first_attempt_at']=time.monotonic()
                     state['attempts']+=1
-                    reject=(mode!='delay' and state['attempts']<=(2 if mode=='reject-twice' else 1))
+                    reject=(mode in ('reject-once','reject-twice')
+                            and state['attempts']<=(2 if mode=='reject-twice' else 1))
                     state['rejected']+=int(reject)
                 try:
                     connection.sendall(b'!' if reject else b'.')

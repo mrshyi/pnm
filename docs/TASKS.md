@@ -1,8 +1,8 @@
 # PNM Current Tasks
 
-**Last reconciled:** 2026-10-25 (default31/389; native update/rollback TERM26/26 and four SIGKILL slices pass; broader fault-position/VM/external acceptance remains open)
+**Last reconciled:** 2026-10-25 (default31/389; native restore TERM17/17 and SIGKILL16/16 per Core pass; broader fault-position/VM/external acceptance remains open)
 
-**Current increment baseline:** branch `dev`, parent HEAD `2d26132`, VERSION `0.16.0-rc.1`.
+**Current increment baseline:** branch `dev`, parent HEAD `a2f8654`, VERSION `0.16.0-rc.1`.
 
 **Environment recheck:** the earlier host EIO/EROFS/CreateInstance failure is no
 longer reproduced: Debian root is writable, real `true`/`df` execute successfully
@@ -1586,6 +1586,47 @@ The task runner reports `usageLimited`; this increment is closed without startin
 another stage. Restore interruption and late fault-position work remain local
 next actions, rather than being reclassified as external acceptance blockers.
 
+## Actual trusted restore process interruption — 2026-10-25
+
+Update/rollback interruption is committed as `a2f8654`. Consecutive local work
+resumes under the renewed user instruction. Restore reuses the protected trusted
+archive, exact owned CLI/session watcher and real managed Core startup. It owns
+both Cores, so compensation checks both original runtime bindings and listeners,
+all resource bytes/modes/UID/GID, directory identities, NSS and previous state,
+then retries the archive successfully.
+
+Initial TERM `78z29jw3` passes17/17 with verified archive under
+`/var/tmp/pnm-restore-term-volume.hcfa56al`. Initial SIGKILL Xray `2ngevftq`
+fails the HY2-inactive assertion: Type=simple returns before the delayed ExecStart
+probe, so the CLI can already continue to HY2. Its failed full image is separately
+retained and verified under `/var/tmp/pnm-restore-sigkill-xray-volume.8_hd28ny`;
+loop detached, cleanup errors empty. It is not passing acceptance evidence.
+
+The existing start fixture now has a bounded ExecStartPre delay, preserving the
+real Core ExecStart and Type=simple. Guards first fail on the absent mode, then
+pass9/9; fifteen Python sources compile and syntax/security/ShellCheck pass.
+Independent source review accepts the cause and repair; service-state assertions
+still reject a missed signal window. Final TERM `_o0lwh5i` passes17/17, including
+both compensation windows and a healthy trusted restore retry. Control
+`/var/tmp/pnm-restore-term-final-volume.u3wg8v9z` verifies full encrypted-image
+readback, detached loop and no cleanup error. Native/Make exit0, unchanged host
+databases, scope not-found and no fixture mounts. Final SIGKILL Xray `npkl6xla`
+and HY2 `k844uu2j` each pass16/16. Both retain published archive resources, prior
+applied evidence and an unfinished core-restore journal. After fault removal,
+actual apply/links/show/check refuse70 for that exact operation with empty stdout
+and no persisted/runtime mutation. Xray's window leaves HY2 inactive/PID0; HY2's
+window has both new live generations. Reports explicitly retain
+mainflow_completed=true, restore_matrix_completed=false and
+expected_recovery_required=true; they do not claim automatic recovery.
+Xray control `/var/tmp/pnm-restore-sigkill-xray-final-volume.u6y5tp_5` verifies
+full-image readback, detached loop and empty cleanup errors. HY2 control
+`/var/tmp/pnm-restore-sigkill-hysteria2-final-volume.1b9imypr` also verifies
+full encrypted-image readback, detached loop and empty cleanup errors. Both native/
+Make exits0 leave unchanged host databases, not-found scopes and no fixture
+mounts. Product Bash is unchanged; the31/389 baseline was not repeated for this
+test-only increment. Earlier partial-file publication, late publication/commit,
+independent VM/reboot, deployed-source identity and external clients stay open.
+
 ## Immediate next steps
 
 Startup readiness/harness and initiating-error repairs are committed as
@@ -1594,8 +1635,8 @@ recovery-required plan. TLS access, valid-account reuse and per-Core process
 interruption now also pass. Ordinary restart's forward readiness gate is repaired.
 All19 declared prerequisite tools and first-deployment Core startup failures now
 pass real checks. Actual post-health listener absence now passes as well.
-Update/rollback startup interruption now passes; continue actual restore process
-interruption, late previous/metadata/
+Update/rollback and restore startup interruption now pass; continue earlier
+partial-file restore faults and late previous/metadata/
 commit and other fault-position acceptance,
 together with the following external prerequisites;
 the earlier cleanup proposal is unnecessary and all original roots are retained.

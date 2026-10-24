@@ -2,6 +2,7 @@
 from pathlib import Path
 from contextlib import contextmanager
 import json
+import hashlib
 import os
 import signal
 import subprocess
@@ -10,6 +11,129 @@ import time
 
 from guest_start_fault import require, require_guest, start_fault
 from guest_recovery_cases import require_commands_blocked
+
+
+def run_restore_interruptions(logs, call, state, binding, links_ready, all_paths,
+                              archive, backup_resources, passed, *, hard_core=None) -> None:
+    require_guest()
+    require(hard_core in (None,'xray','hysteria2'),'unknown interrupted restore Core')
+    from guest_recovery_cases import fingerprint
+    cores=('xray','hysteria2')
+    directory_paths=('/etc/pnm','/etc/pnm/secrets','/usr/local/etc/xray',
+                     '/etc/hysteria','/etc/hysteria/tls',
+                     '/etc/systemd/system/multi-user.target.wants')
+
+    def resources():
+        return {p:fingerprint(Path(p))[:4] for p in all_paths}
+
+    def directories():
+        result={}
+        for name in directory_paths:
+            info=Path(name).lstat()
+            result[name]=(info.st_mode,info.st_uid,info.st_gid,info.st_dev,info.st_ino)
+        return result
+
+    def previous():
+        result={}
+        for core in cores:
+            for name in ('previous','previous.env'):
+                path=Path('/var/lib/pnm/cores')/core/name
+                require(not path.is_symlink(),'unexpected previous-state link')
+                result[str(path)]=fingerprint(path) if path.exists() else None
+        return result
+
+    def listener(core):
+        flag,port=('-lnt',443) if core=='xray' else ('-lnu',8443)
+        lines=subprocess.check_output(['ss','-H',flag],text=True,timeout=3).splitlines()
+        return any(line.split()[3].endswith(':'+str(port)) for line in lines)
+
+    def trusted_archive():
+        require(hashlib.sha256(archive.read_bytes()).hexdigest()==
+                (logs/'trusted-backup.sha256').read_text(),'trusted interruption archive changed')
+
+    node=Path('/etc/pnm/node.conf')
+    original=node.read_text()
+    changed=original.replace('XRAY_TARGET=edge.example.net:443','XRAY_TARGET=signal.example.net:443')
+    require(changed!=original,'restore interruption fixture did not change desired configuration')
+    node.write_text(changed)
+    call('apply-before-restore-signal',['apply','xray'])
+    require(resources()!=backup_resources,'restore interruption candidate equals the baseline')
+    identity_paths=[Path('/etc')/name for name in ('passwd','group','shadow','gshadow')]
+    identities={str(path):fingerprint(path) for path in identity_paths}
+    for core in (cores if hard_core is None else (hard_core,)):
+        before=resources()
+        before_directories=directories()
+        before_previous=previous()
+        services={name:state(name) for name in cores}
+        transactions=set(Path('/var/lib/pnm/transactions').iterdir())
+        trusted_archive()
+        hard=hard_core is not None
+        with start_fault(core,mode='delay-pre') as fault:
+            with signal_owned_command_on_start(fault,signal.SIGKILL if hard else signal.SIGTERM) as slot:
+                call('restore-signal-'+core,['restore',str(archive)],
+                     accepted=(-9 if hard else 143,),process_slot=slot)
+            created=set(Path('/var/lib/pnm/transactions').iterdir())-transactions
+            require(len(created)==1,'restore signal created unexpected transactions')
+            transaction=created.pop()
+            events=[line.split('\t')[1] for line in (transaction/'journal.tsv').read_text().splitlines()]
+            marker=transaction/'commit.env'
+            require(events.count('WRITE')>=12 and 'COMMIT' not in events
+                    and not marker.exists() and not marker.is_symlink(),
+                    'restore signal did not follow uncommitted resource publication')
+            if hard:
+                deadline=time.monotonic()+10
+                while not listener(core):
+                    require(time.monotonic()<deadline,'interrupted restore listener did not stabilize')
+                    time.sleep(0.1)
+                (logs/('restore-SIGKILL-'+core+'-services.json')).write_text(json.dumps({
+                    name:{key:state(name)[key] for key in ('active','pid','invocation','enabled')}
+                    for name in cores}))
+                require(fault['attempts']==1 and fault['rejected']==0
+                        and resources()==backup_resources,'SIGKILL restore changed candidate resources')
+                require('ROLLBACK_COMPLETE' not in events and 'ROLLED_BACK' not in events,
+                        'SIGKILL restore was falsely recovered')
+                for name in cores:
+                    after=state(name)
+                    require(after['applied']==services[name]['applied']
+                            and after['enabled']==services[name]['enabled'],
+                            'SIGKILL restore promoted applied evidence or changed service policy')
+                    if core=='xray' and name=='hysteria2':
+                        require(after['active']=='inactive' and after['pid']=='0',
+                                'first-start restore interruption unexpectedly started HY2')
+                    else:
+                        require(after['active']=='active' and after['pid']!='0'
+                                and after['invocation']!=services[name]['invocation'] and listener(name),
+                                'interrupted restore candidate service is not the new live generation')
+            else:
+                require(fault['attempts']==2 and fault['rejected']==0 and resources()==before,
+                        'TERM restore did not recover original resources and start both generations')
+                require('ROLLBACK_COMPLETE' in events and events[-1]=='ROLLED_BACK'
+                        and 'RECOVERY_REQUIRED' not in events,'TERM restore did not finish compensation')
+                for name in cores:
+                    binding(name)
+                    require(state(name)['invocation']!=services[name]['invocation'] and listener(name),
+                            'TERM restore retained stale invocation or returned before runtime readiness')
+            require(directories()==before_directories and previous()==before_previous,
+                    'restore signal changed directory identity/metadata or previous state')
+            require(identities=={str(path):fingerprint(path) for path in identity_paths},
+                    'restore signal changed service identities')
+        trusted_archive()
+        if hard:
+            passed.append('actual '+core+' restore SIGKILL retains published archive and prior applied evidence')
+            require_commands_blocked(call,state,core,passed,operation='core-restore')
+            return
+        links_ready('links-after-restore-TERM-'+core)
+        passed.append('actual '+core+' restore TERM preserves143 and recovers both original generations')
+    trusted_archive()
+    call('restore-retry-after-TERM',['restore',str(archive)])
+    require(resources()==backup_resources,'restore TERM retry differs from the trusted archive')
+    for core in cores:
+        binding(core)
+    links_ready('links-after-restore-TERM-retry')
+    report=json.loads(call('check-after-restore-TERM-retry',['--json','check'],accepted=(0,1,2)).stdout)
+    require(not [row for row in report['checks'] if row['status'] in ('FAIL','UNKNOWN')
+                 and row['id']!='time_sync'],'restore TERM retry left unhealthy local evidence')
+    passed.append('actual trusted restore succeeds after both TERM compensation windows')
 
 
 @contextmanager

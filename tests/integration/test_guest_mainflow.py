@@ -13,6 +13,7 @@ if sys.platform!='linux' or os.geteuid()!=0:
 parser=argparse.ArgumentParser(description=__doc__)
 update_interruptions=('core-update-term','core-update-sigkill-xray','core-update-sigkill-hysteria2',
                       'core-rollback-sigkill-xray','core-rollback-sigkill-hysteria2')
+restore_interruptions=('restore-term','restore-sigkill-xray','restore-sigkill-hysteria2')
 parser.add_argument('--baseline',type=Path,required=True,help='private verified boot fixture parent')
 parser.add_argument('--nspawn',type=Path,required=True,help='trusted native systemd-nspawn executable')
 parser.add_argument('--asset-cache',type=Path,required=True,help='verified pinned Core asset cache')
@@ -21,7 +22,7 @@ parser.add_argument('--scenario',choices=('lifecycle','deployment-failure','core
     'core-recovery-failure-xray','core-recovery-failure-hysteria2','restore-recovery-failure','tls-access',
     'account-reuse','core-interruption','core-interruption-hysteria2','restart-readiness',
     'dependency-refusal','deployment-startup-failure','deployment-listener-failure',
-    'deployment-term','deployment-sigkill')+update_interruptions,default='lifecycle')
+    'deployment-term','deployment-sigkill')+update_interruptions+restore_interruptions,default='lifecycle')
 parser.add_argument('--previous-asset-cache',type=Path)
 parser.add_argument('--work-dir',type=Path,help='optional canonical private root-owned POSIX fixture directory')
 options=parser.parse_args()
@@ -150,7 +151,7 @@ if options.scenario in ('core-update-failure','restore-failure','startup-readine
                         'core-recovery-failure-xray','core-recovery-failure-hysteria2','restore-recovery-failure',
                         'tls-access','account-reuse','core-interruption','core-interruption-hysteria2',
                         'restart-readiness','dependency-refusal','deployment-startup-failure','deployment-listener-failure',
-                          'deployment-term','deployment-sigkill')+update_interruptions:
+                          'deployment-term','deployment-sigkill')+update_interruptions+restore_interruptions:
     destination=root/'opt/guest_start_fault.py'
     assert not destination.exists() and not destination.is_symlink()
     shutil.copyfile(repo/'tests/integration/guest_start_fault.py',destination)
@@ -162,7 +163,7 @@ if options.scenario in ('startup-readiness','restart-readiness'):
     shutil.copyfile(repo/'tests/integration/guest_readiness_cases.py',destination)
     destination.chmod(0o700)
     py_compile.compile(str(destination),cfile=str(base/'guest_readiness_cases.pyc'),doraise=True)
-if options.scenario.startswith('core-recovery-failure-') or options.scenario in ('restore-recovery-failure','tls-access','account-reuse','core-interruption','core-interruption-hysteria2','dependency-refusal','deployment-startup-failure','deployment-listener-failure','deployment-term','deployment-sigkill')+update_interruptions:
+if options.scenario.startswith('core-recovery-failure-') or options.scenario in ('restore-recovery-failure','tls-access','account-reuse','core-interruption','core-interruption-hysteria2','dependency-refusal','deployment-startup-failure','deployment-listener-failure','deployment-term','deployment-sigkill')+update_interruptions+restore_interruptions:
     destination=root/'opt/guest_recovery_cases.py'
     assert not destination.exists() and not destination.is_symlink()
     shutil.copyfile(repo/'tests/integration/guest_recovery_cases.py',destination)
@@ -180,7 +181,7 @@ if options.scenario=='account-reuse':
     shutil.copyfile(repo/'tests/integration/guest_account_cases.py',destination)
     destination.chmod(0o700)
     py_compile.compile(str(destination),cfile=str(base/'guest_account_cases.pyc'),doraise=True)
-if options.scenario in ('core-interruption','core-interruption-hysteria2','deployment-term','deployment-sigkill')+update_interruptions:
+if options.scenario in ('core-interruption','core-interruption-hysteria2','deployment-term','deployment-sigkill')+update_interruptions+restore_interruptions:
     destination=root/'opt/guest_signal_cases.py'
     assert not destination.exists() and not destination.is_symlink()
     shutil.copyfile(repo/'tests/integration/guest_signal_cases.py',destination)

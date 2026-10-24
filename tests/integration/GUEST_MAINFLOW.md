@@ -227,3 +227,19 @@ with the exact unresolved operation and preserve resource identities and runtime
 state. These variants report the completed initial main flow separately from
 `update_matrix_completed:false` and `expected_recovery_required:true`.
 They do not cover late previous/metadata/commit publication or restore interruption.
+
+`PNM_GUEST_SCENARIO=restore-term` changes and applies an actual Xray target so
+the trusted archive differs from the pre-operation generation. A guest-owned
+three-second ExecStartPre keeps systemctl waiting while the exact CLI session is
+signalled, retaining the real Core ExecStart and Type=simple. At each Core's
+restore startup, TERM must preserve143, compensate all resource bytes and
+metadata, directory identities, NSS and previous state, and confirm both original
+runtime bindings/listeners. A trusted restore retry must then succeed.
+`restore-sigkill-xray` and `restore-sigkill-hysteria2` each require a fresh guest.
+Both retain published archive resources, old applied records and an unfinished
+core-restore journal. The Xray window leaves HY2 inactive/PID0; the HY2 window has
+both new actual service generations. Once the owned delay/drop-in is removed,
+writer/links/show/check refuse70 for that exact unresolved operation without
+output or state changes. Reports separate the completed initial lifecycle from
+`restore_matrix_completed:false` and `expected_recovery_required:true`.
+These are startup-window tests, not partial-file-write or storage durability tests.
