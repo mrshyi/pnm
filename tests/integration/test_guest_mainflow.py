@@ -14,6 +14,7 @@ parser=argparse.ArgumentParser(description=__doc__)
 update_interruptions=('core-update-term','core-update-sigkill-xray','core-update-sigkill-hysteria2',
                       'core-rollback-sigkill-xray','core-rollback-sigkill-hysteria2')
 restore_interruptions=('restore-term','restore-sigkill-xray','restore-sigkill-hysteria2')
+publication_cases=('core-publication-previous','core-publication-metadata','core-publication-applied')
 parser.add_argument('--baseline',type=Path,required=True,help='private verified boot fixture parent')
 parser.add_argument('--nspawn',type=Path,required=True,help='trusted native systemd-nspawn executable')
 parser.add_argument('--asset-cache',type=Path,required=True,help='verified pinned Core asset cache')
@@ -22,7 +23,7 @@ parser.add_argument('--scenario',choices=('lifecycle','deployment-failure','core
     'core-recovery-failure-xray','core-recovery-failure-hysteria2','restore-recovery-failure','tls-access',
     'account-reuse','core-interruption','core-interruption-hysteria2','restart-readiness',
     'dependency-refusal','deployment-startup-failure','deployment-listener-failure',
-    'deployment-term','deployment-sigkill')+update_interruptions+restore_interruptions,default='lifecycle')
+    'deployment-term','deployment-sigkill')+update_interruptions+restore_interruptions+publication_cases,default='lifecycle')
 parser.add_argument('--previous-asset-cache',type=Path)
 parser.add_argument('--work-dir',type=Path,help='optional canonical private root-owned POSIX fixture directory')
 options=parser.parse_args()
@@ -31,7 +32,7 @@ if options.work_dir is not None:
     assert work_dir.is_absolute() and work_dir==work_dir.resolve() and work_dir.is_dir(), 'canonical work directory required'
     info=work_dir.stat()
     assert info.st_uid==0 and stat.S_IMODE(info.st_mode)==0o700, 'private root-owned work directory required'
-is_update=options.scenario in ('core-update','core-update-failure','core-recovery-failure-xray','core-recovery-failure-hysteria2')+update_interruptions
+is_update=options.scenario in ('core-update','core-update-failure','core-recovery-failure-xray','core-recovery-failure-hysteria2')+update_interruptions+publication_cases
 if is_update and options.previous_asset_cache is None:
     parser.error('core-update requires --previous-asset-cache')
 for location in (options.baseline,options.nspawn):
@@ -151,12 +152,18 @@ if options.scenario in ('core-update-failure','restore-failure','startup-readine
                         'core-recovery-failure-xray','core-recovery-failure-hysteria2','restore-recovery-failure',
                         'tls-access','account-reuse','core-interruption','core-interruption-hysteria2',
                         'restart-readiness','dependency-refusal','deployment-startup-failure','deployment-listener-failure',
-                          'deployment-term','deployment-sigkill')+update_interruptions+restore_interruptions:
+                          'deployment-term','deployment-sigkill')+update_interruptions+restore_interruptions+publication_cases:
     destination=root/'opt/guest_start_fault.py'
     assert not destination.exists() and not destination.is_symlink()
     shutil.copyfile(repo/'tests/integration/guest_start_fault.py',destination)
     destination.chmod(0o700)
     py_compile.compile(str(destination),cfile=str(base/'guest_start_fault.pyc'),doraise=True)
+if options.scenario in publication_cases:
+    destination=root/'opt/guest_io_fault.py'
+    assert not destination.exists() and not destination.is_symlink()
+    shutil.copyfile(repo/'tests/integration/guest_io_fault.py',destination)
+    destination.chmod(0o700)
+    py_compile.compile(str(destination),cfile=str(base/'guest_io_fault.pyc'),doraise=True)
 if options.scenario in ('startup-readiness','restart-readiness'):
     destination=root/'opt/guest_readiness_cases.py'
     assert not destination.exists() and not destination.is_symlink()

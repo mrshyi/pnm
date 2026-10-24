@@ -243,3 +243,17 @@ writer/links/show/check refuse70 for that exact unresolved operation without
 output or state changes. Reports separate the completed initial lifecycle from
 `restore_matrix_completed:false` and `expected_recovery_required:true`.
 These are startup-window tests, not partial-file-write or storage durability tests.
+
+`core-publication-previous`, `core-publication-metadata` and
+`core-publication-applied` each use a fresh dual-version guest and target one
+late publication point for both Cores' update and rollback. A one-use move
+launcher enters a separate private mount namespace, binds only the protected
+Core-state parent read-only, confirms kernel EROFS and invokes the real mv.
+Only the creating child removes its identified bind before returning the actual
+move failure. The parent verifies its namespace/mounts were unchanged; subsequent
+normal and recovery moves delegate unchanged. Actual CLI73 and stage-specific
+errors, original resource/previous pairing, refreshed binding, peer isolation,
+terminal rollback and clean swaps forward are required. Protected receipts retain
+the real error and cleanup results. No product function is replaced; no host or
+parent-guest mount propagation is changed. These are VFS read-only refusal cases,
+not physical media, fsync/power-loss durability or commit-journal fault evidence.

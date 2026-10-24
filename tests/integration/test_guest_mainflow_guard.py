@@ -55,6 +55,7 @@ import guest_readiness_cases as readiness
 import guest_preflight_cases as preflight
 import guest_deployment_cases as deployment
 import guest_update_cases as updates
+import guest_io_fault as io_fault
 def forbidden(*args,**kwargs):
     raise AssertionError('fixture acted before its namespace guard')
 fixture.socket.socket=forbidden
@@ -77,6 +78,10 @@ for entry in (
     lambda: interruption.run_interruptions(None,forbidden,forbidden,forbidden,forbidden,[]),
     lambda: interruption.run_restore_interruptions(None,forbidden,forbidden,forbidden,forbidden,(),None,{},[]),
     lambda: interruption.signal_owned_command_on_start({},15).__enter__(),
+    lambda: io_fault.readonly_publication(None,None,'/var/lib/pnm/cores/xray/previous').__enter__(),
+    lambda: io_fault.run_move([],None),
+    lambda: io_fault.run_move([],None,isolated=True),
+    lambda: io_fault.unmount_owned(None,None,None),
     lambda: readiness.run_restart_readiness(None,forbidden,forbidden,forbidden,forbidden,[]),
     lambda: preflight.run_dependencies(None,None,forbidden,forbidden,[]),
     lambda: deployment.run_startup_failures(None,forbidden,forbidden,[]),
@@ -93,6 +98,13 @@ try:
 except RuntimeError as error:
     assert str(error)=='updates require isolated mapped guest root'
 fixture.require_guest=lambda: None
+io_fault.require_guest=lambda: None
+for target in ('/','/etc/passwd','/var/lib/pnm/cores/xray/../hysteria2/previous',None):
+    try:
+        with io_fault.readonly_publication(None,None,target):
+            raise AssertionError('unsafe publication target accepted')
+    except RuntimeError as error:
+        assert str(error)=='unexpected publication target'
 for fault_mode in ('delay','delay-pre'):
     for delay in (0,16,'3',True,3.0,None):
         try:

@@ -136,7 +136,8 @@ def run_updates(logs: Path, env: dict[str,str], call: Callable,
                 core_state: Callable, binding: Callable, links_ready: Callable,
                 passed: list[str], *, inject_start_failure: bool = False,
                 recovery_failure_core: str | None = None,
-                interruption: str = 'none') -> dict[str,str] | None:
+                interruption: str = 'none',
+                publication_fault: str | None = None) -> dict[str,str] | None:
     mapping=[int(x) for x in Path('/proc/self/uid_map').read_text().split()]
     require(os.geteuid()==0 and len(mapping)==3 and mapping[0]==0 and mapping[1]>0
             and mapping[2]==65536,'updates require isolated mapped guest root')
@@ -145,6 +146,7 @@ def run_updates(logs: Path, env: dict[str,str], call: Callable,
     require({p.name for p in Path('/sys/class/net').iterdir()}=={'lo'},'updates require private lo')
     require(interruption in ('none','term','kill-update-xray','kill-update-hysteria2',
                              'kill-rollback-xray','kill-rollback-hysteria2'),'unknown update interruption mode')
+    require(publication_fault in (None,'previous','metadata','applied'),'unknown publication fault')
     target=json.loads(Path('/opt/pnm-update-targets.json').read_text())
     prior=json.loads(Path('/opt/pnm-test-versions.json').read_text())
     assets=Path('/opt/pnm-update-assets')
@@ -289,6 +291,36 @@ def run_updates(logs: Path, env: dict[str,str], call: Callable,
                       if hard else 'TERM preserves143 and restores the original binary and binding'))
         return state(core)
 
+    def publication_failure(operation, core, peer, baseline, version):
+        from guest_io_fault import readonly_publication
+        destination={'previous':'previous','metadata':'previous.env','applied':'applied.env'}[publication_fault]
+        stage={'previous':'previous binary publication','metadata':'previous version metadata publication',
+               'applied':'applied evidence publication'}[publication_fault]
+        peer_before=state(peer)
+        transactions=set(Path('/var/lib/pnm/transactions').iterdir())
+        with readonly_publication(logs,env,'/var/lib/pnm/cores/'+core+'/'+destination) as observed:
+            failed=call(operation+'-readonly-'+core,[operation,core],accepted=(73,))
+        require(observed['probe_errno']==30 and observed['mount_removed'],'actual EROFS mount was not retired')
+        expected='Core '+operation+' failed during '+stage+' (rc=73); previous Core state was restored.'
+        require(expected.encode() in failed.stderr,'publication failure has a different cause or failed recovery')
+        recovered=state(core)
+        require(recovered['resources']==baseline['resources'] and recovered['previous']==baseline['previous']
+                and recovered['invocation']!=baseline['invocation'] and actual_version(core)==version,
+                'read-only publication did not restore the original binary and previous pair')
+        binding(core)
+        links_ready(operation+'-readonly-recovered-'+core)
+        require(state(peer)==peer_before,'publication failure changed peer Core')
+        created=set(Path('/var/lib/pnm/transactions').iterdir())-transactions
+        require(len(created)==1,'publication failure created unexpected transactions')
+        transaction=created.pop()
+        rows=[line.split('\t',2) for line in (transaction/'journal.tsv').read_text().splitlines()]
+        events=[row[1] for row in rows]
+        require(any(row[1:]==['WRITE','label=core_binary'] for row in rows)
+                and 'ROLLBACK_COMPLETE' in events and events[-1]=='ROLLED_BACK'
+                and 'RECOVERY_REQUIRED' not in events and 'COMMIT' not in events
+                and not (transaction/'commit.env').exists(),'publication failure did not finish uncommitted recovery')
+        passed.append('actual '+core+' '+operation+' '+publication_fault+' EROFS restores resources and peer isolation')
+
     try:
         worker.start()
         env.update({'https_proxy':'http://127.0.0.1:'+str(server.server_address[1]),
@@ -352,7 +384,19 @@ def run_updates(logs: Path, env: dict[str,str], call: Callable,
             binding(core)
             links_ready('links-rollback-forward-'+core)
             passed.append('actual '+core+' rollback swap forward retains confirmed links and peer')
-        expected_fetches=3 if inject_start_failure or interruption=='term' else 2
+            if publication_fault is not None:
+                publication_failure('rollback',core,peer,forward,target[core]['version'].removeprefix('v'))
+                call('prepare-readonly-update-'+core,['rollback',core])
+                prior_state=state(core)
+                require(actual_version(core)==prior[core]['version'].removeprefix('v'),
+                        'publication update failure baseline is not the distinct prior version')
+                publication_failure('update',core,peer,prior_state,prior[core]['version'].removeprefix('v'))
+                call('finish-readonly-update-'+core,['rollback',core])
+                require(actual_version(core)==target[core]['version'].removeprefix('v')
+                        and state(core)['resources']==forward['resources'] and state(peer)==peer_before,
+                        'publication recovery did not permit a clean swap forward')
+                binding(core)
+        expected_fetches=3 if inject_start_failure or interruption=='term' or publication_fault is not None else 2
         require(all(server.requests.count(paths[c])==expected_fetches for c in paths),'unexpected asset fetch count')
     finally:
         env.clear()

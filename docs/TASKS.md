@@ -1,8 +1,8 @@
 # PNM Current Tasks
 
-**Last reconciled:** 2026-10-25 (default31/389; native restore TERM17/17 and SIGKILL16/16 per Core pass; broader fault-position/VM/external acceptance remains open)
+**Last reconciled:** 2026-10-25 (default31/389; native Core previous/metadata/applied EROFS each26/26 and restore interruption pass; broader commit/restore-write/VM/external acceptance remains open)
 
-**Current increment baseline:** branch `dev`, parent HEAD `a2f8654`, VERSION `0.16.0-rc.1`.
+**Current increment baseline:** branch `dev`, parent HEAD `f6f60ee`, VERSION `0.16.0-rc.1`.
 
 **Environment recheck:** the earlier host EIO/EROFS/CreateInstance failure is no
 longer reproduced: Debian root is writable, real `true`/`df` execute successfully
@@ -1627,6 +1627,46 @@ mounts. Product Bash is unchanged; the31/389 baseline was not repeated for this
 test-only increment. Earlier partial-file publication, late publication/commit,
 independent VM/reboot, deployed-source identity and external clients stay open.
 
+## Native Core publication read-only failures — 2026-10-25
+
+Restore interruption is committed as `f6f60ee`. Next T-22 slice uses a guest-only
+one-use move launcher for previous binary, previous metadata and applied evidence.
+It runs the real mv under a read-only bind in a new private child mount namespace,
+requires kernel EROFS, then removes only its own identified bind before returning
+the actual failure. Parent mounts are only compared, never cleaned with child IDs.
+Real CLI73 and stage-specific error, original resource/previous pairing, refreshed
+binding, unchanged peer and completed uncommitted compensation are required for
+each operation/Core, followed by clean version swaps.
+
+Initial `2of0eycu` passes18 preceding checks but refuses before any fault mount:
+the existing guest propagation is not fully private. Its separately retained
+control `/var/tmp/pnm-core-publication-previous-volume._fuk4tfd` verifies full
+encrypted-image readback, detached loop, empty cleanup errors and unchanged host
+DBs. Read-only verified-image extraction confirms the guard cause. This is failed
+fixture evidence, not an EROFS acceptance pass. A new private child namespace
+addresses the cause; independent review also removed a cross-namespace parent
+unmount fallback before execution. Host refusal includes both launcher paths and
+direct unmount; unsafe targets refuse before actions. Nine guards,16 Python
+compilations and syntax/security/ShellCheck pass. Final previous `x4aht50p`
+passes26/26: both real Core operations observe kernel EROFS and actual mv failure,
+restore resources/previous/binding without peer changes, and allow clean swaps
+forward. Native/Make exit0, unchanged host DBs, scope not-found and no mounts.
+Its control `/var/tmp/pnm-core-publication-previous-final-volume.w3fymwp8`
+verifies full encrypted-image readback, detached loop and empty cleanup errors.
+Final metadata `kow46z9k` also passes26/26, native/Make exit0, unchanged host DBs,
+scope not-found and no mounts. Its control
+`/var/tmp/pnm-core-publication-metadata-final-volume.1ztys_du` verifies the same
+full-image retention and cleanup. Final applied `bfopszs1` passes26/26 with the
+same native/Make0 and host/scope/mount guarantees. Its control
+`/var/tmp/pnm-core-publication-applied-final-volume.tktrfinz` also verifies full
+encrypted-image readback, detached loop and empty cleanup errors. In total twelve
+actual transient VFS EROFS publication paths pass across the three fresh guests;
+the repeated normal-flow checks are not twelve independent full matrices.
+Production Bash is unchanged; the31-suite/389-test baseline was not rerun for
+this test-only stage. Commit/marker faults, earlier restore-write faults, persistent
+storage/power-loss durability, independent VM/reboot, G-01 and external clients
+remain open.
+
 ## Immediate next steps
 
 Startup readiness/harness and initiating-error repairs are committed as
@@ -1635,9 +1675,9 @@ recovery-required plan. TLS access, valid-account reuse and per-Core process
 interruption now also pass. Ordinary restart's forward readiness gate is repaired.
 All19 declared prerequisite tools and first-deployment Core startup failures now
 pass real checks. Actual post-health listener absence now passes as well.
-Update/rollback and restore startup interruption now pass; continue earlier
-partial-file restore faults and late previous/metadata/
-commit and other fault-position acceptance,
+Update/rollback and restore startup interruption now pass. Native transient
+previous binary/metadata/applied publication failures also pass. Continue earlier
+partial-file restore faults, commit/marker and other fault-position acceptance,
 together with the following external prerequisites;
 the earlier cleanup proposal is unnecessary and all original roots are retained.
 Successful main flow, update/rollback and late-deadline compensation cannot replace

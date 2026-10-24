@@ -314,12 +314,13 @@ try:
     update_interruptions=('core-update-term','core-update-sigkill-xray','core-update-sigkill-hysteria2',
                           'core-rollback-sigkill-xray','core-rollback-sigkill-hysteria2')
     restore_interruptions=('restore-term','restore-sigkill-xray','restore-sigkill-hysteria2')
+    publication_cases=('core-publication-previous','core-publication-metadata','core-publication-applied')
     check(scenario in ('lifecycle','deployment-failure','core-update','core-update-failure','configured-ports',
           'runtime-evidence','restore-failure','startup-readiness','core-recovery-failure-xray',
           'core-recovery-failure-hysteria2','restore-recovery-failure','tls-access','account-reuse',
           'core-interruption','core-interruption-hysteria2','restart-readiness','dependency-refusal',
           'deployment-startup-failure','deployment-listener-failure','deployment-term',
-          'deployment-sigkill')+update_interruptions+restore_interruptions,'unknown guest scenario')
+          'deployment-sigkill')+update_interruptions+restore_interruptions+publication_cases,'unknown guest scenario')
     if scenario=='account-reuse':
         from guest_account_cases import prepare_accounts, require_preserved
         reused_accounts=prepare_accounts()
@@ -534,7 +535,7 @@ try:
     check(not [k for k,v in final_checks.items() if v in ('FAIL','UNKNOWN') and k!='time_sync'],'restored diagnostics not healthy')
     passed.append('protected trusted backup restores all resources and real applied bindings')
     update_interrupted=False
-    if scenario in ('core-update','core-update-failure','core-recovery-failure-xray','core-recovery-failure-hysteria2')+update_interruptions:
+    if scenario in ('core-update','core-update-failure','core-recovery-failure-xray','core-recovery-failure-hysteria2')+update_interruptions+publication_cases:
         stage='actual distinct-version Core update and rollback'
         from guest_update_cases import run_updates
         interruption='none'
@@ -546,7 +547,8 @@ try:
         interrupted=run_updates(logs,env,call,core_state,binding,links_ready,passed,
                     inject_start_failure=scenario=='core-update-failure',
                     recovery_failure_core=scenario.rsplit('-',1)[-1] if scenario.startswith('core-recovery-failure-') else None,
-                    interruption=interruption)
+                    interruption=interruption,
+                    publication_fault=scenario.rsplit('-',1)[-1] if scenario in publication_cases else None)
         if interrupted is not None:
             from guest_recovery_cases import require_commands_blocked
             peer='hysteria2' if interrupted['core']=='xray' else 'xray'
