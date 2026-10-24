@@ -396,6 +396,28 @@ pnm_hysteria_config_matches_node() {
     pnm_hysteria_config_validate_candidate "$PNM_HY2_CONFIG" "$node_name" "$hysteria_name"
 }
 
+pnm_core_runtime_listener_ready() {
+    local core="${1:?core id required}" config="${2:?runtime configuration required}"
+    local runtime_values port protocol
+    local -A recovered_fields=()
+    # Recovery may restore ports different from desired node.conf. Parse only
+    # the caller's hash-verified runtime generation, preserving disabled policy.
+    case "$core" in
+        xray)
+            runtime_values="$(pnm_xray_config_runtime_values "$config")" || return "$PNM_EXIT_SOFTWARE"
+            [[ "${runtime_values##*$'\t'}" == tcp ]] || return "$PNM_EXIT_SOFTWARE"
+            port="${runtime_values%%$'\t'*}" protocol=tcp
+            ;;
+        hysteria2)
+            pnm_hysteria_config_parse_candidate "$config" recovered_fields || return "$PNM_EXIT_SOFTWARE"
+            [[ "${recovered_fields[listen]-}" =~ ^:([0-9]+)$ ]] || return "$PNM_EXIT_SOFTWARE"
+            port="${BASH_REMATCH[1]}" protocol=udp
+            ;;
+        *) return "$PNM_EXIT_SOFTWARE" ;;
+    esac
+    pnm_validate_port "$port" && pnm_listener_present "$protocol" "$port" 26 || return "$PNM_EXIT_SOFTWARE"
+}
+
 pnm_core_applied_config_status() {
     local core="${1:?core id required}"
     local config="${2:?runtime configuration required}"

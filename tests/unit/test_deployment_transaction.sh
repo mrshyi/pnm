@@ -202,6 +202,8 @@ check_recovered_custom_listener_port() (
     trap 'rm -rf -- "$root"' EXIT
     source "$PROJECT_ROOT/lib/render.sh"
     prepare_deployment_fixture "$root"
+    # This helper tests recovery of a previously confirmed active generation.
+    FIXTURE_ACTIVE[hysteria-server.service]=active
     PNM_CONFIG_DIR="$TEST_ROOT/fixtures/config-secrets"
     pnm_load_node_config recovery_node && pnm_load_reality_secret recovery_reality &&
         pnm_load_hysteria_secret recovery_hysteria || return 1

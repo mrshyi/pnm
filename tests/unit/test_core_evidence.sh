@@ -105,6 +105,41 @@ pnm_asset_stage_xray_zip() { printf '%s\n' "$1"; }
 pnm_asset_stage_hysteria_binary() { printf '%s\n' "$1"; }
 pnm_hysteria_config_validate_candidate() { return 0; }
 pnm_tls_validate_pair() { return 0; }
+pnm_core_runtime_listener_ready() { return 0; }
+
+test_recovery_does_not_confirm_an_unready_listener() {
+    local core listener_rc rc original_hash
+    for core in xray hysteria2; do
+        for listener_rc in 1 2; do
+            prepare_evidence_fixture
+            pnm_core_resolve "$core" || return 1
+            pnm_core_lifecycle_snapshot "$core" || return 1
+            pnm_core_capture_applied || return 1
+            original_hash="$(pnm_tx_file_sha256 "$PNM_STATE_DIR/cores/$core/applied.env")"
+            pnm_systemctl restart "$PNM_CORE_UNIT" || return 1
+            pnm_core_runtime_listener_ready() { return "$listener_rc"; }
+            if pnm_core_recover_applied; then rc=0; else rc=$?; fi
+            assert_eq 70 "$rc" || return 1
+            assert_eq "$original_hash" "$(pnm_tx_file_sha256 "$PNM_STATE_DIR/cores/$core/applied.env")" || return 1
+        done
+    done
+}
+
+test_recovery_rechecks_baseline_after_listener_wait() {
+    local core rc original_hash
+    for core in xray hysteria2; do
+        prepare_evidence_fixture
+        pnm_core_resolve "$core" || return 1
+        pnm_core_lifecycle_snapshot "$core" || return 1
+        pnm_core_capture_applied || return 1
+        original_hash="$(pnm_tx_file_sha256 "$PNM_STATE_DIR/cores/$core/applied.env")"
+        pnm_systemctl restart "$PNM_CORE_UNIT" || return 1
+        pnm_core_runtime_listener_ready() { printf '\n' >>"$PNM_CORE_CONFIG"; return 0; }
+        if pnm_core_recover_applied; then rc=0; else rc=$?; fi
+        assert_eq 70 "$rc" || return 1
+        assert_eq "$original_hash" "$(pnm_tx_file_sha256 "$PNM_STATE_DIR/cores/$core/applied.env")" || return 1
+    done
+}
 
 assert_peer_untouched() {
     local peer=hysteria2 unit=hysteria-server.service config="$PNM_HY2_CONFIG"
@@ -948,6 +983,8 @@ test_config_apply_keeps_ownership_error_and_safe_receipts() {
     done
 }
 
+run_test 'recovery rejects absent or unknown listener without confirming an invocation' test_recovery_does_not_confirm_an_unready_listener
+run_test 'recovery rechecks configuration after waiting for a listener' test_recovery_rechecks_baseline_after_listener_wait
 run_test 'config apply retains ownership error and protected receipts' test_config_apply_keeps_ownership_error_and_safe_receipts
 run_test 'config apply preserves external runtime config metadata' test_config_apply_preserves_runtime_config_metadata_edits
 run_test 'config apply rejects metadata drift before ownership normalization' test_config_apply_rejects_metadata_drift_before_ownership

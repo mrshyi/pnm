@@ -1,8 +1,8 @@
 # PNM Current Tasks
 
-**Last reconciled:** 2026-10-24 (default31/380; native persistent recovery failure24/24 +24/24 +16/16, TLS access17/17 and account reuse18/18 pass; broader VM/external acceptance remains open)
+**Last reconciled:** 2026-10-24 (default31/383; native persistent recovery failure24/24 +24/24 +16/16, TLS17/17, account reuse18/18 and per-Core interruption17/17 pass; broader VM/external acceptance remains open)
 
-**Current increment baseline:** branch `dev`, parent HEAD `5e006ce`, VERSION `0.16.0-rc.1`.
+**Current increment baseline:** branch `dev`, parent HEAD `ed0a670`, VERSION `0.16.0-rc.1`.
 
 **Environment recheck:** the earlier host EIO/EROFS/CreateInstance failure is no
 longer reproduced: Debian root is writable, real `true`/`df` execute successfully
@@ -1412,12 +1412,45 @@ syntax/security/ShellCheck pass; independent source review has no blocking issue
 This test-only slice covers valid reuse, not every account-tool failure. The
 earlier container preparation plan is reconciled against these actual outcomes.
 
+## Recovery readiness and native process interruption — 2026-10-24
+
+Account reuse is committed as `ed0a670`. Source review during real TERM testing
+identified that standalone recovery re-certified active Type=simple services
+before listener readiness. The existing deployment runtime-port wait is now shared
+by deployment and Core recovery (including restore). Both recheck active/config
+after waiting; Core recovery also rechecks the original applied baseline. Absent
+or unknown listeners, invalid runtime ports and observed drift cannot publish
+recovered evidence; originally disabled policy remains disabled.
+
+Focused RED passes38/fails2 in Core evidence and13/1 in rendering. GREEN passes
+40/40 and14/14. Final frozen `/var/tmp/pnm-recovery-full.m_tn0a5p` passes static
+checks and `make check`: **31 suites/383 tests, exit0**. Nine current offline
+guards and eleven Python compilations pass. Two failed full logs remain private:
+old simulated config/service boundaries and one misplaced fixture-state edit were
+corrected before the final19/19 deployment suite and full success.
+
+Actual Xray `gljriftj` and HY2 `8itir9ca` each pass17/17. TERM preserves143 and
+returns with the target's real listener and recovered binding ready; resource and
+peer state remain intact. SIGKILL leaves the unfinished journal and old applied
+bytes. After owned drop-in removal, writer/links/show/check all refuse70 with
+empty stdout and unchanged PNM/NSS/managed resources. Both runs record nspawn0,
+unchanged host databases, not-found scope and no guest mounts. Xray's protected
+control `/var/tmp/pnm-signal-green-volume.37po60eo` retains verified encrypted
+evidence, released loop and empty cleanup errors. HY2's control is
+`/var/tmp/pnm-signal-hy2-volume.o83q9afv`; its complete encrypted image also
+passes cipher/raw readback verification, with detached loop and no cleanup errors.
+The earlier test assumption requiring two starts was rejected; recovery may
+legitimately preserve an active process. Its failed image is retained separately.
+Independent source reviews accept the final production repair and per-Core test
+parameterization. This is process interruption, not independent VM/kernel reboot.
+
 ## Immediate next steps
 
 Startup readiness/harness and initiating-error repairs are committed as
 `ce6713f`, `0bee0d8`, and `580ead7`. Fresh native fault cases now complete the
-recovery-required plan. TLS access and valid-account reuse now also pass. Continue
-actual catchable/uncatchable interruption and other fault-position acceptance,
+recovery-required plan. TLS access, valid-account reuse and per-Core process
+interruption now also pass. Fix ordinary restart's forward readiness gate (it
+still checks only systemd state), then continue other fault-position acceptance,
 together with the following external prerequisites;
 the earlier cleanup proposal is unnecessary and all original roots are retained.
 Successful main flow, update/rollback and late-deadline compensation cannot replace

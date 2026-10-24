@@ -112,6 +112,11 @@ pnm_core_recover_applied() {
     # health policy additionally requires enabled and is inappropriate here.
     [[ "$(pnm_systemd_active_state "$PNM_CORE_UNIT")" == active ]] || return "$PNM_EXIT_SOFTWARE"
     pnm_core_check_applied_baseline || return $?
+    pnm_core_runtime_listener_ready "$PNM_CORE_ID" "$PNM_CORE_CONFIG" || return "$PNM_EXIT_SOFTWARE"
+    # The bounded wait can span a service exit or privileged configuration edit.
+    # Recheck before publishing evidence for the recovered invocation.
+    [[ "$(pnm_systemd_active_state "$PNM_CORE_UNIT")" == active ]] || return "$PNM_EXIT_SOFTWARE"
+    pnm_core_check_applied_baseline || return $?
     invocation="$(pnm_systemd_show_value "$PNM_CORE_UNIT" InvocationID)" || return "$PNM_EXIT_SOFTWARE"
     [[ "$invocation" =~ ^[a-fA-F0-9]{32}$ ]] || return "$PNM_EXIT_SOFTWARE"
     pnm_tx_refresh_recovered_applied "$PNM_STATE_DIR/cores/$PNM_CORE_ID/applied.env" "$PNM_CORE_ID" \

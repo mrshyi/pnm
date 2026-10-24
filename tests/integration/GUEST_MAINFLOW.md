@@ -144,6 +144,16 @@ credentials. Owned fixture metadata is restored in finally; an actual HY2 restar
 then refreshes its applied binding, with Xray unchanged and healthy links/checks.
 This does not prove a currently running process has reloaded TLS material.
 
+`PNM_GUEST_SCENARIO=core-interruption` observes delayed real Xray startup, then
+signals only the exact CLI child/session created by its call helper. TERM must
+preserve143, compensate and restore a confirmed binding with peer unchanged.
+SIGKILL must retain the unfinished transaction and prior applied bytes; after
+listener stabilization and owned drop-in removal, writer/show/links/check must
+refuse70 without output or mutations. The final expected recovery requirement
+is an interrupted journal, not a claim of automatic recovery or VM/kernel reboot.
+Use `core-interruption-hysteria2` for the corresponding UDP/HY2 case with Xray
+as the unchanged peer. Each variant requires a separate fresh guest.
+
 The parent prints a safe JSON summary and leaves `boot-result.json`, source
 hashes and protected evidence under the new fixture. Raw CLI/Core output,
 configuration and backups can contain secrets; do not print or publish them.

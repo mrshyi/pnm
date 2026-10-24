@@ -106,6 +106,9 @@ pnm_systemctl() {
     esac
 }
 pnm_systemd_unit_healthy() { [[ "${fixture_active[$1]}" == active && "${fixture_enabled[$1]}" == enabled ]]; }
+# These fixtures contain labels instead of Core configs and simulate services;
+# real runtime parsing/listener outcomes are covered by render/core evidence tests.
+pnm_core_runtime_listener_ready() { return 0; }
 pnm_check_deploy_core_health() {
     if ((fixture_health_failures > 0)); then ((fixture_health_failures -= 1)); return 1; fi
     return 0

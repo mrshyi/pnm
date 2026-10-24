@@ -23,13 +23,15 @@ env={'PATH':'/usr/sbin:/usr/bin:/sbin:/bin','LANG':'C.UTF-8','TZ':'UTC'}
 def check(condition,label):
     if not condition:
         raise RuntimeError(label)
-def call(label,args,accepted=(0,)):
+def call(label,args,accepted=(0,),*,process_slot=None):
     (logs/'operation.json').write_text(json.dumps({'label':label,'state':'started'}))
     command=['bash','/opt/pnm/bin/pnm']+args
     # A CLI descendant can retain PIPE fds after Bash exits. Own a separate
     # session so timeout retires the whole command group with bounded waits.
     with subprocess.Popen(command,stdin=subprocess.DEVNULL,stdout=subprocess.PIPE,
                           stderr=subprocess.PIPE,env=env,start_new_session=True) as process:
+        if process_slot is not None:
+            process_slot.append(process)
         timed_out=False
         try:
             stdout,stderr=process.communicate(timeout=150)
@@ -311,7 +313,8 @@ try:
     scenario=Path('/opt/pnm-test-scenario').read_text().strip()
     check(scenario in ('lifecycle','deployment-failure','core-update','core-update-failure','configured-ports',
           'runtime-evidence','restore-failure','startup-readiness','core-recovery-failure-xray',
-          'core-recovery-failure-hysteria2','restore-recovery-failure','tls-access','account-reuse'),'unknown guest scenario')
+          'core-recovery-failure-hysteria2','restore-recovery-failure','tls-access','account-reuse',
+          'core-interruption','core-interruption-hysteria2'),'unknown guest scenario')
     if scenario=='account-reuse':
         from guest_account_cases import prepare_accounts, require_preserved
         reused_accounts=prepare_accounts()
@@ -542,8 +545,14 @@ try:
         stage='preexisting account preservation after actual lifecycle'
         require_preserved(reused_accounts)
         passed.append('dependency refusal, late rollback and complete real lifecycle preserve preexisting identities without ownership claims')
+    if scenario in ('core-interruption','core-interruption-hysteria2'):
+        stage='actual TERM and SIGKILL during standalone restart'
+        from guest_signal_cases import run_interruptions
+        run_interruptions(logs,call,core_state,binding,links_ready,passed,
+                          core='hysteria2' if scenario.endswith('-hysteria2') else 'xray')
     result={'passed':True,'checks':passed,'clock_diagnostic':checks.get('time_sync'),'uids_distinct':True,
-            'expected_recovery_required':scenario.startswith('core-recovery-failure-') or scenario=='restore-recovery-failure'}
+            'expected_recovery_required':scenario.startswith('core-recovery-failure-')
+            or scenario in ('restore-recovery-failure','core-interruption','core-interruption-hysteria2')}
 except Exception as error:
     result={'passed':False,'checks':passed,'stage':stage,'error_class':type(error).__name__}
     if isinstance(error,RuntimeError):

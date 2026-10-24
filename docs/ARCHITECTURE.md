@@ -47,6 +47,14 @@ without enabling it. Failed state queries, unknown state and policy drift remain
 recovery errors. Forward health checks still require enabled. Update compensation
 continues to refresh only previously confirmed applied evidence after recovery.
 
+Before refreshing recovered applied evidence, deployment and the shared Core
+recovery path parse the restored runtime port and wait up to26 observations for
+its actual listener. Missing listeners, observer errors or invalid runtime ports
+retain recovery uncertainty. Both paths recheck service/configuration after the
+wait; Core recovery also rechecks the original applied baseline. This preserves
+active-but-disabled policy and covers restart/apply/update/rollback/restore
+compensation without inferring readiness from Type=simple active state alone.
+
 Restart, configuration apply, uninstall and standalone lifecycle now share the same preparation-through-close exclusive lock as update/rollback/restore/backup. The existing helper lives in common code for lifecycle reuse; nested backup/transactions preserve the caller's lock level. Argument/root/confirmation checks precede this boundary. Configuration compensation restores snapshot ownership/mode without normalizing them afterwards. Success paths explicitly propagate close failures, including lifecycle dry-run bookkeeping; uninstall preparation preserves its primary failure across directory cleanup and retains staging when close fails.
 
 The existing unresolved-deployment guard also inspects standalone Core, node-init, install-state and sandbox-install transactions. Writers and protected reads refuse interrupted, abandoned-after-attempt, invalid or recovery-required evidence. Valid committed/rolled-back receipts allow progress. A narrow schema-2 retry exception accepts protected empty receipts with only BEGIN, private SNAPSHOT and ABANDONED events, without any service/restore/commit baseline or attempted step. It does not replay recovery across processes or infer service safety from an empty file manifest.

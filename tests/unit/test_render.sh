@@ -206,6 +206,38 @@ test_deployment_health_uses_real_renderer_with_local_secrets() (
     done
 )
 
+test_runtime_listener_recovery_uses_runtime_ports() (
+    local directory core protocol port config listener_rc rc calls=0
+    directory="$(mktemp -d)"
+    trap 'rm -rf -- "$directory"' EXIT
+    load_render_fixtures || return 1
+    NODE[XRAY_PORT]=10443 NODE[HY2_PORT]=18443
+    pnm_render_xray_config NODE REALITY >"$directory/xray.json" || return 1
+    pnm_render_hysteria_config NODE HYSTERIA >"$directory/hysteria.yaml" || return 1
+    NODE[XRAY_PORT]=443 NODE[HY2_PORT]=8443
+    pnm_listener_present() {
+        ((calls += 1))
+        [[ "$1" == "$protocol" && "$2" == "$port" && "$3" == 26 ]] || return 70
+        return "$listener_rc"
+    }
+    for core in xray hysteria2; do
+        protocol=tcp port=10443 config="$directory/xray.json"
+        [[ "$core" == xray ]] || { protocol=udp; port=18443; config="$directory/hysteria.yaml"; }
+        for listener_rc in 0 1 2; do
+            calls=0
+            if pnm_core_runtime_listener_ready "$core" "$config"; then rc=0; else rc=$?; fi
+            assert_eq "$((listener_rc == 0 ? 0 : 70))" "$rc" || return 1
+            assert_eq 1 "$calls" || return 1
+        done
+        printf '{}\n' >"$config"
+        calls=0
+        if pnm_core_runtime_listener_ready "$core" "$config"; then rc=0; else rc=$?; fi
+        assert_eq 70 "$rc" || return 1
+        assert_eq 0 "$calls" || return 1
+    done
+)
+
+run_test 'runtime recovery waits for original configured ports and refuses absent unknown or invalid state' test_runtime_listener_recovery_uses_runtime_ports
 run_test 'Xray render and comparison resolve caller-local node/reality arrays' test_xray_renderer_accepts_caller_local_array_names
 run_test 'HY2 render and validation resolve caller-local node/hysteria arrays' test_hysteria_renderer_accepts_caller_local_array_names
 run_test 'REALITY secret renderer resolves caller-local reality array without diagnostics' test_reality_secret_renderer_accepts_caller_local_array_name

@@ -17,7 +17,7 @@ parser.add_argument('--asset-cache',type=Path,required=True,help='verified pinne
 parser.add_argument('--scenario',choices=('lifecycle','deployment-failure','core-update','core-update-failure',
     'configured-ports','runtime-evidence','restore-failure','startup-readiness',
     'core-recovery-failure-xray','core-recovery-failure-hysteria2','restore-recovery-failure','tls-access',
-    'account-reuse'),default='lifecycle')
+    'account-reuse','core-interruption','core-interruption-hysteria2'),default='lifecycle')
 parser.add_argument('--previous-asset-cache',type=Path)
 parser.add_argument('--work-dir',type=Path,help='optional canonical private root-owned POSIX fixture directory')
 options=parser.parse_args()
@@ -144,7 +144,7 @@ if is_update:
     py_compile.compile(str(destination),cfile=str(base/'guest_update_cases.pyc'),doraise=True)
 if options.scenario in ('core-update-failure','restore-failure','startup-readiness',
                         'core-recovery-failure-xray','core-recovery-failure-hysteria2','restore-recovery-failure',
-                        'tls-access','account-reuse'):
+                        'tls-access','account-reuse','core-interruption','core-interruption-hysteria2'):
     destination=root/'opt/guest_start_fault.py'
     assert not destination.exists() and not destination.is_symlink()
     shutil.copyfile(repo/'tests/integration/guest_start_fault.py',destination)
@@ -156,7 +156,7 @@ if options.scenario=='startup-readiness':
     shutil.copyfile(repo/'tests/integration/guest_readiness_cases.py',destination)
     destination.chmod(0o700)
     py_compile.compile(str(destination),cfile=str(base/'guest_readiness_cases.pyc'),doraise=True)
-if options.scenario.startswith('core-recovery-failure-') or options.scenario in ('restore-recovery-failure','tls-access','account-reuse'):
+if options.scenario.startswith('core-recovery-failure-') or options.scenario in ('restore-recovery-failure','tls-access','account-reuse','core-interruption','core-interruption-hysteria2'):
     destination=root/'opt/guest_recovery_cases.py'
     assert not destination.exists() and not destination.is_symlink()
     shutil.copyfile(repo/'tests/integration/guest_recovery_cases.py',destination)
@@ -174,6 +174,12 @@ if options.scenario=='account-reuse':
     shutil.copyfile(repo/'tests/integration/guest_account_cases.py',destination)
     destination.chmod(0o700)
     py_compile.compile(str(destination),cfile=str(base/'guest_account_cases.pyc'),doraise=True)
+if options.scenario in ('core-interruption','core-interruption-hysteria2'):
+    destination=root/'opt/guest_signal_cases.py'
+    assert not destination.exists() and not destination.is_symlink()
+    shutil.copyfile(repo/'tests/integration/guest_signal_cases.py',destination)
+    destination.chmod(0o700)
+    py_compile.compile(str(destination),cfile=str(base/'guest_signal_cases.pyc'),doraise=True)
 unit=root/'etc/systemd/system/pnm-boot-probe.service'
 assert unit.is_file() and not unit.is_symlink()
 assert 'ExecStart=/usr/bin/python3 /opt/pnm-boot-worker.py' in unit.read_text(), 'dedicated boot fixture unit required'
