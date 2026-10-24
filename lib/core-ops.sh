@@ -536,6 +536,7 @@ pnm_core_publish_previous_state() {
 
 pnm_core_update_abort() {
     local operation="${1:?operation required}" stage="${2:?failure stage required}" original_rc="${3:?original failure code required}" rollback_rc=0
+    PNM_TX_STEP_FAILURE_RC="$original_rc"
     if pnm_tx_rollback; then
         pnm_error "Core $operation failed during $stage (rc=$original_rc); previous Core state was restored."
     else

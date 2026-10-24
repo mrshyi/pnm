@@ -2,7 +2,7 @@
 
 **Last reconciled:** 2026-10-24 (final default31 suites/380 tests pass; actual startup-readiness16/16 and update-failure26/26 pass; persistent recovery failure remains next)
 
-**Current increment baseline:** branch `dev`, parent HEAD `5a9bf86`, VERSION `0.16.0-rc.1`.
+**Current increment baseline:** branch `dev`, parent HEAD `0bee0d8`, VERSION `0.16.0-rc.1`.
 
 **Environment recheck:** the earlier host EIO/EROFS/CreateInstance failure is no
 longer reproduced: Debian root is writable, real `true`/`df` execute successfully
@@ -1323,6 +1323,30 @@ compile. Independent review's tool-error finding is repaired and re-reviewed;
 no further blocking issue remains.
 Persistent recovery failure, late publication/commit faults, kernel reboot,
 deployed source identity and external clients remain separate acceptance work.
+
+## Initiating error retained during failed Core recovery — 2026-10-24
+
+The shared update/rollback abort helper reported the original failure to stderr
+but did not copy it to the existing transaction failure field before rollback.
+When compensation failed, the real journal incorrectly recorded `original_rc=0`.
+The existing dual-Core update/rollback matrix now checks the initiating78 and
+recovery70 independently. Frozen RED `pnm-original-error-red.cvuafqdv` passes37/
+fails1 and records `rollback_rc=70 original_rc=0`. The one-line shared-entry
+assignment preserves the original return code and all existing recovery gates.
+Frozen GREEN `pnm-original-error-green.2rh7_zju` passes static checks, the full
+focused suite38/38 and default **31 suites/380 tests, exit0**. Independent read-only
+review found no blocking issue. This focused matrix uses actual files/journals
+with simulated services; native persistent recovery failure remains separate.
+
+The next native slice needs additional reusable disk space. Exact stopped roots
+`mkmrfpdx/rootfs` and `jkja5d_v/rootfs` have private, hash-verified retained-evidence
+bundles beside them, including logs, trusted backup, actual source/configuration
+and small transaction receipts. Their cleanup-review.json files identify device/
+inode, file count and logical size. The explicit cleanup decision is pending;
+neither rootfs has been deleted. Removing them would make approximately1.45GiB
+of guest filesystem data reusable; Windows VHD/C free space need not immediately
+increase. Baseline, asset caches, failed fixtures and external acceptance stay
+outside that proposed cleanup.
 
 ## Verification already reported (historical host evidence)
 

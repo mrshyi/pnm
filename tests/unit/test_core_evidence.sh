@@ -400,7 +400,7 @@ test_update_candidate_version_mismatch_is_nonmutating() {
 }
 
 test_update_restart_and_recovery_failures_are_reported() {
-    local core operation failure rc fixture_restart_attempts=0 fixture_failed_attempt=0
+    local core operation failure rc journal fixture_restart_attempts=0 fixture_failed_attempt=0
     pnm_systemctl() {
         ((fixture_restart_attempts += 1))
         ((fixture_restart_attempts != fixture_failed_attempt)) || return 69
@@ -428,6 +428,8 @@ test_update_restart_and_recovery_failures_are_reported() {
                     assert_eq changed "$(pnm_core_applied_config_status "$core" "$PNM_CORE_CONFIG")" || return 1
                     local -a snapshots=("$PNM_STATE_DIR"/transactions/*/snapshots/core_binary)
                     [[ -f "${snapshots[0]}" ]] || return 1
+                    journal="${snapshots[0]%/snapshots/core_binary}/journal.tsv"
+                    assert_contains "$(<"$journal")" 'rollback_rc=70 original_rc=78' || return 1
                     assert_peer_untouched "$core" || return 1
                     assert_eq 0 "$PNM_LOCK_DEPTH" || return 1
                 fi
