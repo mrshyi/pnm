@@ -314,7 +314,7 @@ try:
     check(scenario in ('lifecycle','deployment-failure','core-update','core-update-failure','configured-ports',
           'runtime-evidence','restore-failure','startup-readiness','core-recovery-failure-xray',
           'core-recovery-failure-hysteria2','restore-recovery-failure','tls-access','account-reuse',
-          'core-interruption','core-interruption-hysteria2','restart-readiness'),'unknown guest scenario')
+          'core-interruption','core-interruption-hysteria2','restart-readiness','dependency-refusal'),'unknown guest scenario')
     if scenario=='account-reuse':
         from guest_account_cases import prepare_accounts, require_preserved
         reused_accounts=prepare_accounts()
@@ -362,6 +362,10 @@ try:
         deployment_failure_cases()
         if reused_accounts:
             require_preserved(reused_accounts)
+    if scenario=='dependency-refusal':
+        stage='actual installation dependency refusal matrix'
+        from guest_preflight_cases import run_dependencies
+        run_dependencies(logs,env,call,absent,passed)
     stage='installation apply'
     call('install-apply',['install','--apply','--yes'])
     check(fields('/etc/pnm/node.conf')['PNM_CONFIGURED']=='yes','successful install lacks committed node state')

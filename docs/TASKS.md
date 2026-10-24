@@ -2,7 +2,7 @@
 
 **Last reconciled:** 2026-10-24 (default31/385; native persistent recovery failure24/24 +24/24 +16/16, TLS17/17, account reuse18/18, per-Core interruption17/17 and ordinary restart readiness16/16 pass; broader VM/external acceptance remains open)
 
-**Current increment baseline:** branch `dev`, parent HEAD `54d5d67`, VERSION `0.16.0-rc.1`.
+**Current increment baseline:** branch `dev`, parent HEAD `22e088b`, VERSION `0.16.0-rc.1`.
 
 **Environment recheck:** the earlier host EIO/EROFS/CreateInstance failure is no
 longer reproduced: Debian root is writable, real `true`/`df` execute successfully
@@ -106,7 +106,7 @@ not close G-02 or prove systemd recovery, reboot or public client connectivity.
 | G-02 — complete deployment rollback | Actual guest late-deadline rollback/retry PASS / broader failure matrix open | Real dual-Core post-health precedes a cause-qualified deadline failure; live services/accounts/resources/metadata and commit state compensate, then installation and lifecycle retry pass. | Continue interruption, other failure points, concurrent commands and independent VM reboot matrix; do not infer production readiness. |
 | G-03 — Core update transaction | Actual distinct-version operations and startup/recovery failure PASS / broader matrix open | Both official Cores change real versions, retain paired previous state and preserve peer evidence. Native start-once failures compensate; start-twice failures retain RECOVERY_REQUIRED and block protected commands. Curl uses a private HTTPS transport fixture. | Extend late publication/commit and interruption matrix; upstream acquisition and VM reboot remain separate. |
 | G-04 — backup/restore safety | Actual trusted round trip and startup/recovery failure PASS / broader matrix open | Real CLI restores bytes/metadata and applied bindings. Native startup failure compensates and retries; failed compensation retains uncertainty and blocks further protected operations. | Accept interruption, other publication failures and reboot separately. |
-| G-05 — dependency preflight | Actual guest missing-TLS-tool and repeat refusal PASS / remaining tools mocked | A private PATH hides only openssl: real CLI refuses for that cause before transaction/resource/account mutation. Repeat-install also preserves both running Cores. | Extend remaining dependency classes and supported distributions separately. |
+| G-05 — dependency preflight | Actual Debian guest19-tool refusal and repeat refusal PASS | A private PATH individually hides all19 declared preflight prerequisites. Actual JSON install returns2 with the matching FAIL class and preserves authority/NSS fingerprints, PNM inventory/transactions and absent Core/service/account state; normal lifecycle then passes. | Upstream acquisition failures, other distributions and remaining fault positions stay separate. |
 | G-06 — HY2 TLS permissions | Actual managed-account TLS, permission failures and valid reuse PASS | Wrong key owner/non-traversable parent fail real gates; permission recovery and restart pass. Valid preexisting identities survive preview, refusal, late compensation and full lifecycle with unchanged NSS and no PNM creation ownership. | Account-tool failures, independent VM and external clients remain separate; do not infer external reachability. |
 
 ## G-02 deployment transaction — working-tree implementation
@@ -1465,13 +1465,30 @@ D pool passes cipher/raw readback verification, loop detached, cleanup errors
 empty. Earlier regular-file success is retained separately. Independent review
 accepts the type-guard correction; no production or external traffic was tested.
 
+## Native missing-dependency matrix — 2026-10-24
+
+Ordinary restart repair is committed as `22e088b`. Fresh `fitvjgzu` passes33/33:
+all19 declared preflight tools are individually absent only from a private PATH,
+with actual JSON install refusal2 in the corresponding class. Authority/NSS
+fingerprints, PNM inventory/transaction set and absent service/account/resource
+baselines stay unchanged. Per-case finally restores the environment and owned
+link; the original14-case lifecycle then passes. Native/Make exit0, unchanged
+host databases, not-found scope and no mounts. Protected control/key/results:
+`/var/tmp/pnm-dependency-volume.7got3ah5`; full encrypted image in the ignored D
+pool passes cipher/raw readback verification, loop detached, cleanup errors empty.
+Nine guards, twelve Python compilations and syntax/security/ShellCheck pass.
+Independent source review has no blocking issue. Product source is unchanged
+from the31-suite/385-test baseline; this is Debian missing-tool preflight evidence,
+not upstream acquisition, another distribution or external-client acceptance.
+
 ## Immediate next steps
 
 Startup readiness/harness and initiating-error repairs are committed as
 `ce6713f`, `0bee0d8`, and `580ead7`. Fresh native fault cases now complete the
 recovery-required plan. TLS access, valid-account reuse and per-Core process
 interruption now also pass. Ordinary restart's forward readiness gate is repaired.
-Extend actual missing-dependency classes, then continue other fault-position acceptance,
+All19 declared dependency classes now pass real refusal checks. Continue first
+deployment's independent Core startup failures and other fault-position acceptance,
 together with the following external prerequisites;
 the earlier cleanup proposal is unnecessary and all original roots are retained.
 Successful main flow, update/rollback and late-deadline compensation cannot replace

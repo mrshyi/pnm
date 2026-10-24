@@ -52,6 +52,7 @@ import guest_tls_access as tls
 import guest_account_cases as accounts
 import guest_signal_cases as interruption
 import guest_readiness_cases as readiness
+import guest_preflight_cases as preflight
 def forbidden(*args,**kwargs):
     raise AssertionError('fixture acted before its namespace guard')
 fixture.socket.socket=forbidden
@@ -73,6 +74,7 @@ for entry in (
     lambda: accounts.require_preserved({}),
     lambda: interruption.run_interruptions(None,forbidden,forbidden,forbidden,forbidden,[]),
     lambda: readiness.run_restart_readiness(None,forbidden,forbidden,forbidden,forbidden,[]),
+    lambda: preflight.run_dependencies(None,None,forbidden,forbidden,[]),
 ):
     try:
         entry()

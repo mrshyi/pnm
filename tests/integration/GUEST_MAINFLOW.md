@@ -47,6 +47,13 @@ and metadata must stay unchanged from that preexisting baseline, real Core
 processes must use the expected UID/GID, and all transaction account ledgers must
 remain empty. This covers valid reuse; it does not simulate account-tool failures.
 
+`PNM_GUEST_SCENARIO=dependency-refusal` temporarily hides each of the19 declared
+preflight prerequisites using only its own private PATH links. The actual JSON
+install command must refuse2 in the corresponding class; original authority/NSS
+fingerprints, PNM inventory/transaction set and absent Core/account/service state
+must remain unchanged. Environment and links are restored per case, followed by
+the normal14-case lifecycle. System binaries/packages are never removed or mocked.
+
 `PNM_GUEST_SCENARIO=runtime-evidence` restarts each actual Core outside PNM,
 requires show/links to retain unconfirmed applied state and withhold only that
 Core's URI, and checks that PNM restart cannot promote it. Fully validated apply
