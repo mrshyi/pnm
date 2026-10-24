@@ -50,7 +50,7 @@ pnm_core_restart_locked() {
     fi
     pnm_tx_add_rollback pnm_core_restart_restore || { pnm_tx_close; return "$PNM_EXIT_SOFTWARE"; }
     if pnm_tx_run restart pnm_core_restart_step; then :; else rc=$?; pnm_tx_close; return "$rc"; fi
-    if pnm_tx_run health pnm_core_lifecycle_health_step; then :; else rc=$?; pnm_tx_close; return "$rc"; fi
+    if pnm_tx_run health pnm_core_restart_health_step; then :; else rc=$?; pnm_tx_close; return "$rc"; fi
     if pnm_tx_run applied_evidence pnm_core_refresh_applied; then :; else rc=$?; pnm_tx_close; return "$rc"; fi
     pnm_tx_commit || { rc=$?; pnm_tx_rollback || true; pnm_tx_close; return "$rc"; }
     pnm_tx_close || return $?
@@ -59,6 +59,11 @@ pnm_core_restart_locked() {
 
 pnm_core_restart_step() {
     pnm_systemctl restart "$PNM_CORE_UNIT"
+}
+
+pnm_core_restart_health_step() {
+    pnm_core_runtime_listener_ready "$PNM_CORE_ID" "$PNM_CORE_CONFIG" || return "$PNM_EXIT_CONFIG"
+    pnm_core_lifecycle_health_step
 }
 
 pnm_core_restart_restore() {

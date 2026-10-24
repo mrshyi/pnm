@@ -107,6 +107,30 @@ pnm_hysteria_config_validate_candidate() { return 0; }
 pnm_tls_validate_pair() { return 0; }
 pnm_core_runtime_listener_ready() { return 0; }
 
+test_restart_forward_listener_failure_compensates() {
+    local core listener_rc listener_calls rc
+    local -a journals=()
+    for core in xray hysteria2; do
+        for listener_rc in 1 2; do
+            prepare_evidence_fixture
+            listener_calls=0
+            pnm_core_runtime_listener_ready() {
+                ((listener_calls += 1))
+                ((listener_calls != 1)) || return "$listener_rc"
+                return 0
+            }
+            if pnm_core_restart "$core"; then rc=0; else rc=$?; fi
+            assert_eq 78 "$rc" || return 1
+            assert_eq 2 "$listener_calls" || return 1
+            assert_eq confirmed "$(pnm_core_applied_config_status "$core" "$PNM_CORE_CONFIG")" || return 1
+            assert_peer_untouched "$core" || return 1
+            journals=("$PNM_STATE_DIR"/transactions/*/journal.tsv)
+            assert_eq 1 "${#journals[@]}" || return 1
+            assert_contains "$(<"${journals[0]}")" $'\tROLLED_BACK\t' || return 1
+        done
+    done
+}
+
 test_recovery_does_not_confirm_an_unready_listener() {
     local core listener_rc rc original_hash
     for core in xray hysteria2; do
@@ -983,6 +1007,7 @@ test_config_apply_keeps_ownership_error_and_safe_receipts() {
     done
 }
 
+run_test 'restart forward listener absence and observer errors compensate without success' test_restart_forward_listener_failure_compensates
 run_test 'recovery rejects absent or unknown listener without confirming an invocation' test_recovery_does_not_confirm_an_unready_listener
 run_test 'recovery rechecks configuration after waiting for a listener' test_recovery_rechecks_baseline_after_listener_wait
 run_test 'config apply retains ownership error and protected receipts' test_config_apply_keeps_ownership_error_and_safe_receipts

@@ -314,7 +314,7 @@ try:
     check(scenario in ('lifecycle','deployment-failure','core-update','core-update-failure','configured-ports',
           'runtime-evidence','restore-failure','startup-readiness','core-recovery-failure-xray',
           'core-recovery-failure-hysteria2','restore-recovery-failure','tls-access','account-reuse',
-          'core-interruption','core-interruption-hysteria2'),'unknown guest scenario')
+          'core-interruption','core-interruption-hysteria2','restart-readiness'),'unknown guest scenario')
     if scenario=='account-reuse':
         from guest_account_cases import prepare_accounts, require_preserved
         reused_accounts=prepare_accounts()
@@ -533,6 +533,10 @@ try:
         stage='actual delayed Core listener readiness'
         from guest_readiness_cases import run_readiness
         run_readiness(logs,env,core_state,show,passed)
+    if scenario=='restart-readiness':
+        stage='actual ordinary restart with delayed Core listeners'
+        from guest_readiness_cases import run_restart_readiness
+        run_restart_readiness(logs,call,core_state,binding,links_ready,passed)
     if scenario=='restore-recovery-failure':
         stage='actual restore service recovery failure'
         from guest_recovery_cases import run_restore_recovery_failure

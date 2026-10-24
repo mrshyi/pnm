@@ -154,6 +154,12 @@ is an interrupted journal, not a claim of automatic recovery or VM/kernel reboot
 Use `core-interruption-hysteria2` for the corresponding UDP/HY2 case with Xray
 as the unchanged peer. Each variant requires a separate fresh guest.
 
+`PNM_GUEST_SCENARIO=restart-readiness` runs the ordinary CLI restart for each
+Core with a guest-owned delayed real ExecStart. At command return its actual
+TCP/UDP listener must exist, applied binding must match the new invocation,
+target resources must be unchanged and the peer untouched. Exactly one startup
+attempt is allowed, followed by both links ready after removing the test drop-in.
+
 The parent prints a safe JSON summary and leaves `boot-result.json`, source
 hashes and protected evidence under the new fixture. Raw CLI/Core output,
 configuration and backups can contain secrets; do not print or publish them.

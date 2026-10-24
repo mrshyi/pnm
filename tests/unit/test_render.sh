@@ -237,6 +237,39 @@ test_runtime_listener_recovery_uses_runtime_ports() (
     done
 )
 
+test_runtime_listener_rejects_unsafe_config_files() (
+    local directory core path rc
+    directory="$(mktemp -d)"
+    trap 'rm -rf -- "$directory"' EXIT
+    load_render_fixtures || return 1
+    pnm_render_hysteria_config NODE HYSTERIA >"$directory/real.yaml" || return 1
+    ln -s "$directory/real.yaml" "$directory/link"
+    mkfifo "$directory/fifo"
+    cat >"$directory/probe.sh" <<'EOF'
+set -Eeuo pipefail
+source "$1/common.sh"
+source "$1/config.sh"
+source "$1/render.sh"
+observer="$2"
+shift 2
+pnm_listener_present() { touch -- "$observer"; return 0; }
+pnm_core_runtime_listener_ready "$@"
+EOF
+    for core in xray hysteria2; do
+        for path in "$directory/fifo" "$directory/link"; do
+            # Keep a missing type guard reproducible without hanging the suite.
+            if timeout 3 bash "$directory/probe.sh" "$PNM_LIB_DIR" "$directory/observed" "$core" "$path"; then
+                rc=0
+            else
+                rc=$?
+            fi
+            assert_eq 70 "$rc" || return 1
+            [[ ! -e "$directory/observed" ]] || return 1
+        done
+    done
+)
+
+run_test 'runtime listener checks reject FIFO and symbolic-link configurations before parsing' test_runtime_listener_rejects_unsafe_config_files
 run_test 'runtime recovery waits for original configured ports and refuses absent unknown or invalid state' test_runtime_listener_recovery_uses_runtime_ports
 run_test 'Xray render and comparison resolve caller-local node/reality arrays' test_xray_renderer_accepts_caller_local_array_names
 run_test 'HY2 render and validation resolve caller-local node/hysteria arrays' test_hysteria_renderer_accepts_caller_local_array_names

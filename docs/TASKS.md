@@ -1,8 +1,8 @@
 # PNM Current Tasks
 
-**Last reconciled:** 2026-10-24 (default31/383; native persistent recovery failure24/24 +24/24 +16/16, TLS17/17, account reuse18/18 and per-Core interruption17/17 pass; broader VM/external acceptance remains open)
+**Last reconciled:** 2026-10-24 (default31/385; native persistent recovery failure24/24 +24/24 +16/16, TLS17/17, account reuse18/18, per-Core interruption17/17 and ordinary restart readiness16/16 pass; broader VM/external acceptance remains open)
 
-**Current increment baseline:** branch `dev`, parent HEAD `ed0a670`, VERSION `0.16.0-rc.1`.
+**Current increment baseline:** branch `dev`, parent HEAD `54d5d67`, VERSION `0.16.0-rc.1`.
 
 **Environment recheck:** the earlier host EIO/EROFS/CreateInstance failure is no
 longer reproduced: Debian root is writable, real `true`/`df` execute successfully
@@ -1444,13 +1444,34 @@ legitimately preserve an active process. Its failed image is retained separately
 Independent source reviews accept the final production repair and per-Core test
 parameterization. This is process interruption, not independent VM/kernel reboot.
 
+## Ordinary restart readiness — 2026-10-24
+
+Recovery/interruption repair is committed as `54d5d67`. Ordinary restart now
+waits for its runtime listener before the original service health, applied binding
+and success; missing/error observations retain78 and enter existing compensation.
+Focused RED0/1 becomes GREEN1/1 (both Cores and both error outcomes). Independent
+review also found HY2 FIFO/symlink input could bypass the helper's bounded probe;
+safe RED times out124, then a regular/readable/non-symlink guard yields15/15
+renderer tests. Final `/var/tmp/pnm-restart-final.mkb7hk8r` passes syntax/security/
+ShellCheck, nine guards and **31 suites/385 tests, exit0**. Eleven Python sources
+compile. The earlier31/384 full result predates the final type guard.
+
+Final native `7xhrrhf0` passes16/16 including both actual delayed CLI restarts,
+ready TCP/UDP at return, single startup attempts, correct new applied binding,
+identical target resources and untouched peer. Native/Make exit0, unchanged host
+databases, scope not-found, no mounts. Control/key/results are under
+`/var/tmp/pnm-restart-final-volume.d52dqp7n`; encrypted full image in the ignored
+D pool passes cipher/raw readback verification, loop detached, cleanup errors
+empty. Earlier regular-file success is retained separately. Independent review
+accepts the type-guard correction; no production or external traffic was tested.
+
 ## Immediate next steps
 
 Startup readiness/harness and initiating-error repairs are committed as
 `ce6713f`, `0bee0d8`, and `580ead7`. Fresh native fault cases now complete the
 recovery-required plan. TLS access, valid-account reuse and per-Core process
-interruption now also pass. Fix ordinary restart's forward readiness gate (it
-still checks only systemd state), then continue other fault-position acceptance,
+interruption now also pass. Ordinary restart's forward readiness gate is repaired.
+Extend actual missing-dependency classes, then continue other fault-position acceptance,
 together with the following external prerequisites;
 the earlier cleanup proposal is unnecessary and all original roots are retained.
 Successful main flow, update/rollback and late-deadline compensation cannot replace

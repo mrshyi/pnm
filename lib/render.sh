@@ -400,8 +400,9 @@ pnm_core_runtime_listener_ready() {
     local core="${1:?core id required}" config="${2:?runtime configuration required}"
     local runtime_values port protocol
     local -A recovered_fields=()
-    # Recovery may restore ports different from desired node.conf. Parse only
-    # the caller's hash-verified runtime generation, preserving disabled policy.
+    [[ -f "$config" && ! -L "$config" && -r "$config" ]] || return "$PNM_EXIT_SOFTWARE"
+    # Inspect runtime ports rather than desired node.conf. Recovery callers
+    # verify the original configuration hash; disabled policy is unchanged.
     case "$core" in
         xray)
             runtime_values="$(pnm_xray_config_runtime_values "$config")" || return "$PNM_EXIT_SOFTWARE"

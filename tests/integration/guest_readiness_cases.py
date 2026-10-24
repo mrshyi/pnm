@@ -4,7 +4,34 @@ import json
 import subprocess
 import time
 
-from guest_start_fault import start_fault, require
+from guest_start_fault import start_fault, require, require_guest
+
+
+def run_restart_readiness(logs, call, core_state, binding, links_ready, passed) -> None:
+    require_guest()
+    observations=[]
+    for core,socket_flag,port in (('xray','-lnt',443),('hysteria2','-lnu',8443)):
+        peer='hysteria2' if core=='xray' else 'xray'
+        before=core_state(core)
+        peer_before=core_state(peer)
+        with start_fault(core,mode='delay') as fault:
+            began=time.monotonic()
+            call('restart-delayed-'+core,['restart',core])
+            elapsed=time.monotonic()-began
+            sockets=subprocess.check_output(['ss','-H',socket_flag],text=True,timeout=5)
+            ready=any(line.split()[3].endswith(':'+str(port)) for line in sockets.splitlines())
+            observations.append({'core':core,'elapsed':round(elapsed,3),
+                                 'listener_present_at_return':ready,'start_attempts':fault['attempts']})
+            (logs/'restart-readiness.json').write_text(json.dumps(observations))
+            require(ready,'ordinary restart returned before actual Core listener readiness')
+            require(fault['attempts']==1 and fault['rejected']==0,'ordinary restart unexpectedly retried startup')
+            binding(core)
+            after=core_state(core)
+            require(after['resources']==before['resources'] and after['invocation']!=before['invocation'],
+                    'ordinary restart did not preserve configuration and refresh the real invocation')
+            require(core_state(peer)==peer_before,'ordinary delayed restart changed peer Core')
+        links_ready('links-after-delayed-restart-'+core)
+        passed.append('actual ordinary '+core+' restart waits for its delayed listener before success and binding')
 
 
 def run_readiness(logs, env, core_state, show, passed) -> None:
