@@ -257,3 +257,15 @@ terminal rollback and clean swaps forward are required. Protected receipts retai
 the real error and cleanup results. No product function is replaced; no host or
 parent-guest mount propagation is changed. These are VFS read-only refusal cases,
 not physical media, fsync/power-loss durability or commit-journal fault evidence.
+
+`restore-publication` reuses that real EROFS move fixture for the fixed HY2
+configuration path after changing/applying the current Xray desired generation.
+The archive node must already have APPLIED evidence distinct from the original,
+while the failed HY2 target has INTENT without APPLIED. Ordinary WRITE count must
+be between0 and the archive resource count. Complete original resource bytes and
+metadata, directory identities, NSS, both fresh bindings and healthy links/checks
+must recover without commit/uncertainty; a trusted restore retry must succeed.
+Safe `restore-partial-publication.json` records counts and the retired EROFS
+receipt. This adds partial-publication coverage; the existing `restore-failure`
+startup mode remains separate, and physical/persistent storage or commit faults
+are not inferred from this transient refusal.

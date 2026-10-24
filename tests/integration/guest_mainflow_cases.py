@@ -1,4 +1,5 @@
 from pathlib import Path
+import base64
 from datetime import datetime
 import fcntl,hashlib,json,os,pwd,grp,re,secrets,signal,socket,stat,subprocess,sys
 from urllib.parse import urlsplit,parse_qs
@@ -182,7 +183,8 @@ def deployment_failure_cases() -> None:
     subprocess.run(['systemctl','daemon-reload'],check=True,timeout=15,capture_output=True)
     passed.append('late deployment deadline restores live services resources accounts and commit state')
 
-def restore_start_failure_case(core_state, binding, links_ready, all_paths, archive, backup_resources) -> None:
+def restore_start_failure_case(core_state, binding, links_ready, all_paths, archive, backup_resources,
+                               *, publication_fault=False) -> None:
     from guest_start_fault import start_fault
     desired=Path('/etc/pnm/node.conf')
     original=desired.read_text()
@@ -191,6 +193,7 @@ def restore_start_failure_case(core_state, binding, links_ready, all_paths, arch
     desired.write_text(changed)
     call('apply-before-restore-failure',['apply','xray'])
     before_resources={p:fingerprint(p) for p in all_paths}
+    check(before_resources!=backup_resources,'restore failure candidate equals the original generation')
     before_services={core:core_state(core) for core in ('xray','hysteria2')}
     directory_paths=('/etc/pnm','/etc/pnm/secrets','/usr/local/etc/xray','/etc/hysteria','/etc/hysteria/tls')
     def directory_state(path: str) -> tuple[int,int,int,int,int]:
@@ -201,15 +204,23 @@ def restore_start_failure_case(core_state, binding, links_ready, all_paths, arch
     transactions=set(Path('/var/lib/pnm/transactions').iterdir())
     check(hashlib.sha256(archive.read_bytes()).hexdigest()==(logs/'trusted-backup.sha256').read_text(),
           'trusted archive changed before failure test')
-    with start_fault('hysteria2') as fault:
-        result=call('restore-start-failure',['restore',str(archive)],accepted=(1,))
+    if publication_fault:
+        from guest_io_fault import readonly_publication
+        context=readonly_publication(logs,env,'/etc/hysteria/config.yaml')
+    else:
+        context=start_fault('hysteria2')
+    with context as fault:
+        result=call('restore-publication-failure' if publication_fault else 'restore-start-failure',
+                    ['restore',str(archive)],accepted=(73 if publication_fault else 1,))
         (logs/'restore-start-failure-state.json').write_text(json.dumps({
             'fault':fault,'services':{core:{field:show(unit,field) for field in
                 ('ActiveState','SubState','Result','MainPID','UnitFileState')}
                 for core,unit in (('xray','xray.service'),('hysteria2','hysteria-server.service'))}}))
-        check(b'Core restore failed (rc=1); prior resources and service policy were restored.' in result.stderr,
+        error='Core restore failed (rc='+('73' if publication_fault else '1')+'); prior resources and service policy were restored.'
+        check(error.encode() in result.stderr,
               'restore failure or recovery cause differs from fixture')
-        check(fault['attempts']==2 and fault['rejected']==1,'restore did not execute failure and compensation starts')
+        if not publication_fault:
+            check(fault['attempts']==2 and fault['rejected']==1,'restore did not execute failure and compensation starts')
         check(before_resources=={p:fingerprint(p) for p in all_paths},'failed restore did not recover original resources')
         check(before_directories=={p:directory_state(p) for p in directory_paths},'failed restore did not recover directory metadata/identity')
         check(identities=={p:fingerprint(p) for p in identities},'restore compensation changed service identities')
@@ -222,12 +233,33 @@ def restore_start_failure_case(core_state, binding, links_ready, all_paths, arch
               'restore compensation left failed local health')
         created=set(Path('/var/lib/pnm/transactions').iterdir())-transactions
         check(len(created)==1,'unexpected failed restore transaction count')
-        journal=(created.pop()/'journal.tsv').read_text().splitlines()
+        transaction=created.pop()
+        journal=(transaction/'journal.tsv').read_text().splitlines()
         events=[line.split('\t')[1] for line in journal]
-        check(sum(event=='WRITE' for event in events)>=12 and 'ROLLBACK_COMPLETE' in events
+        writes=events.count('WRITE')
+        check((0<writes<len(all_paths) if publication_fault else writes>=12) and 'ROLLBACK_COMPLETE' in events
               and events[-1]=='ROLLED_BACK' and 'RECOVERY_REQUIRED' not in events,
               'restore did not fail after publication with completed compensation')
-    passed.append('actual HY2 startup failure after restore publication recovers both original generations')
+        check('COMMIT' not in events and not (transaction/'commit.env').exists()
+              and not (transaction/'commit.env').is_symlink(),'failed restore was committed')
+    if publication_fault:
+        check(fault['probe_errno']==30 and fault['move_rc']==1 and fault['readonly_error']
+              and fault['mount_removed'] and fault['private_namespace'],'partial restore has no real retired EROFS refusal')
+        rows=[line.split('\t') for line in (transaction/'changes.tsv').read_text().splitlines()]
+        node_path=base64.b64encode(b'/etc/pnm/node.conf').decode('ascii')
+        node_writes=[row for row in rows if len(row)==6 and row[0]=='APPLIED' and row[2]==node_path]
+        check(len(node_writes)==1 and node_writes[0][5]==backup_resources['/etc/pnm/node.conf'][0]
+              and node_writes[0][5]!=before_resources['/etc/pnm/node.conf'][0],
+              'restore did not publish the distinct archived node before the failure')
+        target_path=base64.b64encode(b'/etc/hysteria/config.yaml').decode('ascii')
+        check(any(len(row)==6 and row[0]=='INTENT' and row[2]==target_path for row in rows)
+              and not any(len(row)==6 and row[0]=='APPLIED' and row[2]==target_path for row in rows),
+              'restore failure did not precede target publication')
+        (logs/'restore-partial-publication.json').write_text(json.dumps({'ordinary_resources':len(all_paths),
+            'published_before_failure':writes,'changed_node_published':True,
+            'failed_target_unpublished':True,'refusal':fault}))
+    passed.append('actual partial restore EROFS recovers both original generations' if publication_fault else
+                  'actual HY2 startup failure after restore publication recovers both original generations')
     check(hashlib.sha256(archive.read_bytes()).hexdigest()==(logs/'trusted-backup.sha256').read_text(),
           'trusted archive changed before restore retry')
     call('restore-retry-after-start-failure',['restore',str(archive)])
@@ -235,7 +267,8 @@ def restore_start_failure_case(core_state, binding, links_ready, all_paths, arch
     for core in ('xray','hysteria2'):
         binding(core)
     links_ready('links-restored-after-start-failure')
-    passed.append('actual restore retries successfully after completed startup-failure compensation')
+    passed.append('actual restore retries successfully after completed publication-failure compensation' if publication_fault else
+                  'actual restore retries successfully after completed startup-failure compensation')
 
 
 def runtime_evidence_cases(core_state, binding, links_ready) -> None:
@@ -315,7 +348,7 @@ try:
                           'core-rollback-sigkill-xray','core-rollback-sigkill-hysteria2')
     restore_interruptions=('restore-term','restore-sigkill-xray','restore-sigkill-hysteria2')
     publication_cases=('core-publication-previous','core-publication-metadata','core-publication-applied')
-    check(scenario in ('lifecycle','deployment-failure','core-update','core-update-failure','configured-ports',
+    check(scenario in ('lifecycle','deployment-failure','core-update','core-update-failure','configured-ports','restore-publication',
           'runtime-evidence','restore-failure','startup-readiness','core-recovery-failure-xray',
           'core-recovery-failure-hysteria2','restore-recovery-failure','tls-access','account-reuse',
           'core-interruption','core-interruption-hysteria2','restart-readiness','dependency-refusal',
@@ -562,9 +595,10 @@ try:
     if scenario=='runtime-evidence':
         stage='external restart and real consistency lock'
         runtime_evidence_cases(core_state,binding,links_ready)
-    if scenario=='restore-failure':
-        stage='actual restore startup failure compensation'
-        restore_start_failure_case(core_state,binding,links_ready,all_paths,archive,backup_resources)
+    if scenario in ('restore-failure','restore-publication'):
+        stage='actual restore publication failure compensation' if scenario=='restore-publication' else 'actual restore startup failure compensation'
+        restore_start_failure_case(core_state,binding,links_ready,all_paths,archive,backup_resources,
+                                   publication_fault=scenario=='restore-publication')
     if scenario=='startup-readiness':
         stage='actual delayed Core listener readiness'
         from guest_readiness_cases import run_readiness

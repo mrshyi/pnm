@@ -13,6 +13,7 @@ from guest_start_fault import require, require_guest
 
 TARGETS={f'/var/lib/pnm/cores/{core}/{name}'
          for core in ('xray','hysteria2') for name in ('previous','previous.env','applied.env')}
+TARGETS.add('/etc/hysteria/config.yaml')
 
 
 def mounts():

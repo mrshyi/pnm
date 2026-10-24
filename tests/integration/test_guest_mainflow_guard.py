@@ -33,13 +33,15 @@ class GuestGuardTests(unittest.TestCase):
             foreign.mkdir(mode=0o700)
             os.chown(foreign,65534,65534)
             for candidate in (public,link,regular,foreign):
-                result=subprocess.run([sys.executable,'-B',str(DRIVER),
-                    '--baseline',str(root/'missing-baseline'),'--nspawn',str(root/'missing-nspawn'),
-                    '--asset-cache',str(root/'missing-assets'),'--work-dir',str(candidate)],
-                    env={**os.environ,'PNM_RUN_GUEST_TESTS':'1'},capture_output=True,timeout=10)
-                self.assertNotEqual(result.returncode,0)
-                self.assertIn(b'work directory required',result.stderr)
-                self.assertEqual(result.stdout,b'')
+                for scenario in ('lifecycle','restore-publication'):
+                    result=subprocess.run([sys.executable,'-B',str(DRIVER),
+                        '--baseline',str(root/'missing-baseline'),'--nspawn',str(root/'missing-nspawn'),
+                        '--asset-cache',str(root/'missing-assets'),'--work-dir',str(candidate),
+                        '--scenario',scenario],env={**os.environ,'PNM_RUN_GUEST_TESTS':'1'},
+                        capture_output=True,timeout=10)
+                    self.assertNotEqual(result.returncode,0)
+                    self.assertIn(b'work directory required',result.stderr)
+                    self.assertEqual(result.stdout,b'')
             self.assertEqual(regular.read_text(),'sentinel')
 
     @unittest.skipUnless(sys.platform=='linux','Linux namespace guard')

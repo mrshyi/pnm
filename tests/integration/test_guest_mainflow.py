@@ -19,7 +19,7 @@ parser.add_argument('--baseline',type=Path,required=True,help='private verified 
 parser.add_argument('--nspawn',type=Path,required=True,help='trusted native systemd-nspawn executable')
 parser.add_argument('--asset-cache',type=Path,required=True,help='verified pinned Core asset cache')
 parser.add_argument('--scenario',choices=('lifecycle','deployment-failure','core-update','core-update-failure',
-    'configured-ports','runtime-evidence','restore-failure','startup-readiness',
+    'configured-ports','runtime-evidence','restore-failure','restore-publication','startup-readiness',
     'core-recovery-failure-xray','core-recovery-failure-hysteria2','restore-recovery-failure','tls-access',
     'account-reuse','core-interruption','core-interruption-hysteria2','restart-readiness',
     'dependency-refusal','deployment-startup-failure','deployment-listener-failure',
@@ -148,7 +148,7 @@ if is_update:
     shutil.copyfile(repo/'tests/integration/guest_update_cases.py',destination)
     destination.chmod(0o700)
     py_compile.compile(str(destination),cfile=str(base/'guest_update_cases.pyc'),doraise=True)
-if options.scenario in ('core-update-failure','restore-failure','startup-readiness',
+if options.scenario in ('core-update-failure','restore-failure','restore-publication','startup-readiness',
                         'core-recovery-failure-xray','core-recovery-failure-hysteria2','restore-recovery-failure',
                         'tls-access','account-reuse','core-interruption','core-interruption-hysteria2',
                         'restart-readiness','dependency-refusal','deployment-startup-failure','deployment-listener-failure',
@@ -158,7 +158,7 @@ if options.scenario in ('core-update-failure','restore-failure','startup-readine
     shutil.copyfile(repo/'tests/integration/guest_start_fault.py',destination)
     destination.chmod(0o700)
     py_compile.compile(str(destination),cfile=str(base/'guest_start_fault.pyc'),doraise=True)
-if options.scenario in publication_cases:
+if options.scenario in publication_cases+('restore-publication',):
     destination=root/'opt/guest_io_fault.py'
     assert not destination.exists() and not destination.is_symlink()
     shutil.copyfile(repo/'tests/integration/guest_io_fault.py',destination)

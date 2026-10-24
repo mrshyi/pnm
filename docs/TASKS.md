@@ -1,8 +1,8 @@
 # PNM Current Tasks
 
-**Last reconciled:** 2026-10-25 (default31/389; native Core previous/metadata/applied EROFS each26/26 and restore interruption pass; broader commit/restore-write/VM/external acceptance remains open)
+**Last reconciled:** 2026-10-25 (default31/389; native partial restore EROFS16/16, Core publication each26/26 and restore interruption pass; commit/VM/external acceptance remains open)
 
-**Current increment baseline:** branch `dev`, parent HEAD `f6f60ee`, VERSION `0.16.0-rc.1`.
+**Current increment baseline:** branch `dev`, parent HEAD `d475c80`, VERSION `0.16.0-rc.1`.
 
 **Environment recheck:** the earlier host EIO/EROFS/CreateInstance failure is no
 longer reproduced: Debian root is writable, real `true`/`df` execute successfully
@@ -1667,6 +1667,30 @@ this test-only stage. Commit/marker faults, earlier restore-write faults, persis
 storage/power-loss durability, independent VM/reboot, G-01 and external clients
 remain open.
 
+## Native partial restore publication refusal — 2026-10-25
+
+Core publication EROFS acceptance is committed as `d475c80`. T-24 now reuses the
+same private-child move fixture for one additional fixed HY2 configuration path
+and the existing restore failure/retry validation. A different archived node must
+already have APPLIED evidence while the failed target has INTENT but no APPLIED;
+ordinary WRITE count must lie strictly between0 and the resource count. Both
+original resources/modes/UID/GID, directories/NSS and fresh bindings, no commit,
+completed rollback and trusted restore retry are required.
+
+The new routing guard first fails for the absent scenario, then9 guards pass.
+Sixteen Python sources compile; syntax/security/ShellCheck pass. Independent
+source review finds no blocker; the original startup-failure default remains.
+Native `sbvfde8t` passes16/16. Safe observations confirm4 of12 ordinary resources
+published, the distinct archived node applied, the failed target unpublished,
+kernel EROFS30, actual mv1 and removed child bind. Both original generations
+recover with healthy bindings/checks, then trusted restore retry succeeds.
+Native/Make0 leaves unchanged host DBs, scope not-found and no mounts. Control
+`/var/tmp/pnm-restore-publication-volume.5yo2uajz` verifies full encrypted-image
+readback, detached loop and empty cleanup errors. Final review finds no blocker.
+Product Bash is unchanged; the31/389 baseline was not repeated for this test-only
+stage. Commit/marker, persistent storage, VM/reboot, deployed identity and clients stay
+separate.
+
 ## Immediate next steps
 
 Startup readiness/harness and initiating-error repairs are committed as
@@ -1676,10 +1700,11 @@ interruption now also pass. Ordinary restart's forward readiness gate is repaire
 All19 declared prerequisite tools and first-deployment Core startup failures now
 pass real checks. Actual post-health listener absence now passes as well.
 Update/rollback and restore startup interruption now pass. Native transient
-previous binary/metadata/applied publication failures also pass. Continue earlier
-partial-file restore faults, commit/marker and other fault-position acceptance,
-together with the following external prerequisites;
-the earlier cleanup proposal is unnecessary and all original roots are retained.
+previous binary/metadata/applied publication failures and partial restore EROFS
+also pass. Continue commit/marker and other remaining fault-position acceptance.
+Persistent storage and the following VM/deployed-host/external-client prerequisites
+remain separate. The earlier cleanup proposal is unnecessary; all original roots
+are retained.
 Successful main flow, update/rollback and late-deadline compensation cannot replace
 the following VM/reboot, deployed-host and external-client prerequisites.
 
