@@ -18,6 +18,7 @@ stage='initial managed-resource baseline'
 result={}
 ports={'xray':443,'hysteria2':8443}
 default_sockets=[]
+reused_accounts={}
 env={'PATH':'/usr/sbin:/usr/bin:/sbin:/bin','LANG':'C.UTF-8','TZ':'UTC'}
 def check(condition,label):
     if not condition:
@@ -66,7 +67,12 @@ def show(unit,field):
 def fields(path):
     return dict(line.split('=',1) for line in Path(path).read_text().splitlines() if line and not line.startswith('#'))
 def absent():
+    if reused_accounts:
+        check(reused_accounts=={path:fingerprint(path) for path in reused_accounts},
+              'preexisting accounts changed before installation or after compensation')
     for name in ('xray','hysteria'):
+        if reused_accounts:
+            continue
         try:
             pwd.getpwnam(name)
         except KeyError:
@@ -305,7 +311,11 @@ try:
     scenario=Path('/opt/pnm-test-scenario').read_text().strip()
     check(scenario in ('lifecycle','deployment-failure','core-update','core-update-failure','configured-ports',
           'runtime-evidence','restore-failure','startup-readiness','core-recovery-failure-xray',
-          'core-recovery-failure-hysteria2','restore-recovery-failure','tls-access'),'unknown guest scenario')
+          'core-recovery-failure-hysteria2','restore-recovery-failure','tls-access','account-reuse'),'unknown guest scenario')
+    if scenario=='account-reuse':
+        from guest_account_cases import prepare_accounts, require_preserved
+        reused_accounts=prepare_accounts()
+        passed.append('guest-only valid preexisting service identities establish a fixed NSS baseline')
     if scenario=='configured-ports':
         ports={'xray':10443,'hysteria2':18443}
         for kind,port in ((socket.SOCK_STREAM,443),(socket.SOCK_DGRAM,8443)):
@@ -328,7 +338,7 @@ try:
     call('install-preview',['install','--dry-run'])
     absent()
     check(fields('/etc/pnm/node.conf')['PNM_CONFIGURED']=='no','preview committed node state')
-    passed.append('installation preview leaves accounts and runtime resources absent')
+    passed.append('installation preview preserves original accounts and leaves runtime resources absent')
     if scenario=='configured-ports':
         stage='configured-port conflict refusal'
         baseline_paths=('/etc/pnm/node.conf','/etc/pnm/versions.conf','/etc/passwd','/etc/group','/etc/shadow','/etc/gshadow')
@@ -344,9 +354,11 @@ try:
         check(baseline=={p:fingerprint(p) for p in baseline_paths},'port conflict changed configuration or identities')
         check(transactions==set(Path('/var/lib/pnm/transactions').iterdir()),'port conflict began publication')
         passed.append('configured port conflicts refuse before managed writes')
-    if scenario=='deployment-failure':
+    if scenario in ('deployment-failure','account-reuse'):
         stage='actual dependency refusal and late deployment compensation'
         deployment_failure_cases()
+        if reused_accounts:
+            require_preserved(reused_accounts)
     stage='installation apply'
     call('install-apply',['install','--apply','--yes'])
     check(fields('/etc/pnm/node.conf')['PNM_CONFIGURED']=='yes','successful install lacks committed node state')
@@ -365,6 +377,7 @@ try:
         pid=int(show(unit,'MainPID'))
         proc=Path('/proc/'+str(pid)+'/status').read_text()
         check('Uid:\t'+('\t'.join([str(record.pw_uid)]*4)) in proc,'actual Core identity mismatch')
+        check('Gid:\t'+('\t'.join([str(record.pw_gid)]*4)) in proc,'actual Core primary group mismatch')
         check('NoNewPrivs:\t1' in proc,'actual Core can gain privileges')
         cap=next(line.split()[1] for line in proc.splitlines() if line.startswith('CapEff:'))
         check(int(cap,16)==(1024 if name=='xray' else 0),'actual Core capability mismatch')
@@ -525,6 +538,10 @@ try:
         stage='actual managed-account TLS access failures'
         from guest_tls_access import run_tls_access
         run_tls_access(logs,env,call,core_state,binding,links_ready,passed)
+    if scenario=='account-reuse':
+        stage='preexisting account preservation after actual lifecycle'
+        require_preserved(reused_accounts)
+        passed.append('dependency refusal, late rollback and complete real lifecycle preserve preexisting identities without ownership claims')
     result={'passed':True,'checks':passed,'clock_diagnostic':checks.get('time_sync'),'uids_distinct':True,
             'expected_recovery_required':scenario.startswith('core-recovery-failure-') or scenario=='restore-recovery-failure'}
 except Exception as error:

@@ -46,13 +46,13 @@ Stages and stop conditions:
   stops the stage without silently disabling user/cgroup isolation. A boot or
   isolation failure remains an environment limitation and must
   not be reported as application failure or success.
-- [ ] If isolation passes, reuse the pinned verified Core assets and current PNM
+- [x] If isolation passes, reuse the pinned verified Core assets and current PNM
   source. In the guest only, verify actual account provisioning/reuse, unit/Core
   startup, applied/config state, then scoped apply/restart/backup/restore/recovery
   cases. The network fetch boundary may use a narrowly identified local adapter
   fixture; keep production validators/transactions/files/accounts/systemd real.
   Design/review each case before execution and commit verified increments.
-- [ ] Stop only the registered test container/scope after verifying its identity.
+- [x] Stop only the registered test container/scope after verifying its identity.
   Confirm exit and private mount cleanup before deleting any owned fixture.
   Retain protected failure evidence; never perform broad cleanup or host reboot.
 
@@ -131,3 +131,12 @@ passwords and links. Repeat-install refusal and per-Core independence follow
 as separate verified increments. This is offline-cache integration, not network
 download or external connectivity evidence. Keep a clean pre-install rootfs
 snapshot and protected failure evidence; do not reset an uncertain guest state.
+
+2026-10-24 reconciliation: the subsequent native slices in TASKS and the guest
+guide now cover installation, actual account provisioning and valid reuse,
+independent lifecycle, trusted backup/restore and startup/recovery failures.
+Each successful run requires nspawn0, unchanged host databases, a not-found
+scope and no guest mounts. The new D storage's private outer mount and owned
+loop are also released; retained encrypted images are hash-readback verified.
+This closes the two preparation-plan tasks above, without closing the broader
+Phase3 fault matrix, independent VM reboot or external client acceptance.

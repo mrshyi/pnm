@@ -40,6 +40,13 @@ on the actual selected ports refuse before any managed write. It then runs the
 real installation/lifecycle/restore, verifies actual listeners and URI ports,
 and requires both unrelated default sockets to remain untouched.
 
+`PNM_GUEST_SCENARIO=account-reuse` first creates valid system identities only
+inside the guarded clean guest. It then runs the existing dependency-refusal,
+late deployment compensation and full lifecycle cases. Complete NSS file bytes
+and metadata must stay unchanged from that preexisting baseline, real Core
+processes must use the expected UID/GID, and all transaction account ledgers must
+remain empty. This covers valid reuse; it does not simulate account-tool failures.
+
 `PNM_GUEST_SCENARIO=runtime-evidence` restarts each actual Core outside PNM,
 requires show/links to retain unconfirmed applied state and withhold only that
 Core's URI, and checks that PNM restart cannot promote it. Fully validated apply
