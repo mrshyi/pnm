@@ -427,6 +427,56 @@ test_uncertain_commit_does_not_blindly_rollback() (
     assert_eq 70 "$rc"
 )
 
+test_unobservable_marker_does_not_control_services() (
+    local root rc transaction
+    root="$(mktemp -d)"
+    trap 'rm -rf -- "$root"' EXIT
+    prepare_deployment_fixture "$root"
+    pnm_apply_gate_begin && pnm_deploy_execute || return 1
+    pnm_tx_journal COMMIT_INTENT '' || return 1
+    pnm_tx_publish_deployment_commit || return 1
+    ((PNM_TX_COMMITTED == 0)) || return 1
+    pnm_tx_deployment_marker verify "$PNM_TX_PATH" "$PNM_TX_ID" "$PNM_TX_DEPLOYMENT_ID" || return 1
+    transaction="$PNM_TX_PATH"
+    [[ "$transaction" == "$root/state/transactions/tx-fixture" ]] || return 1
+    mv -- "$transaction" "$root/held-transaction" || return 1
+    source <(declare -f pnm_systemctl | sed '1s/pnm_systemctl/pnm_test_original_systemctl/')
+    pnm_systemctl() {
+        printf '%s\n' "$*" >>"$root/controls"
+        pnm_test_original_systemctl "$@"
+    }
+    if pnm_deploy_abort 73 >"$root/abort.out" 2>&1; then rc=0; else rc=$?; fi
+    assert_eq 70 "$rc" || return 1
+    [[ ! -s "$root/controls" ]] || {
+        printf 'unobservable commit marker allowed service controls\n' >&2
+        return 1
+    }
+    assert_eq active "${FIXTURE_ACTIVE[xray.service]}" || return 1
+    assert_eq active "${FIXTURE_ACTIVE[hysteria-server.service]}" || return 1
+    assert_eq 'new binary' "$(<"$root/binary")" || return 1
+    [[ -f "$root/held-transaction/commit.env" ]] || return 1
+    grep -q 'marker state could not be observed; automatic rollback was not attempted' "$root/abort.out" || return 1
+    grep -q 'original_rc=73 recovery_rc=70' "$root/abort.out"
+)
+
+test_marker_observer_failure_does_not_rollback() (
+    local root rc transaction
+    root="$(mktemp -d)"
+    trap 'rm -rf -- "$root"' EXIT
+    prepare_deployment_fixture "$root"
+    pnm_apply_gate_begin && pnm_deploy_execute || return 1
+    pnm_tx_journal COMMIT_INTENT '' || return 1
+    pnm_tx_publish_deployment_commit || return 1
+    transaction="$PNM_TX_PATH"
+    python3() { return 1; }
+    pnm_tx_rollback() { printf 'rollback attempted\n' >>"$root/rollback"; }
+    if pnm_deploy_abort 73 >"$root/abort.out" 2>&1; then rc=0; else rc=$?; fi
+    assert_eq 70 "$rc" || return 1
+    [[ ! -e "$root/rollback" ]] || return 1
+    [[ -f "$transaction/commit.env" ]] || return 1
+    grep -q 'original_rc=73 recovery_rc=70' "$root/abort.out"
+)
+
 test_interrupted_deployment_blocks_writes_and_links() (
     local root rc
     root="$(mktemp -d)"
@@ -546,6 +596,8 @@ run_test 'success publishes one authoritative deployment commit' test_success_ha
 run_test 'progress journal failure after durable commit stays committed' test_commit_progress_failure_stays_committed
 run_test 'metadata drift is retained and blocks subsequent writes' test_metadata_drift_is_not_overwritten
 run_test 'uncertain marker durability retains resources and requires recovery' test_uncertain_commit_does_not_blindly_rollback
+run_test 'unobservable marker never permits service controls or blind rollback' test_unobservable_marker_does_not_control_services
+run_test 'marker observer generic failure never authorizes rollback' test_marker_observer_failure_does_not_rollback
 run_test 'interrupted deployments block new writes and credential-bearing reads' test_interrupted_deployment_blocks_writes_and_links
 run_test 'TERM compensates the live deployment before runtime cleanup' test_term_compensates_before_runtime_cleanup
 finish_tests

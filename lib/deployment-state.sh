@@ -45,6 +45,31 @@ import time
 action, directory, tx_id, deploy_id = sys.argv[1:5]
 temporary = None
 
+# A false shell existence test also covers lookup errors. Bind a checked
+# absence to an open protected directory; inaccessible/missing parents are
+# unknown, and a dangling marker link still counts as present. Dedicated status
+# 3 distinguishes confirmed absence from Python's generic failure status 1.
+if action == "probe":
+    status, descriptor = 2, None
+    try:
+        descriptor = os.open(directory, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        info = os.fstat(descriptor)
+        if stat.S_ISDIR(info.st_mode) and info.st_uid == os.geteuid() and stat.S_IMODE(info.st_mode) == 0o700:
+            try:
+                os.stat("commit.env", dir_fd=descriptor, follow_symlinks=False)
+                status = 0
+            except FileNotFoundError:
+                status = 3
+    except OSError:
+        status = 2
+    finally:
+        if descriptor is not None:
+            try:
+                os.close(descriptor)
+            except OSError:
+                status = 2
+    sys.exit(status)
+
 def protected_file(path, hash_only=False):
     info = os.lstat(path)
     if not stat.S_ISREG(info.st_mode) or stat.S_IMODE(info.st_mode) != 0o600 or info.st_uid != os.geteuid():

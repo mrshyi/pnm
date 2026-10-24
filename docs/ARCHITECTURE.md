@@ -151,6 +151,15 @@ applied evidence. Node initialization still defaults to TCP443/UDP8443.
 
 Deployment publishes a durable uncertainty record before its marker. Uncertain publication or incomplete recovery retains evidence and blocks later writes and protected reads. Before commit, one recovery callback stops affected services, restores resource bytes/metadata and units, verifies each original service policy, then compensates created accounts and directories. Originally absent units remain absent; active-but-disabled baselines are preserved. Recovery refreshes applied InvocationID only for a previously confirmed, hash-matching runtime and unchanged original applied record.
 
+Deployment abort permits compensation only after a checked marker probe confirms
+absence within an opened, owner-matching `0700` transaction directory. The probe
+does not follow the marker or final directory symlinks. A present marker, missing
+or inaccessible directory, unsafe directory metadata, lookup/close failure or
+observer failure retains recovery state without running rollback callbacks.
+Confirmed absence has a dedicated internal status distinct from Python's generic
+failure status. This assumes protected ancestors; it does not guarantee race-free
+resolution against concurrent privileged replacement.
+
 Loaded units and existing Core resources require established PNM ownership receipts before replacement. Valid existing credentials are reused. INT/TERM/EXIT attempt in-process compensation; SIGKILL/reboot detection blocks further changes but does not implement automatic cross-process replay. These behaviors have local filesystem/mock evidence only; real systemd/reboot recovery remains G-02 acceptance work in `docs/TASKS.md`.
 
 ## Core lifecycle, health, and recovery

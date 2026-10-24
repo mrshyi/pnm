@@ -1,8 +1,8 @@
 # PNM Current Tasks
 
-**Last reconciled:** 2026-10-25 (default31/389; native partial restore EROFS16/16, Core publication each26/26 and restore interruption pass; commit/VM/external acceptance remains open)
+**Last reconciled:** 2026-10-25 (default31/391; deployment marker observation repaired, native publisher EROFS15/15; later commit/VM/external acceptance remains open)
 
-**Current increment baseline:** branch `dev`, parent HEAD `4206f2e`, VERSION `0.16.0-rc.1`.
+**Current increment baseline:** branch `dev`, parent HEAD `236b566`, VERSION `0.16.0-rc.1`.
 
 **Environment recheck:** the earlier host EIO/EROFS/CreateInstance failure is no
 longer reproduced: Debian root is writable, real `true`/`df` execute successfully
@@ -1720,6 +1720,40 @@ retention and cleanup, with unchanged host DBs/not-found scope/no mounts.
 Product Bash is
 unchanged; later marker/rename/fsync uncertainty, persistent media, VM/reboot,
 G-01 and external clients stay separate.
+
+## Deployment abort marker observation repair — 2026-10-25
+
+Continue T-17 from `236b566`. A shell `-e`/`-L` false result also covered an
+unavailable transaction directory. The rollback engine retained a failed journal
+append but still invoked service-control callbacks. A private Linux filesystem
+test publishes a real valid marker without setting the in-memory committed flag,
+then moves its own transaction directory aside: old abort wrongly controls
+services (22 pass/1 fail). This is mocked-service evidence, not hardware EIO.
+
+Abort now queries the marker relative to an opened, owner-matching `0700`
+directory, without following its final symlink or the marker. Only dedicated
+status3 means confirmed leaf absence and permits rollback. Existing markers and
+all unknown states retain recovery70, the original error and candidate resources.
+Independent review caught generic Python failure1 being mistaken for absence;
+the added regression reproduces that problem (23 pass/1 fail), then passes after
+the dedicated status repair. Its post-close marker assertion now uses a saved
+transaction path. Final `/var/tmp/pnm-marker-checked-records.s6pfj9_l` passes
+syntax/security/ShellCheck, focused24/24 and full31 suites/391 tests, exit0.
+Frozen production/test bytes match the working tree. Earlier full attempts
+`qsxub6l8` and `we44xriy` remain failed evidence: private source ancestors blocked
+the real nobody test; the latter also had the repaired post-close test assertion.
+Final checks separate readable source from mode0700 logs; no product permissions
+were relaxed. Independent final review finds no blocker.
+
+Final native publisher EROFS guest `_w5ter13` passes15/15 under
+`/var/tmp/pnm-marker-probe-final-native-volume.povfwhp2`: kernel EROFS30 and actual
+publisher73, successful known-absent compensation, original NSS/directories/units,
+no marker/uncertainty/applied residue and complete healthy retry. Native/Make0
+leaves host DBs unchanged, scope not-found and no fixture mounts. Full encrypted
+image readback verifies, the loop is detached and cleanup errors are empty. The earlier
+`jn5cusz_`15/15 run also verified encrypted readback and cleanup, but predates the
+dedicated status repair. Late post-rename SIGKILL remains the next local increment;
+hardware IO failure, independent VM/reboot, G-01 and external clients stay open.
 
 ## Immediate next steps
 

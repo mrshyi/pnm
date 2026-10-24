@@ -365,15 +365,26 @@ pnm_deploy_restore_resources() {
 }
 
 pnm_deploy_abort() {
-    local rc="${1:?original exit code required}" recovery_rc=0
+    local rc="${1:?original exit code required}" recovery_rc=0 marker_rc
     if ((PNM_TX_ACTIVE == 1 && PNM_TX_COMMITTED == 0 && PNM_TX_ROLLED_BACK == 0)); then
-        if [[ -e "$PNM_TX_PATH/commit.env" || -L "$PNM_TX_PATH/commit.env" ]]; then
-            PNM_TX_RECOVERY_REQUIRED=1
-            recovery_rc="$PNM_EXIT_SOFTWARE"
+        PNM_TX_STEP_FAILURE_RC="$rc"
+        if pnm_tx_deployment_marker probe "$PNM_TX_PATH" "$PNM_TX_ID" "$PNM_TX_DEPLOYMENT_ID"; then
+            marker_rc=0
         else
-            PNM_TX_STEP_FAILURE_RC="$rc"
-            pnm_tx_rollback || recovery_rc="$PNM_EXIT_SOFTWARE"
+            marker_rc=$?
         fi
+        case "$marker_rc" in
+            3) pnm_tx_rollback || recovery_rc="$PNM_EXIT_SOFTWARE" ;;
+            *)
+                # Existing or unobservable markers cannot authorize service
+                # controls or file compensation across the commit boundary.
+                if ((marker_rc != 0)); then
+                    pnm_error 'Deployment commit marker state could not be observed; automatic rollback was not attempted.'
+                fi
+                PNM_TX_RECOVERY_REQUIRED=1
+                recovery_rc="$PNM_EXIT_SOFTWARE"
+                ;;
+        esac
     fi
     if ((PNM_TX_RECOVERY_REQUIRED == 1 || recovery_rc != 0)); then
         pnm_error "Deployment failed (original_rc=$rc recovery_rc=$recovery_rc); recovery evidence retained at $PNM_TX_PATH."
