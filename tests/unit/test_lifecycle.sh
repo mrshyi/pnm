@@ -224,6 +224,36 @@ test_ineffective_compensation_keeps_transaction_uncertain() {
     assert_not_contains "$journal" $'ROLLBACK_COMPLETE\t'
 }
 
+test_verified_stop_normalizes_only_observed_failure() (
+    local scenario current controls rc
+    for scenario in inactive failed stop-error reset-error query-error ineffective reset-ineffective final-query-error; do
+        current=active controls=''
+        pnm_systemctl() {
+            controls+="$1,"
+            case "$1" in
+                stop)
+                    [[ "$scenario" != stop-error ]] || return 1
+                    case "$scenario" in failed|reset-error|reset-ineffective|final-query-error) current=failed ;; ineffective) current=active ;; *) current=inactive ;; esac
+                    ;;
+                reset-failed) [[ "$scenario" != reset-error ]] || return 1; [[ "$scenario" == reset-ineffective ]] || current=inactive ;;
+                *) return 77 ;;
+            esac
+        }
+        pnm_systemd_active_state() {
+            [[ "$scenario" != query-error ]] || return 1
+            printf '%s\n' "$current"
+            [[ "$scenario" != final-query-error || "$controls" != 'stop,reset-failed,' ]]
+        }
+        if pnm_systemd_stop_verified xray.service; then rc=0; else rc=$?; fi
+        case "$scenario" in
+            inactive) assert_eq 0 "$rc" && assert_eq 'stop,' "$controls" || return 1 ;;
+            failed) assert_eq 0 "$rc" && assert_eq 'stop,reset-failed,' "$controls" || return 1 ;;
+            *) assert_eq 70 "$rc" || return 1 ;;
+        esac
+    done
+)
+
+run_test 'verified stop normalizes failed state and rejects ineffective or failed controls' test_verified_stop_normalizes_only_observed_failure
 run_test 'lifecycle recovery rejects successful controls without effect' test_recovery_rejects_successful_controls_without_effect
 run_test 'lifecycle recovery accepts all exact supported policies' test_recovery_observes_exact_supported_policy_pairs
 run_test 'lifecycle recovery rejects failed final query with matching stdout' test_recovery_rejects_final_failed_query_with_valid_output

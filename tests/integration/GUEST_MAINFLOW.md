@@ -54,6 +54,14 @@ fingerprints, PNM inventory/transaction set and absent Core/account/service stat
 must remain unchanged. Environment and links are restored per case, followed by
 the normal14-case lifecycle. System binaries/packages are never removed or mocked.
 
+`PNM_GUEST_SCENARIO=deployment-startup-failure` rejects the first real Xray start,
+then the first HY2 start after Xray activation. Both deployments must restore
+authority/NSS bytes and metadata, directory identities, absent Core resources,
+inactive/not-found/PID0 services and no applied/commit promotion, with completed
+rollback receipts. Safe structured observations are retained before assertions.
+The fault fixture never resets failed units itself. The normal14-case lifecycle
+then proves a clean retry after both completed compensations.
+
 `PNM_GUEST_SCENARIO=runtime-evidence` restarts each actual Core outside PNM,
 requires show/links to retain unconfirmed applied state and withhold only that
 Core's URI, and checks that PNM restart cannot promote it. Fully validated apply

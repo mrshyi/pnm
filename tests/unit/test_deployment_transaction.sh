@@ -8,6 +8,7 @@ source "$PROJECT_ROOT/lib/output.sh"
 source "$PROJECT_ROOT/lib/config.sh"
 source "$PROJECT_ROOT/lib/lock.sh"
 source "$PROJECT_ROOT/lib/transaction.sh"
+source "$PROJECT_ROOT/adapters/systemd.sh"
 source "$PROJECT_ROOT/lib/deploy.sh"
 source "$PROJECT_ROOT/lib/apply-gate.sh"
 source "$PROJECT_ROOT/lib/node.sh"
@@ -45,6 +46,7 @@ pnm_systemd_load_state() {
     if [[ -f "$FIXTURE_ROOT/units/$1" ]]; then printf 'loaded\n'; else printf 'not-found\n'; fi
 }
 pnm_systemd_active_state() { printf '%s\n' "${FIXTURE_ACTIVE[$1]}"; }
+pnm_systemd_show_value() { [[ "$2" == MainPID ]] || return 1; printf '0\n'; }
 pnm_systemd_enabled_state() { printf '%s\n' "${FIXTURE_ENABLED[$1]}"; }
 pnm_systemd_daemon_reload() { return 0; }
 pnm_systemd_unit_healthy() { [[ "${FIXTURE_ACTIVE[$1]}" == active && "${FIXTURE_ENABLED[$1]}" == enabled ]]; }
@@ -173,7 +175,7 @@ test_recovered_applied_record_matches_restarted_service() (
     printf 'SCHEMA_VERSION=1\nCORE=xray\nCONFIG_SHA256=%s\nSERVICE_INVOCATION_ID=%s\n' \
         "$(pnm_tx_file_sha256 "$PNM_XRAY_CONFIG")" "$old_invocation" >"$record"
     chmod 0600 "$record"
-    pnm_systemd_show_value() { printf '%s\n' "$FIXTURE_INVOCATION"; }
+    pnm_systemd_show_value() { if [[ "$2" == MainPID ]]; then printf '0\n'; else printf '%s\n' "$FIXTURE_INVOCATION"; fi; }
     fixture_xray() { FIXTURE_ACTIVE[xray.service]=active; FIXTURE_INVOCATION=22222222222222222222222222222222; }
     FIXTURE_ENABLED[xray.service]=disabled FIXTURE_FAILURE=outer-health
     if [[ "${1-}" == drift ]]; then
@@ -255,7 +257,7 @@ PY
     # Desired state may already be different: the recovered hash-bound runtime
     # is authoritative for the port being verified during compensation.
     declare -gA PNM_NODE_CONFIG=([XRAY_PORT]=443 [HY2_PORT]=8443)
-    pnm_systemd_show_value() { printf '22222222222222222222222222222222\n'; }
+    pnm_systemd_show_value() { if [[ "$2" == MainPID ]]; then printf '0\n'; else printf '22222222222222222222222222222222\n'; fi; }
     pnm_listener_present() {
         observed="$1:$2"
         [[ "$1" == "$_fixture_protocol" && "$2" == "$_fixture_port" ]]
@@ -330,7 +332,7 @@ test_unowned_loaded_unit_is_not_stopped() (
     IFS=$'\n\t'
     mkdir -p "$root/etc/systemd/system"
     cp "$root/units/xray.service" "$root/etc/systemd/system/xray.service"
-    pnm_systemd_show_value() { printf '%s/etc/systemd/system/%s\n' "$root" "$1"; }
+    pnm_systemd_show_value() { if [[ "$2" == MainPID ]]; then printf '0\n'; else printf '%s/etc/systemd/system/%s\n' "$root" "$1"; fi; }
     pnm_recovery_unit_has_no_dropins() { return 0; }
     pnm_systemctl() { printf 'unexpected mutation\n' >>"$root/mutations"; return 70; }
     if pnm_apply_gate_execute; then rc=0; else rc=$?; fi
@@ -443,6 +445,72 @@ test_interrupted_deployment_blocks_writes_and_links() (
     assert_eq 'new binary' "$(<"$root/binary")"
 )
 
+test_failed_new_unit_is_reset_before_compensation() (
+    local root rc reset_count=0
+    root="$(mktemp -d)"
+    trap 'rm -rf -- "$root"' EXIT
+    prepare_deployment_fixture "$root"
+    source <(declare -f pnm_systemctl | sed '1s/pnm_systemctl/pnm_test_original_systemctl/')
+    pnm_systemctl() {
+        if [[ "$1" == stop && "${FIXTURE_ACTIVE[$2]}" == failed ]]; then return 0; fi
+        if [[ "$1" == reset-failed ]]; then
+            ((reset_count += 1))
+            FIXTURE_ACTIVE[$2]=inactive
+            return 0
+        fi
+        pnm_test_original_systemctl "$@"
+    }
+    fixture_hysteria() {
+        pnm_systemctl enable hysteria-server.service || return 70
+        FIXTURE_ACTIVE[hysteria-server.service]=failed
+        return 70
+    }
+    if pnm_apply_gate_execute; then rc=0; else rc=$?; fi
+    assert_eq 70 "$rc" || return 1
+    assert_eq 1 "$reset_count" || return 1
+    assert_eq inactive "${FIXTURE_ACTIVE[hysteria-server.service]}" || return 1
+    assert_eq not-found "$(pnm_systemd_load_state hysteria-server.service)" || return 1
+    assert_contains "$(<"$PNM_STATE_DIR/transactions/tx-fixture/journal.tsv")" $'\tROLLED_BACK\t'
+)
+
+test_missing_unit_runtime_is_rejected_before_deployment() (
+    local root variant absent_active absent_pid query_error rc
+    for variant in 'active|123' 'failed|0' 'unknown|0' 'inactive|123' 'inactive|unknown' \
+        'inactive|0|active-query-error' 'inactive|0|pid-query-error'; do
+        root="$(mktemp -d)"
+        trap 'rm -rf -- "$root"' EXIT
+        prepare_deployment_fixture "$root"
+        IFS='|' read -r absent_active absent_pid query_error <<<"$variant"
+        pnm_systemd_active_state() {
+            if [[ "$1" == hysteria-server.service ]]; then printf '%s\n' "$absent_active"; [[ "$query_error" != active-query-error ]]
+            else printf '%s\n' "${FIXTURE_ACTIVE[$1]}"; fi
+        }
+        pnm_systemd_show_value() { printf '%s\n' "$absent_pid"; [[ "$query_error" != pid-query-error ]]; }
+        if pnm_deploy_begin; then rc=0; else rc=$?; fi
+        assert_eq 69 "$rc" || return 1
+        [[ ! -e "$PNM_STATE_DIR" ]] || return 1
+        rm -rf -- "$root"
+    done
+)
+
+test_absent_recovery_unit_requires_inactive_zero_pid() (
+    local root rc
+    root="$(mktemp -d)"
+    trap 'rm -rf -- "$root"' EXIT
+    prepare_deployment_fixture "$root"
+    PNM_DEPLOY_RESOURCES_STARTED=1
+    PNM_DEPLOY_XRAY_LOAD=not-found PNM_DEPLOY_HY2_LOAD=not-found
+    PNM_DEPLOY_XRAY_ACTIVE=inactive PNM_DEPLOY_HY2_ACTIVE=inactive
+    PNM_DEPLOY_XRAY_ENABLED=disabled PNM_DEPLOY_HY2_ENABLED=disabled
+    FIXTURE_ACTIVE[xray.service]=inactive FIXTURE_ACTIVE[hysteria-server.service]=inactive
+    pnm_systemd_load_state() { printf 'not-found\n'; }
+    pnm_systemd_show_value() { printf '0\n'; }
+    pnm_tx_restore_written_files() { FIXTURE_ACTIVE[hysteria-server.service]=failed; return 0; }
+    pnm_tx_restore_directories() { return 0; }
+    if pnm_deploy_restore_resources; then rc=0; else rc=$?; fi
+    assert_eq 70 "$rc"
+)
+
 test_term_compensates_before_runtime_cleanup() (
     local root rc
     root="$(mktemp -d)"
@@ -458,6 +526,9 @@ test_term_compensates_before_runtime_cleanup() (
     assert_eq 'PNM_CONFIGURED=no' "$(<"$PNM_CONFIG_DIR/node.conf")"
 )
 
+run_test 'missing unit with runtime state refuses before deployment writes' test_missing_unit_runtime_is_rejected_before_deployment
+run_test 'absent recovered unit must still be inactive with zero process' test_absent_recovery_unit_requires_inactive_zero_pid
+run_test 'failed newly installed Core unit is reset before resource compensation' test_failed_new_unit_is_reset_before_compensation
 run_test 'outer health failure restores resources node state and both service baselines' test_late_failure_restores_resources_and_services
 run_test 'phase deadline state and commit failures restore the original resources' test_each_phase_failure_restores_baseline
 run_test 'active disabled baseline is restored without changing its enable state' test_active_disabled_baseline_is_restored

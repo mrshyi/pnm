@@ -46,6 +46,7 @@ prepare_deploy() {
     pnm_require_root() { return 0; }
     pnm_systemd_load_state() { printf 'not-found\n'; }
     pnm_systemd_active_state() { printf 'inactive\n'; }
+    pnm_systemd_show_value() { [[ "$2" == MainPID ]] || return 1; printf '0\n'; }
     pnm_systemd_enabled_state() { printf 'disabled\n'; }
     pnm_systemctl() { return 0; }
     pnm_deploy_restore_service_state() { ((DEPLOY_RESTORE_CALLS += 1)); }

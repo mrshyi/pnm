@@ -9,6 +9,7 @@ source "$PROJECT_ROOT/lib/config.sh"
 source "$PROJECT_ROOT/lib/render.sh"
 source "$PROJECT_ROOT/lib/lock.sh"
 source "$PROJECT_ROOT/lib/transaction.sh"
+source "$PROJECT_ROOT/adapters/systemd.sh"
 source "$PROJECT_ROOT/lib/core-ops.sh"
 source "$TEST_ROOT/testlib.sh"
 # Reuse the trusted, non-executable archive fixture generator, not archive data.

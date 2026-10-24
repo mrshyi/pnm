@@ -61,6 +61,7 @@ pnm_deploy_begin() {
     [[ "$xray_load" =~ ^(loaded|not-found)$ && "$hy2_load" =~ ^(loaded|not-found)$ ]] || return "$PNM_EXIT_CONFIG"
     PNM_DEPLOY_XRAY_LOAD="$xray_load" PNM_DEPLOY_HY2_LOAD="$hy2_load"
     if [[ "$xray_load" == not-found ]]; then
+        pnm_systemd_unit_stopped xray.service || return "$PNM_EXIT_UNAVAILABLE"
         PNM_DEPLOY_XRAY_ACTIVE=inactive PNM_DEPLOY_XRAY_ENABLED=disabled
     else
         PNM_DEPLOY_XRAY_ACTIVE="$(pnm_systemd_active_state xray.service 2>/dev/null)" || return "$PNM_EXIT_UNAVAILABLE"
@@ -69,6 +70,7 @@ pnm_deploy_begin() {
         [[ "$PNM_DEPLOY_XRAY_ENABLED" == enabled || "$PNM_DEPLOY_XRAY_ENABLED" == disabled ]] || return "$PNM_EXIT_UNAVAILABLE"
     fi
     if [[ "$hy2_load" == not-found ]]; then
+        pnm_systemd_unit_stopped hysteria-server.service || return "$PNM_EXIT_UNAVAILABLE"
         PNM_DEPLOY_HY2_ACTIVE=inactive PNM_DEPLOY_HY2_ENABLED=disabled
     else
         PNM_DEPLOY_HY2_ACTIVE="$(pnm_systemd_active_state hysteria-server.service 2>/dev/null)" || return "$PNM_EXIT_UNAVAILABLE"
@@ -324,9 +326,11 @@ pnm_deploy_restore_resources() {
         for unit in xray.service hysteria-server.service; do
             load="$(pnm_systemd_load_state "$unit")" || return "$PNM_EXIT_SOFTWARE"
             if [[ "$load" == loaded ]]; then
-                pnm_systemctl stop "$unit" >/dev/null || return "$PNM_EXIT_SOFTWARE"
+                pnm_systemd_stop_verified "$unit" >/dev/null || return "$PNM_EXIT_SOFTWARE"
                 pnm_systemctl disable "$unit" >/dev/null || return "$PNM_EXIT_SOFTWARE"
-            elif [[ "$load" != not-found ]]; then
+            elif [[ "$load" == not-found ]]; then
+                pnm_systemd_unit_stopped "$unit" || return "$PNM_EXIT_SOFTWARE"
+            else
                 return "$PNM_EXIT_SOFTWARE"
             fi
         done
@@ -344,7 +348,10 @@ pnm_deploy_restore_resources() {
         fi
         current="$(pnm_systemd_load_state "$unit")" || return "$PNM_EXIT_SOFTWARE"
         [[ "$current" == "$expected_load" ]] || return "$PNM_EXIT_SOFTWARE"
-        [[ "$expected_load" != not-found ]] || continue
+        if [[ "$expected_load" == not-found ]]; then
+            pnm_systemd_unit_stopped "$unit" || return "$PNM_EXIT_SOFTWARE"
+            continue
+        fi
         [[ "$(pnm_systemd_active_state "$unit")" == "$active" &&
             "$(pnm_systemd_enabled_state "$unit")" == "$enabled" ]] || return "$PNM_EXIT_SOFTWARE"
         if [[ "$active" == active ]]; then

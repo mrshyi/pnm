@@ -48,6 +48,26 @@ pnm_systemd_active_state() {
     pnm_systemd_show_value "$1" ActiveState
 }
 
+# Call only after establishing ownership of the unit being compensated.
+pnm_systemd_stop_verified() {
+    local unit="${1:?unit required}" stopped
+    pnm_systemctl stop "$unit" || return "$PNM_EXIT_SOFTWARE"
+    stopped="$(pnm_systemd_active_state "$unit")" || return "$PNM_EXIT_SOFTWARE"
+    # systemctl stop preserves a failed ExecStart/ExecStartPre result.
+    if [[ "$stopped" == failed ]]; then
+        pnm_systemctl reset-failed "$unit" || return "$PNM_EXIT_SOFTWARE"
+        stopped="$(pnm_systemd_active_state "$unit")" || return "$PNM_EXIT_SOFTWARE"
+    fi
+    [[ "$stopped" == inactive ]] || return "$PNM_EXIT_SOFTWARE"
+}
+
+pnm_systemd_unit_stopped() {
+    local unit="${1:?unit required}" active pid
+    active="$(pnm_systemd_active_state "$unit")" || return 1
+    pid="$(pnm_systemd_show_value "$unit" MainPID)" || return 1
+    [[ "$active" == inactive && "$pid" == 0 ]]
+}
+
 pnm_systemd_sub_state() {
     pnm_systemd_show_value "$1" SubState
 }

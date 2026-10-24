@@ -8,6 +8,7 @@ source "$PROJECT_ROOT/lib/output.sh"
 source "$PROJECT_ROOT/lib/config.sh"
 source "$PROJECT_ROOT/lib/lock.sh"
 source "$PROJECT_ROOT/lib/transaction.sh"
+source "$PROJECT_ROOT/adapters/systemd.sh"
 source "$PROJECT_ROOT/lib/core-ops.sh"
 source "$TEST_ROOT/testlib.sh"
 source <(declare -f pnm_tx_manifest_append | sed '1s/pnm_tx_manifest_append/pnm_test_real_manifest_append/')

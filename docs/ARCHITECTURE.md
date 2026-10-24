@@ -60,6 +60,12 @@ the existing service health check, applied binding and success. Listener absence
 or observation errors preserve the health failure code and enter the existing
 compensation path; they cannot be reported as a successful restart.
 
+Deployment treats a not-found unit as absent only after successful independent
+inactive/MainPID0 queries, both before changes and after compensation. Deployment
+and restore share verified stopping of owned units: an observed failed state is
+reset and queried again before restoring files. Failed controls, ineffective reset
+or observation errors retain recovery uncertainty rather than certifying rollback.
+
 Restart, configuration apply, uninstall and standalone lifecycle now share the same preparation-through-close exclusive lock as update/rollback/restore/backup. The existing helper lives in common code for lifecycle reuse; nested backup/transactions preserve the caller's lock level. Argument/root/confirmation checks precede this boundary. Configuration compensation restores snapshot ownership/mode without normalizing them afterwards. Success paths explicitly propagate close failures, including lifecycle dry-run bookkeeping; uninstall preparation preserves its primary failure across directory cleanup and retains staging when close fails.
 
 The existing unresolved-deployment guard also inspects standalone Core, node-init, install-state and sandbox-install transactions. Writers and protected reads refuse interrupted, abandoned-after-attempt, invalid or recovery-required evidence. Valid committed/rolled-back receipts allow progress. A narrow schema-2 retry exception accepts protected empty receipts with only BEGIN, private SNAPSHOT and ABANDONED events, without any service/restore/commit baseline or attempted step. It does not replay recovery across processes or infer service safety from an empty file manifest.

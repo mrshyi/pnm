@@ -26,6 +26,8 @@ source "$PNM_LIB_DIR/service.sh"
 source "$PNM_LIB_DIR/tls.sh"
 # shellcheck source=../../adapters/assets.sh
 source "$PNM_ADAPTER_DIR/assets.sh"
+# shellcheck source=../../adapters/systemd.sh
+source "$PNM_ADAPTER_DIR/systemd.sh"
 # shellcheck source=../../lib/sandbox-install.sh
 source "$PNM_LIB_DIR/sandbox-install.sh"
 # shellcheck source=../../lib/node.sh
@@ -402,7 +404,7 @@ test_shared_deployment_restores_real_sandbox_resources() (
     }
     pnm_systemd_active_state() { printf '%s\n' "${fixture_active[$1]}"; }
     pnm_systemd_enabled_state() { printf '%s\n' "${fixture_enabled[$1]}"; }
-    pnm_systemd_show_value() { printf '0123456789abcdef0123456789abcdef\n'; }
+    pnm_systemd_show_value() { if [[ "$2" == MainPID ]]; then printf '0\n'; else printf '0123456789abcdef0123456789abcdef\n'; fi; }
     pnm_systemd_daemon_reload() { return 0; }
     pnm_systemctl() {
         case "$1" in
