@@ -64,8 +64,49 @@ test_verified_download_atomically_installs_payload() {
     rm -rf -- "$temp_dir"
 }
 
+asset_failure_preserves_publication_boundary() (
+    local curl_rc="$1" expected_rc="$2" temp_dir fakebin destination digest rc
+    temp_dir="$(mktemp -d)"
+    trap 'rm -rf -- "$temp_dir"' EXIT
+    fakebin="$temp_dir/bin"
+    destination="$temp_dir/payload"
+    mkdir -m 0700 -- "$fakebin"
+    printf 'preserve unrelated file' >"$temp_dir/sentinel"
+    cat >"$fakebin/curl" <<'BASH'
+#!/usr/bin/env bash
+set -Eeuo pipefail
+target=''
+while (($# > 0)); do
+    if [[ "$1" == --output ]]; then target="$2"; shift 2; else shift; fi
+done
+[[ -n "$target" ]]
+printf 'partial unverified asset' >"$target"
+printf '%s\n' "$PNM_TEST_CURL_RC" >"$PNM_TEST_CURL_RECEIPT"
+exit "$PNM_TEST_CURL_RC"
+BASH
+    chmod 0700 -- "$fakebin/curl"
+    digest="$(printf '%064d' 0)"
+    if PNM_TEST_CURL_RC="$curl_rc" PNM_TEST_CURL_RECEIPT="$temp_dir/attempt" PATH="$fakebin:$PATH" \
+        pnm_asset_download_verified xray v1.2.3 "$digest" "$destination"; then rc=0; else rc=$?; fi
+    assert_eq "$curl_rc" "$(<"$temp_dir/attempt")" || return 1
+    assert_eq "$expected_rc" "$rc" || return 1
+    assert_eq 'preserve unrelated file' "$(<"$temp_dir/sentinel")" || return 1
+    [[ ! -e "$destination" && ! -L "$destination" ]] || return 1
+    ! compgen -G "$temp_dir/.pnm-asset.*" >/dev/null
+)
+
+test_failed_download_removes_partial_candidate() {
+    asset_failure_preserves_publication_boundary 22 69
+}
+
+test_checksum_refusal_removes_unverified_candidate() {
+    asset_failure_preserves_publication_boundary 0 78
+}
+
 run_test 'asset URLs are fixed by Core and version' test_asset_urls_are_pinned_by_core_and_version
 run_test 'asset SHA-256 verification fails closed' test_asset_hash_verification
 run_test 'assets output is JSON and excludes Secret values' test_assets_json_has_no_secrets
 run_test 'verified download atomically installs the payload' test_verified_download_atomically_installs_payload
+run_test 'failed download removes its partial candidate without publication' test_failed_download_removes_partial_candidate
+run_test 'checksum refusal removes its unverified candidate without publication' test_checksum_refusal_removes_unverified_candidate
 finish_tests

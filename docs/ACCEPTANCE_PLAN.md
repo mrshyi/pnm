@@ -2,7 +2,7 @@
 
 日期：2026-10-22。对应源码基线：`7a8dfe134f0c07e7ba16d740eb0e3c54db53b9ec`。
 
-**状态：验收计划；L1 已有本地执行记录，L2/L3 仍待执行。** 对应 [实施前评估](IMPLEMENTATION_ASSESSMENT.md) 和 [部署事务设计](DEPLOYMENT_TRANSACTION_DESIGN.md)。初次文档审计的 Linux 环境阻塞已解除；第 6 节记录后续本地执行范围，不代表整份矩阵已通过。
+**状态：验收计划；L1 和选定 Debian 13 L2 场景已有执行记录，完整 L2 矩阵及 L3 尚未通过。** 对应 [实施前评估](IMPLEMENTATION_ASSESSMENT.md) 和 [部署事务设计](DEPLOYMENT_TRANSACTION_DESIGN.md)。2026-10-25 已执行独立内核启动、真实生命周期／不同版本更新、同盘重启及一个提交窗口的突然 VM 中断；最新逐项范围见 [TASKS](TASKS.md#matrix-reconciliation--2026-10-25)。历史执行记录不代表整份矩阵已通过。
 
 ## 1. 分层证据与环境
 

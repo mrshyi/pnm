@@ -60,7 +60,7 @@ does not yet prove a VM can be created or booted.
       process at an observed pending-commit window, reboot its retained owned
       disk and verify on-disk uncertainty and fresh protected-command refusals.
       This is abrupt VM termination, not physical media/power-loss acceptance.
-- [ ] Review remaining matrix positions against executed source/unit/native/VM
+- [x] Review remaining matrix positions against executed source/unit/native/VM
       evidence. Deployed identity G-01 and independent external clients still
       require authorized targets; do not infer them from local tests.
 

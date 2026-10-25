@@ -16,6 +16,7 @@ source "$PNM_LIB_DIR/config.sh"
 source "$PNM_ADAPTER_DIR/assets.sh"
 # shellcheck source=../testlib.sh
 source "$TEST_ROOT/testlib.sh"
+# shellcheck source=tests/unit/test_backup_archive.sh
 source <(sed -n '/^make_backup_archive() {$/,/^}$/p' "$TEST_ROOT/unit/test_backup_archive.sh")
 
 stage_suite_root="$(mktemp -d)"
@@ -59,6 +60,20 @@ test_xray_zip_stage_accepts_safe_archive() {
     [[ -f "$staged" && -x "$staged" ]]
     rm -rf -- "$temp_dir"
 }
+
+test_xray_stage_rejects_nonzip_without_executable_publication() (
+    local temp_dir archive output rc digest
+    temp_dir="$(mktemp -d)"
+    trap 'rm -rf -- "$temp_dir"' EXIT
+    archive="$temp_dir/invalid.zip"
+    printf 'untrusted non-ZIP response' >"$archive"
+    digest="$(sha256sum "$archive" | awk '{print $1}')"
+    if output="$(pnm_asset_stage_xray_zip "$archive" "$temp_dir/staging" 2>/dev/null)"; then rc=0; else rc=$?; fi
+    assert_eq 78 "$rc" || return 1
+    assert_eq '' "$output" || return 1
+    [[ ! -e "$temp_dir/staging/xray-extract/xray" ]] || return 1
+    assert_eq "$digest" "$(sha256sum "$archive" | awk '{print $1}')"
+)
 
 test_temp_directory_output_stays_in_the_calling_shell() {
     local stage='' count rc output
@@ -189,6 +204,7 @@ run_test 'stdout publication failure removes its temporary directory' test_stdou
 run_test 'Hysteria2 binary staging sets executable mode' test_hysteria_binary_stage_is_private_and_executable
 run_test 'Xray ZIP staging rejects traversal members' test_xray_zip_stage_rejects_traversal
 run_test 'Xray ZIP staging accepts a safe archive' test_xray_zip_stage_accepts_safe_archive
+run_test 'non-ZIP response refuses without executable publication or input changes' test_xray_stage_rejects_nonzip_without_executable_publication
 run_test 'temporary path output and cleanup registration stay in the caller' test_temp_directory_output_stays_in_the_calling_shell
 run_test 'restore candidate rejection cleans its real temporary directory on EXIT' test_restore_validation_failure_cleans_real_staging_on_exit
 run_test 'failed temporary cleanup registration propagates and removes the directory' test_failed_cleanup_registration_propagates_without_temp_leak

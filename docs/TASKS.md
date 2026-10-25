@@ -1,8 +1,8 @@
 # PNM Current Tasks
 
-**Last reconciled:** 2026-10-25 (default31/391; native faults, independent Debian lifecycle/reboot and selected abrupt-VM recovery pass; broader storage/update matrix and external acceptance remain open)
+**Last reconciled:** 2026-10-25 (fresh default31/394; independent Debian lifecycle/update/reboot and selected abrupt-VM recovery pass; remaining storage/platform and external acceptance are unverified)
 
-**Current increment baseline:** branch `dev`, parent HEAD `1f68c03`, VERSION `0.16.0-rc.1`.
+**Current increment baseline:** branch `dev`, parent HEAD `1e8c4ad`, VERSION `0.16.0-rc.1`.
 
 **Environment recheck:** the earlier host EIO/EROFS/CreateInstance failure is no
 longer reproduced: Debian root is writable, real `true`/`df` execute successfully
@@ -20,7 +20,7 @@ This page is a status snapshot, not a test report. Status must be refreshed from
 
 ## Active phase
 
-**Phase 3 — existing defect fixes and acceptance.** Phase 4 has not started. Local evidence includes actual managed-account installation, independent restart/apply, trusted backup/restore, late-deadline compensation/retry and distinct-version Core update/rollback in a private Debian guest, plus earlier real Core/local-client checks. Broader update/restore fault recovery, reboot and external clients remain open. The user has authorized consecutive local stages and commits, and confirmed Debian WSL is the only available test environment.
+**Phase 3 — existing defect fixes and acceptance.** Phase 4 has not started. Local evidence includes real managed-account installation, per-Core lifecycle, trusted backup/restore, native fault/recovery slices, independent-kernel VM lifecycle/update/reboot and selected abrupt-VM pending-deployment recovery, plus earlier private real-Core/client checks. Remaining storage/commit positions, deployed-source identity, other platforms and external clients are unverified. The user has authorized consecutive local stages and commits; Debian WSL remains the host of the private KVM guest.
 
 Current review artifacts (2026-10-22):
 
@@ -28,7 +28,7 @@ Current review artifacts (2026-10-22):
 - [Deployment transaction design](DEPLOYMENT_TRANSACTION_DESIGN.md): accepted direction with a dated working-tree scope and remaining differences from the original proposal.
 - [Acceptance plan](ACCEPTANCE_PLAN.md): layered evidence and fault-injection matrix; not an executed test report.
 
-Source review confirms listener health gates, symmetric Core reporting, transactional publication/recovery, trusted-input policy and archive resource limits, unresolved-journal guards and HY2 TLS access checks. Actual guest testing additionally repaired renderer scope, managed health executable selection and Xray candidate format. The remaining work includes integrated update/fault recovery, reboot/fault injection, deployed-source identity and external clients. Detailed chronological increments below retain their original evidence boundaries; the table and final next steps summarize current work.
+Source review confirms listener health gates, symmetric Core reporting, transactional publication/recovery, trusted-input policy and archive resource limits, unresolved-journal guards and HY2 TLS access checks. Actual guest testing additionally repaired renderer scope, managed health executable selection and Xray candidate format. Remaining acceptance includes the unexecuted storage/commit positions, upstream acquisition, other platforms, deployed identity and external clients. Detailed chronological increments below retain their original evidence boundaries; the table and final next steps summarize current work.
 
 ## Safety prerequisite slice — working-tree implementation
 
@@ -103,11 +103,11 @@ not close G-02 or prove systemd recovery, reboot or public client connectivity.
 | Item | Current status | Evidence / blocker | Next action |
 |---|---|---|---|
 | G-01 — runtime/config/link state | BLOCKED for production acceptance | Current `lib/node.sh` source prints an HY2 runtime row. Prior production output reportedly omitted it despite the same VERSION; deployed executable/source identity has not been verified in this session. | On an authorized host, perform read-only path/version/source-hash comparison; do not apply or upgrade as diagnosis. |
-| G-02 — complete deployment rollback | Native fault and independent VM lifecycle/reboot slices PASS / abrupt/storage matrix open | Both Core startup/post-health/deadline/TERM failures compensate and retry. Publisher EROFS compensates; post-rename SIGKILL retains uncertainty. Unknown marker observation forbids blind rollback; deletion refusal retains exact owned identities. Independent Debian mainflow14/reboot7 pass. | Continue abrupt-VM pending-commit acceptance and retain remaining storage/commit-position boundaries; do not infer production readiness. |
-| G-03 — Core update transaction | Native distinct-version, publication and interruption slices PASS / broader matrix open | Both official Cores retain paired current/previous state and peer evidence across startup failure, previous binary/metadata/applied EROFS, TERM and SIGKILL or retain unresolved state. Curl uses a private HTTPS transport fixture. | Independent-kernel reboot and remaining commit/storage positions; upstream acquisition stays separate. |
+| G-02 — complete deployment rollback | Native fault, independent VM lifecycle/reboot and selected abrupt recovery PASS / broader storage matrix open | Native startup/post-health/deadline/TERM compensate and retry. Publisher EROFS compensates; unknown marker observation forbids blind rollback. Actual QEMU post-rename SIGKILL preserves uncertainty across a new kernel and blocks4 fresh commands even with torn progress rows. | Remaining marker/storage positions and external acceptance; do not infer production readiness. |
+| G-03 — Core update transaction | Native fault and independent VM distinct-version/update/reboot slices PASS / broader matrix open | Both official Cores retain paired current/previous state and peer evidence through actual checksum refusal/update/rollback/swap and subsequent VM reboot. Native startup/publication/interruption faults retain recovery or compensate. Curl uses a private HTTPS transport fixture. | Remaining commit/storage positions and upstream acquisition stay separate. |
 | G-04 — backup/restore safety | Native restore fault slices and independent VM trusted restore/reboot PASS / broader matrix open | Actual trusted round trip, partial-write EROFS, TERM/SIGKILL and failed compensation verify bytes/metadata/NSS/applied recovery or retained uncertainty with protected-command refusal. Independent VM mainflow includes trusted restore; the subsequent reboot preserves persisted resources and withholds stale bindings. | Remaining abrupt/storage/client boundaries; do not equate trusted archive validation with arbitrary executable safety. |
 | G-05 — dependency preflight | Actual Debian guest19-tool refusal and repeat refusal PASS | A private PATH individually hides all19 declared preflight prerequisites. Actual JSON install returns2 with the matching FAIL class and preserves authority/NSS fingerprints, PNM inventory/transactions and absent Core/service/account state; normal lifecycle then passes. | Upstream acquisition failures, other distributions and remaining fault positions stay separate. |
-| G-06 — HY2 TLS permissions | Native managed TLS, valid reuse and account-tool refusal slices PASS | Actual service TLS access and permission gates pass; preexisting identities are preserved. Real creation refusal compensates prior identities; real deletion refusal retains precise unfinished ownership/recovery evidence. | Other NSS/platform behavior, independent-kernel VM and external clients remain separate; do not infer external reachability. |
+| G-06 — HY2 TLS permissions | Native TLS/reuse/account faults and independent VM positive lifecycle PASS | Actual service TLS access and permission gates pass; preexisting identities are preserved. Real creation refusal compensates prior identities; deletion refusal retains precise unfinished ownership. Positive managed TLS/Core loading also passes on the independent kernel. | Other NSS/platform/fault behavior and external clients remain separate; do not infer external reachability. |
 
 ## G-02 deployment transaction — working-tree implementation
 
@@ -1990,6 +1990,83 @@ unchanged from this actual run; the default31/391 baseline is
 unchanged, not freshly rerun. Independent review remains unavailable; this
 increment has self-review and executed checks.
 
+## Matrix reconciliation — 2026-10-25
+
+This is a source-to-evidence reconciliation of T-01–T-27 in
+[the acceptance plan](ACCEPTANCE_PLAN.md), not a new27-case execution campaign.
+L1 refers to the recorded full Bash suite; native means the previously recorded
+private nspawn guest sharing WSL's kernel; VM means the independently booted
+Debian13 kernel. Native evidence must not be silently relabeled L2 VM evidence.
+The [guest guide](../tests/integration/GUEST_MAINFLOW.md) names each executable
+scenario; dated records above retain its actual results and limitations.
+
+| ID | Verified boundary | Still not established by that evidence |
+|---|---|---|
+| T-01 | L1, native and VM positive dual-Core install/lifecycle; real identities, bindings, TLS and listeners | External traffic and the whole supported-platform matrix |
+| T-02 | L1 credential/TLS reuse and corruption refusal; native/VM repeat-install refusal preserves resources | A complete VM replay of every existing-credential corruption/reuse branch |
+| T-03 | Native19 prerequisite refusals; native/VM actual checksum refusal; L1 partial-download/checksum candidate cleanup and real non-ZIP rejection | Upstream DNS/PKI/download failures and all acquisition/ZIP failures through real VM install |
+| T-04 | L1 configured-port checks and native configured/default-port conflict lifecycle | Complete independent-VM conflict replay |
+| T-05 | L1 alias/symlink/managed-path and directory protection; host fixture refusal guards | Cross-process privileged ancestor replacement is outside the protected-parent assumption |
+| T-06 | L1 original/missing byte and numeric metadata compensation; selected native complete-resource checks | Every nondefault metadata combination on every L2 operation |
+| T-07 | L1 directory enrollment/drift/empty removal; native directory compensation checks | All externally modified directory timings on the independent kernel |
+| T-08 | Native valid-account reuse and real groupadd/useradd/userdel/groupdel refusal, precise incomplete recovery | Other NSS providers/platforms and account interruption timings |
+| T-09 | Native real first-Xray startup failure and complete compensation/retry | Full VM replay of all startup fault positions |
+| T-10 | Native real first-HY2 failure after Xray activation and complete compensation/retry | Full VM replay of all startup fault positions |
+| T-11 | Native active-without-listener failures for each Core, full compensation/retry | All VM scheduling/listener-failure variants |
+| T-12 | L1 TLS/SNI/pin/access checks; native real managed-account TLS faults; VM positive TLS loading | External handshake/network and every L2 TLS fault combination |
+| T-13 | L1 configured/applied failure paths; native selected applied/publication EROFS compensation | Every node/applied write-failure position through real VM deployment |
+| T-14 | Native actual outer deadline failure, full compensation and clean retry | All late health/deadline timing interleavings |
+| T-15 | L1 commit failure paths; native real uncertainty-create EROFS and compensation | All actual marker create/write/rename storage failures, including ENOSPC/EIO |
+| T-16 | L1 derived progress failure after durable commit preserves committed status | Actual post-marker logging/cleanup storage failures on independent VM/media |
+| T-17 | L1 marker corruption/uncertain publication; native post-rename CLI stop; VM retained marker+uncertainty after abrupt stop | All corruption/fsync/device-failure positions and physical media behavior |
+| T-18 | L1 foreign file/applied metadata drift retention without blind rollback | Every independent-VM external-edit race |
+| T-19 | Native actual TERM/SIGKILL slices; VM SIGKILL of owned QEMU at observed publisher window, same-disk new-kernel refusal with torn journal | Other VM interruption points and physical power loss |
+| T-20 | L1 actual flock; native independent lock holder refuses apply/links without mutation | Every install/apply/reader scheduling interleaving |
+| T-21 | L1 old/unknown schema, unsafe paths/fields and read-only inspection boundaries | This L1 item does not imply safe execution of arbitrary records |
+| T-22 | Native distinct-version startup/publication/TERM/SIGKILL slices; VM update/checksum/rollback/swap and paired previous-state reboot | Remaining commit/storage failures and abrupt-VM update/rollback positions |
+| T-23 | L1 malformed/untrusted archive and resource-budget refusal before candidate execution | Arbitrary executable safety is excluded by trusted-input policy |
+| T-24 | Native trusted restore startup/partial-publication/interruption/recovery slices; VM positive round trip then reboot | Abrupt-VM restore and all remaining storage positions |
+| T-25 | Native real per-Core lifecycle/update/rollback success and selected recovery failures; VM positive lifecycle/update/reboot | Every failure combination on the independent kernel |
+| T-26 | Native external service restart and VM actual new-kernel reboot with stale URI suppression and validated per-Core reconfirmation | External client traffic is a separate assertion |
+| T-27 | Earlier private real-Core/local-client evidence remains a separate layer | L3 external dual-protocol clients/targets are unavailable; not accepted |
+
+No row closes an unexecuted position merely because a unit suite, successful
+commit or positive VM run passed. Deployed-source identity G-01 remains blocked
+without an authorized target; other supported distributions and the remaining
+storage/fault positions remain unverified. Phase3 and release acceptance are not
+complete. The independent review agent remains usage-limited; later increments
+have self-review and executed checks, not independent review approval.
+
+## Acquisition refusal regression and final gates — 2026-10-25
+
+The matrix audit identifies three missing explicit L1 refusal assertions. Add
+partial curl failure and checksum mismatch tests that require the exact69/78
+classes, confirmed fixture invocation, absent final payload, removed private
+candidate and an unchanged unrelated sentinel. The curl executable is a local
+controlled stand-in, not a real upstream failure. Real unzip rejects a non-ZIP
+response78 without emitting a staged executable or changing its input archive.
+These tests pass6/6 assets and11/11 staging, and add3 cases to the full baseline.
+
+`/var/tmp/pnm-acquisition-gates.0ob38zfp` final static gates and `make check`
+pass0:31 suites,394 cases,0 failures. The first snapshot omitted the repository's
+.shellcheckrc and fake-command executable mode; its static failure and383/11 full
+result are invalid fixture evidence, retained in the earlier logs. Correct the
+snapshot using the unchanged tracked ShellCheck configuration and exact Git
+file modes, without modifying product code or adding disabled lint rules. The
+final full runtime matches the working tree except a subsequent comment that
+identifies the existing extracted backup-fixture source to ShellCheck. After
+that annotation, staging11/11 and standalone ShellCheck for both changed test
+files pass; no runtime statement differs from the full passing snapshot.
+Final current-worktree static gates pass,43 local documentation paths resolve,
+all27 matrix IDs occur exactly once, and a fresh host NSS/dpkg comparison matches
+the pre-tooling baseline.
+
+The T-01–T-27 reconciliation above and the acceptance-plan status now distinguish
+selected native/VM evidence from the complete L2/L3 matrix. All protected images,
+failed-run evidence and unrelated untracked cache are retained. No VERSION,
+production service, firewall, host package installation, push, tag or release is
+changed by this increment.
+
 ## Immediate next steps
 
 Selected abrupt-VM recovery is committed as `1f68c03`. The follow-on G-03 slice
@@ -2037,11 +2114,11 @@ proposal is unnecessary; all original roots are retained.
 Successful main flow, update/rollback and late-deadline compensation cannot replace
 the following VM/reboot, deployed-host and external-client prerequisites.
 
-1. Continue G-03 with actual distinct-version update/rollback and paired previous-state persistence across the independent VM reboot; the current14+7 slice did not run the update matrix.
-2. Reconcile remaining T-01–T-27 positions against source/unit/native/VM evidence, retaining unexecuted storage/commit positions explicitly.
-3. Confirm deployed PNM source identity for G-01 using read-only checks when an authorized target is provided; none is currently available.
-4. Record external dual-protocol client handshake/traffic separately when clients/targets are supplied; local listeners and private clients do not replace L3.
-5. Reassess Phase3 completion against those remaining gates. Do not start Phase4 or release work automatically.
+1. Confirm deployed PNM source identity for G-01 using read-only checks when an authorized target is provided; none is currently available.
+2. Complete the unexecuted storage/commit positions in the reconciliation only in a disposable, controlled fault environment; do not infer physical failure behavior from the selected VM stop.
+3. Record external dual-protocol client handshake/traffic when clients/targets are supplied; none is currently available and local evidence does not replace L3.
+4. Keep Debian12/Ubuntu22.04/24.04 as unverified platform acceptance until their own execution evidence exists; os-release fixtures are L1 only.
+5. Reassess Phase3 completion against those gates. The planned local VM stages and matrix reconciliation are complete; Phase3 as a whole is not. Do not start Phase4 or release work automatically.
 
 Local account/lifecycle acceptance can now continue in the verified Debian WSL
 container. Remaining external prerequisites include an authorized deployed source
