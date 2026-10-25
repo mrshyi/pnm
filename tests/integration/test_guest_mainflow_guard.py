@@ -18,6 +18,32 @@ DRIVER=Path(__file__).with_name('test_guest_mainflow.py')
 
 
 class GuestGuardTests(unittest.TestCase):
+    @unittest.skipUnless(sys.platform=='linux','Linux VM worker refusal')
+    def test_independent_vm_worker_refuses_host_before_controls(self):
+        if Path('/sys/firmware/qemu_fw_cfg/by_name/opt/pnm/instance/raw').exists():
+            self.skipTest('actual explicitly prepared VM environment')
+        script='''import sys
+sys.path.insert(0,sys.argv[1])
+import guest_vm_boot as fixture
+def forbidden(*args,**kwargs):
+    raise AssertionError('host reached VM control operation')
+fixture.os.open=forbidden
+fixture.os.system=forbidden
+fixture.os.kill=forbidden
+fixture.os.killpg=forbidden
+fixture.subprocess.run=forbidden
+fixture.subprocess.Popen=forbidden
+for entry in (fixture.require_vm,fixture.main):
+    try:
+        entry()
+        raise AssertionError('host accepted as independent VM')
+    except fixture.GuestRefusal as error:
+        assert str(error)=='VM worker requires the approved independent guest'
+'''
+        result=subprocess.run([sys.executable,'-B','-c',script,str(DRIVER.parent)],
+                              capture_output=True,timeout=10)
+        self.assertEqual(result.returncode,0,result.stderr.decode(errors='replace'))
+
     @unittest.skipUnless(sys.platform=='linux' and os.geteuid()==0,'Linux work-directory policy')
     def test_custom_work_directory_rejects_unsafe_paths_before_fixture_access(self):
         with tempfile.TemporaryDirectory(prefix='pnm-workdir-guard.') as directory:

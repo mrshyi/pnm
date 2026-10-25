@@ -1864,6 +1864,61 @@ from the verified `292b682` full31/391 baseline; it was not rerun for this
 integration-only increment.
 Product Bash is unchanged;31/391 remains the full baseline.
 
+## Independent Debian VM preparation — 2026-10-25
+
+Account deletion acceptance is committed as `820d6cc`. Continue the existing
+independent-kernel VM/reboot gate with the available WSL host rather than
+assuming missing emulator packages make it impossible. Initial read-only checks
+observe KVM API12, no installed QEMU/kernel/initrd and APT candidate metadata.
+`/var/tmp/pnm-vm-tools.s1a8keac` then creates and immediately closes an empty
+KVM VM descriptor successfully, with unchanged host NSS/dpkg hashes. This is not
+KVM_RUN or boot evidence. Full baseline ownership inspection covers10,184
+entries within the unshifted numeric range; key path samples are0:0. No ownership
+conversion is performed. The first owned ext4 clone preserves the compared
+account/init bytes, modes and numeric ownership.
+
+Private APT configuration inspection now passes: APT_CONFIG/main/parts/sources/
+preferences/auth/status/cache/log paths are isolated and effective Pre/Post-
+Invoke hooks are absent. Signature, date/validity and archive hash checks remain
+enabled; only explicit official Debian13 sources are configured. The installed
+public `.gpg` keyring is a protected alias to `.pgp`; after validating its root-
+owned canonical target/ancestors, a private snapshot is used without modifying
+system trust. The initial regular-file assumption stopped preparation before any
+download and was corrected. Host databases remain unchanged. The download-only
+script passed independent review. Authenticated APT refresh/download now passes:
+38 packages,124MiB, including QEMU10.0.13 and Debian kernel6.12.113+deb13-amd64.
+Every archive's size/SHA256 matches fresh signed metadata before parsing its
+control fields. All38 data archives are extracted privately without maintainer
+scripts or host installation. QEMU/busybox/cpio runtime probes pass; private
+depmod/modprobe resolution supplies8 initramfs modules. The1,770,448-byte
+initramfs has a recorded SHA256; its real host invocation refuses77 before any
+mount, with unchanged mountinfo and host databases. Baseline ownership covers
+10,184 entries. Busybox provides findfs rather than blkid, so the init script
+uses findfs and still requires the supplied UUID to resolve to/dev/vda.
+
+Preboot checks `/var/tmp/pnm-vm-preboot-gates.yf42qq4w` pass12 host guards,
+20 integration Python compilations and syntax/security/ShellCheck. The first
+boot attempt `/var/tmp/pnm-vm-boot-volume.twmcogmx` stops before the guest kernel:
+legacy QEMU -drive auto-opens O_RDONLY while the exclusive anonymous fdset has
+only O_RDWR. The failure is reproduced on a small fresh anonymous file; explicit
+file/raw -blockdev permissions survive the bounded paused-VM probe with default
+locking retained. The failed disk is fully encrypted/readback-verified, the loop
+is detached, QEMU is quiescent, host databases are unchanged and cleanup is empty.
+Fresh `/var/tmp/pnm-vm-boot-volume.n79xtpbb` now passes the complete boot-only
+slice: actual Debian13 kernel6.12.113+deb13-amd64, systemd running, distinct
+boot/machine identities, only lo, matching live QEMU PID/start/executable/argv
+and anonymous disk FD, one-use serial approval, persisted guest result, clean
+powerdown and QEMU exit0. Full2GiB encrypted image readback matches the original
+digest; loop detached, QEMU quiescent, host NSS/dpkg unchanged and cleanup empty.
+No PNM resources are installed in this boot-only slice. PNM lifecycle, same-disk
+independent reboot and abrupt-VM interruption remain separate next steps.
+Independent review of later extraction/initramfs/operator code was unavailable
+after the reviewer reached its usage limit; compilation, self-review and actual
+checks are recorded separately and do not stand in for independent review.
+The [separate plan](superpowers/plans/2026-10-25-independent-debian-vm.md) retains
+raw exclusive owned storage, explicit QEMU device/config restrictions, nonce/
+live-process/serial binding and encrypted full-image/cleanup requirements.
+
 ## Immediate next steps
 
 Startup readiness/harness and initiating-error repairs are committed as
@@ -1877,10 +1932,10 @@ previous binary/metadata/applied publication failures and partial restore EROFS
 also pass. Native publisher EROFS, late post-rename SIGKILL and all four account
 tool refusal slices now pass as recorded above. Continue the
 [independent Debian VM plan](superpowers/plans/2026-10-25-independent-debian-vm.md):
-read-only preflight observes KVM API12 and APT candidates but no emulator or boot
-artifacts; package authentication, private preparation and actual VM boot remain
-unverified. Missing tools are a preparation task, not proof that WSL cannot run
-an independent guest kernel. Persistent storage, remaining fault positions and
+private authenticated tools/initramfs and the independent boot-only slice now
+pass, including clean poweroff and full encrypted image verification. Continue
+with actual PNM lifecycle on the independent kernel and same-disk reboot.
+Persistent storage, remaining fault positions and
 deployed-host/external-client prerequisites stay separate. The earlier cleanup
 proposal is unnecessary; all original roots are retained.
 Successful main flow, update/rollback and late-deadline compensation cannot replace
@@ -1894,7 +1949,7 @@ the following VM/reboot, deployed-host and external-client prerequisites.
 
 Local account/lifecycle acceptance can now continue in the verified Debian WSL
 container. Remaining external prerequisites include an authorized deployed source
-identity for G-01, an independent disposable VM for kernel reboot/fault injection,
+identity for G-01, same-disk independent-kernel reboot/fault acceptance,
 and external clients for dual-protocol traffic. The stand-in and private-network
 Core/container results do not close those external items;
 Phase 3 remains incomplete and release work has not started.

@@ -6,6 +6,20 @@ binds host directories or changes host accounts/network/firewall configuration.
 Default `make check` does not run it. It currently targets the verified hybrid
 WSL cgroup layout; another layout fails closed.
 
+The separate `guest_vm_boot.py` worker is a boot-only probe for the privately
+prepared independent Debian VM described in the
+[VM plan](../../docs/superpowers/plans/2026-10-25-independent-debian-vm.md).
+It does not install PNM or extend the mapped-container acceptance route. Its
+read-only guard requires the expected protected worker hash/kernel/root UUID,
+QEMU firmware nonce, independent boot ID, systemd PID1, QEMU DMI identity and
+loopback-only networking before opening serial or issuing power commands.
+Only the exact matching live QEMU/disk owner may approve the bounded serial
+handshake. Success requires evidence persistence, actual clean poweroff and host
+verification; a ready message alone is insufficient. Ordinary host execution
+refuses77 before serial/power controls, covered by the host guard suite. This
+worker alone is not a VM launcher; trusted tools, image preparation and owned
+storage/process cleanup remain prerequisites.
+
 Prerequisites are the signed, private rootfs and successful native boot fixture
 described in [the preparation plan](../../docs/superpowers/plans/2026-10-23-container-mainflow.md):
 root-owned mode-0700 parent, canonical `rootfs`, successful `boot-result.json`,
