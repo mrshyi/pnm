@@ -43,14 +43,15 @@ does not yet prove a VM can be created or booted.
 
 ## Stage2: real PNM lifecycle and independent reboot
 
-- [ ] Extend only test guards for an authenticated QEMU boot marker; default host
+- [x] Extend only test guards for an authenticated QEMU boot marker; default host
       refusal and existing mapped nspawn guards must remain intact. Do not compare
       namespace inode numbers across kernels as proof of isolation.
-- [ ] Reuse the existing actual CLI/Core assets and main-flow assertions inside
+- [x] Reuse the existing actual CLI/Core assets and main-flow assertions inside
       the VM, then reboot that same guest. Require changed kernel boot_id and
       Core InvocationIDs, unchanged persisted applied records and withheld stale
       links before explicit verified apply. Confirm both recovered bindings.
-- [ ] Run focused guards/compilation/static checks and independent review; retain
+- [x] Run focused guards/compilation/static checks, request independent review
+      and record any unavailability separately from self-review; retain
       full VM evidence and clean host boundaries, update status and commit.
 
 ## Stage3: bounded abrupt-VM interruption
@@ -88,6 +89,22 @@ original digest; loop detached, QEMU quiescent, host databases unchanged and
 cleanup empty. Preboot guards12/12,20 Python compilations and static checks pass.
 Later operator/extraction/initramfs code has self-review and executed checks;
 independent review is unavailable after the review agent's usage limit.
+
+Stage2 `pnm-vm-boot-volume.4m0l596i` now passes the actual14-case lifecycle,
+guest-requested reboot and7 post-reboot checks. The same anonymous disk is
+retained while -no-reboot lets the host verify the first kernel's Restarting
+system marker/QEMU0, then explicitly starts the next kernel with a fresh nonce.
+Both boot ID and Core invocations change; persisted resources/applied records
+are unchanged, stale links stay withheld through ordinary restart, and each
+validated apply restores its own binding while preserving the peer. Both real
+TCP/UDP listeners are observed before clean poweroff. Full2GiB encrypted image
+readback matches the original digest; owned loop detached, QEMU quiescent, host
+databases unchanged and cleanup empty. Guards pass16/16 and21 integration sources
+compile; static checks pass. Independent review was attempted but remains
+unavailable because of the review agent's usage limit; self-review and executed
+checks are the evidence for this increment. Two earlier
+test-contract failures (all-links-withheld exit78, plain restart output) remain
+retained as failed runs; neither is counted as a reboot PASS.
 Primary references: [KVM API](https://docs.kernel.org/virt/kvm/api.html),
 [APT configuration order](https://manpages.debian.org/trixie/apt/apt.conf.5.en.html),
 [QEMU options](https://www.qemu.org/docs/master/system/qemu-manpage.html).

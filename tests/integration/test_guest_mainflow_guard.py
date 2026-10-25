@@ -18,6 +18,23 @@ DRIVER=Path(__file__).with_name('test_guest_mainflow.py')
 
 
 class GuestGuardTests(unittest.TestCase):
+    def test_vm_reboot_cli_preserves_plain_and_json_output_contracts(self):
+        tree=ast.parse(DRIVER.with_name('guest_vm_lifecycle.py').read_text())
+        outer=next(node for node in tree.body if isinstance(node,ast.FunctionDef)
+                   and node.name=='reboot_acceptance')
+        function=next(node for node in outer.body if isinstance(node,ast.FunctionDef)
+                      and node.name=='call')
+        from unittest.mock import Mock
+        runner=Mock()
+        with tempfile.TemporaryDirectory(prefix='pnm-vm-output-contract.') as directory:
+            namespace={'subprocess':runner,'logs':Path(directory),'json':json,
+                       'need':lambda condition,label:self.assertTrue(condition,label)}
+            exec(compile(ast.Module(body=[function],type_ignores=[]),'<actual-vm-cli-call>','exec'),namespace)
+            runner.run.return_value=subprocess.CompletedProcess([],0,b'Core restart complete.\n',b'')
+            self.assertEqual(namespace['call']('restart',['restart','xray']),{})
+            runner.run.return_value=subprocess.CompletedProcess([],78,b'{"safe":true}\n',b'')
+            self.assertEqual(namespace['call']('show',['--json','node','show'],(78,)),{'safe':True})
+
     @unittest.skipUnless(sys.platform=='linux','Linux VM worker refusal')
     def test_independent_vm_worker_refuses_host_before_controls(self):
         if Path('/sys/firmware/qemu_fw_cfg/by_name/opt/pnm/instance/raw').exists():
@@ -33,12 +50,73 @@ fixture.os.kill=forbidden
 fixture.os.killpg=forbidden
 fixture.subprocess.run=forbidden
 fixture.subprocess.Popen=forbidden
-for entry in (fixture.require_vm,fixture.main):
+for entry in (fixture.require_vm,fixture.require_approved_vm,fixture.main):
     try:
         entry()
         raise AssertionError('host accepted as independent VM')
     except fixture.GuestRefusal as error:
         assert str(error)=='VM worker requires the approved independent guest'
+'''
+        result=subprocess.run([sys.executable,'-B','-c',script,str(DRIVER.parent)],
+                              capture_output=True,timeout=10)
+        self.assertEqual(result.returncode,0,result.stderr.decode(errors='replace'))
+
+    @unittest.skipUnless(sys.platform=='linux','Linux VM lifecycle worker refusal')
+    def test_independent_vm_lifecycle_refuses_host_before_controls(self):
+        script='''import sys
+sys.path.insert(0,sys.argv[1])
+import guest_vm_lifecycle as fixture
+def forbidden(*args,**kwargs):
+    raise AssertionError('host reached lifecycle control operation')
+fixture.os.open=forbidden
+fixture.subprocess.run=forbidden
+try:
+    fixture.main()
+    raise AssertionError('host accepted as lifecycle VM')
+except fixture.GuestRefusal:
+    pass
+'''
+        result=subprocess.run([sys.executable,'-B','-c',script,str(DRIVER.parent)],
+                              capture_output=True,timeout=10)
+        self.assertEqual(result.returncode,0,result.stderr.decode(errors='replace'))
+
+    @unittest.skipUnless(sys.platform=='linux' and os.geteuid()==0,'Linux VM approval policy')
+    def test_vm_mutation_rejects_stale_boot_approval(self):
+        script='''import json,os,sys,tempfile
+from pathlib import Path
+from unittest.mock import patch
+sys.path.insert(0,sys.argv[1])
+import guest_vm_boot as fixture
+identity=fixture.VmIdentity('a'*32,'current-boot','root','kernel','b'*64)
+with tempfile.TemporaryDirectory(prefix='pnm-stale-vm-approval.') as directory:
+    proof=Path(directory)/'approval'
+    proof.write_text(json.dumps({'schema':1,'instance':identity.instance,
+        'boot_id':'previous-boot','scope':'pnm-lifecycle'}))
+    proof.chmod(0o600)
+    with patch.object(fixture,'require_vm',return_value=identity),patch.object(fixture,'Path',return_value=proof):
+        try:
+            fixture.require_approved_vm()
+            raise AssertionError('stale VM approval accepted')
+        except fixture.GuestRefusal:
+            pass
+'''
+        result=subprocess.run([sys.executable,'-B','-c',script,str(DRIVER.parent)],
+                              capture_output=True,timeout=10)
+        self.assertEqual(result.returncode,0,result.stderr.decode(errors='replace'))
+
+    @unittest.skipUnless(sys.platform=='linux','Linux actual cases host refusal')
+    def test_actual_mainflow_cases_refuse_host_before_writes(self):
+        script='''import runpy,sys
+from pathlib import Path
+sys.path.insert(0,sys.argv[1])
+def forbidden(*args,**kwargs):
+    raise AssertionError('host reached actual case write')
+Path.mkdir=forbidden
+try:
+    runpy.run_path(str(Path(sys.argv[1])/'guest_mainflow_cases.py'),run_name='__main__')
+    raise AssertionError('host accepted for actual cases')
+except SystemExit as error:
+    assert error.code==77
 '''
         result=subprocess.run([sys.executable,'-B','-c',script,str(DRIVER.parent)],
                               capture_output=True,timeout=10)

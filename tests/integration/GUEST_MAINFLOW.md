@@ -20,6 +20,19 @@ refuses77 before serial/power controls, covered by the host guard suite. This
 worker alone is not a VM launcher; trusted tools, image preparation and owned
 storage/process cleanup remain prerequisites.
 
+`guest_vm_lifecycle.py` reuses that guarded serial handshake and the existing
+14-case CLI lifecycle on an independent kernel. It grants a mode-0600 approval
+record only after the matching live host handshake; the actual cases accept
+the VM route only with that boot's instance/boot ID. The mapped-container guard
+remains unchanged. The first guest requests reboot; the owner retains the same
+anonymous disk while QEMU exits on -no-reboot, then explicitly launches the
+second kernel with a fresh nonce. Reboot acceptance compares both changed
+service invocations and persisted resource/applied fingerprints, requires stale
+URIs to remain withheld through ordinary restart, and checks independent apply
+and both real listeners before clean poweroff. Its private records and outputs
+may contain credentials and must remain inside the protected guest evidence and
+fully encrypted image. Default checks never launch this worker.
+
 Prerequisites are the signed, private rootfs and successful native boot fixture
 described in [the preparation plan](../../docs/superpowers/plans/2026-10-23-container-mainflow.md):
 root-owned mode-0700 parent, canonical `rootfs`, successful `boot-result.json`,

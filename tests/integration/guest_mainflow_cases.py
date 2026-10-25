@@ -6,11 +6,21 @@ from urllib.parse import urlsplit,parse_qs
 mapping=[int(x) for x in Path('/proc/self/uid_map').read_text().split()]
 if sys.flags.optimize:
     raise SystemExit('enabled assertions required')
-if os.geteuid()!=0 or len(mapping)!=3 or mapping[0]!=0 or mapping[1]<=0 or mapping[2]!=65536:
+if os.geteuid()!=0:
     raise SystemExit(77)
-expected=json.loads(Path('/opt/pnm-boot-expected.json').read_text())
-assert all(os.stat('/proc/self/ns/'+n).st_ino!=v for n,v in expected['host_namespaces'].items())
-assert Path('/run/host/container-manager').read_text().strip()=='systemd-nspawn'
+if len(mapping)==3 and mapping[0]==0 and mapping[1]>0 and mapping[2]==65536:
+    expected=json.loads(Path('/opt/pnm-boot-expected.json').read_text())
+    assert all(os.stat('/proc/self/ns/'+n).st_ino!=v for n,v in expected['host_namespaces'].items())
+    assert Path('/run/host/container-manager').read_text().strip()=='systemd-nspawn'
+else:
+    try:
+        from guest_vm_boot import GuestRefusal, require_approved_vm
+    except ImportError:
+        raise SystemExit(77) from None
+    try:
+        require_approved_vm()
+    except GuestRefusal:
+        raise SystemExit(77) from None
 logs=Path('/var/tmp/pnm-install-evidence')
 logs.mkdir(mode=0o700)
 os.umask(0o077)

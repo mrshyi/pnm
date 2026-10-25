@@ -12,6 +12,7 @@ import subprocess
 import sys
 import termios
 import time
+from typing import Callable
 
 
 class GuestRefusal(RuntimeError):
@@ -70,13 +71,35 @@ def require_vm() -> VmIdentity:
         raise GuestRefusal(message) from error
 
 
-def main() -> None:
+def require_approved_vm() -> VmIdentity:
+    """Mutation helpers require this boot's post-handshake private approval."""
     identity=require_vm()
+    try:
+        path=Path('/run/pnm-vm-approved.json')
+        info=path.lstat()
+        if (path.resolve()!=path or not stat.S_ISREG(info.st_mode) or info.st_uid!=0
+                or stat.S_IMODE(info.st_mode)!=0o600 or info.st_nlink!=1 or info.st_size>2048):
+            raise ValueError('approval protection')
+        record=json.loads(path.read_text())
+        if (record!={'schema':1,'instance':identity.instance,'boot_id':identity.boot_id,
+                     'scope':'pnm-lifecycle'} or type(record.get('schema')) is not int):
+            raise ValueError('approval identity')
+        return identity
+    except (OSError,ValueError,TypeError) as error:
+        raise GuestRefusal('VM mutation requires this boot approval') from error
+
+
+def main(*, action: Callable[[],dict] | None=None, scope: str='boot-only',
+         power_action: str='poweroff') -> None:
+    identity=require_vm()
+    if (scope not in ('boot-only','pnm-lifecycle','pnm-reboot')
+            or (action is None)!=(scope=='boot-only') or power_action not in ('poweroff','reboot')):
+        raise GuestRefusal('VM action scope is invalid')
     # The identity guard above must remain before every serial/power operation.
     descriptor=None
     emit=None
     result={'schema':1,'kind':'boot-result','instance':identity.instance,
-            'boot_id':identity.boot_id,'passed':False,'scope':'boot-only'}
+            'boot_id':identity.boot_id,'passed':False,'scope':scope}
     stage='serial setup'
     try:
         descriptor=os.open('/dev/ttyS0',os.O_RDWR|os.O_NOCTTY|os.O_NONBLOCK|os.O_NOFOLLOW)
@@ -107,9 +130,10 @@ def main() -> None:
                         pass
 
         stage='fresh managed-resource absence'
-        for name in ('/etc/pnm','/usr/local/bin/xray','/usr/local/bin/hysteria'):
-            if Path(name).exists() or Path(name).is_symlink():
-                raise RuntimeError('boot-only baseline has managed resources')
+        absent=not any(Path(name).exists() or Path(name).is_symlink()
+                       for name in ('/etc/pnm','/usr/local/bin/xray','/usr/local/bin/hysteria'))
+        if absent!=(scope!='pnm-reboot'):
+            raise RuntimeError('guest managed-resource baseline differs from scope')
         stage='Debian operating-system identity'
         os_release={}
         for line in Path('/usr/lib/os-release').read_text().splitlines():
@@ -140,14 +164,14 @@ def main() -> None:
         ready={'schema':1,'kind':'boot-ready','instance':identity.instance,'boot_id':identity.boot_id,
                'kernel_release':identity.kernel_release,'root_uuid':identity.root_uuid,
                'os_id':'debian','os_version':'13','vm_detected':detected.stdout.strip(),
-               'manager_state':manager,'network_only_loopback':True,'pnm_absent':True,
+               'manager_state':manager,'network_only_loopback':True,'pnm_absent':absent,'scope':scope,
                'machine_id_differs_from_host':True}
         stage='host approval'
         pending=bytearray()
         approved=False
         deadline=time.monotonic()+60
         next_emit=0.0
-        approval={'schema':1,'action':'approve-boot-only','instance':identity.instance,
+        approval={'schema':1,'action':'approve-'+scope,'instance':identity.instance,
                   'boot_id':identity.boot_id}
         while time.monotonic()<deadline and not approved:
             now=time.monotonic()
@@ -176,14 +200,25 @@ def main() -> None:
                     continue
         if not approved:
             raise RuntimeError('VM boot approval was not received')
+        if action is not None:
+            stage='approved PNM acceptance'
+            proof={'schema':1,'instance':identity.instance,'boot_id':identity.boot_id,
+                   'scope':'pnm-lifecycle'}
+            descriptor_proof=os.open('/run/pnm-vm-approved.json',
+                os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW|os.O_WRONLY,0o600)
+            with os.fdopen(descriptor_proof,'w') as stream:
+                json.dump(proof,stream)
+                stream.flush()
+                os.fsync(stream.fileno())
+            result['acceptance']=action()
         result.update({'passed':True,'host_approval_seen':True,'kernel_release':identity.kernel_release,
             'root_uuid':identity.root_uuid,'manager_state':manager,'network_only_loopback':True,
-            'pnm_absent':True,'independent_boot_id':True,'machine_id_differs_from_host':True})
+            'pnm_absent':absent,'independent_boot_id':True,'machine_id_differs_from_host':True})
     except Exception as error:
         result.update({'stage':stage,'error_class':type(error).__name__})
     finally:
         # This block is reachable only after the independent-guest guard passed.
-        path=Path('/var/tmp/pnm-vm-boot-result.json')
+        path=Path('/var/tmp/pnm-vm-'+('boot' if scope=='boot-only' else scope)+'-result.json')
         try:
             output=os.open(path,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600)
             with os.fdopen(output,'w') as stream:
@@ -210,7 +245,7 @@ def main() -> None:
                     if descriptor is not None:
                         os.close(descriptor)
                 finally:
-                    subprocess.run(['systemctl','--no-block','poweroff'],capture_output=True,timeout=10)
+                    subprocess.run(['systemctl','--no-block',power_action],capture_output=True,timeout=10)
 
 
 if __name__=='__main__':

@@ -1,8 +1,8 @@
 # PNM Current Tasks
 
-**Last reconciled:** 2026-10-25 (default31/391; native commit and account-tool failure slices pass; independent-kernel VM/reboot and external acceptance remain open)
+**Last reconciled:** 2026-10-25 (default31/391; native fault slices and independent Debian boot/lifecycle/reboot pass; abrupt VM/storage fault and external acceptance remain open)
 
-**Current increment baseline:** branch `dev`, parent HEAD `1b49c04`, VERSION `0.16.0-rc.1`.
+**Current increment baseline:** branch `dev`, parent HEAD `102483a`, VERSION `0.16.0-rc.1`.
 
 **Environment recheck:** the earlier host EIO/EROFS/CreateInstance failure is no
 longer reproduced: Debian root is writable, real `true`/`df` execute successfully
@@ -103,9 +103,9 @@ not close G-02 or prove systemd recovery, reboot or public client connectivity.
 | Item | Current status | Evidence / blocker | Next action |
 |---|---|---|---|
 | G-01 — runtime/config/link state | BLOCKED for production acceptance | Current `lib/node.sh` source prints an HY2 runtime row. Prior production output reportedly omitted it despite the same VERSION; deployed executable/source identity has not been verified in this session. | On an authorized host, perform read-only path/version/source-hash comparison; do not apply or upgrade as diagnosis. |
-| G-02 — complete deployment rollback | Native compensation/publication/interruption slices PASS / VM/storage matrix open | Both Core startup/post-health/deadline/TERM failures compensate and retry. Publisher EROFS compensates; post-rename SIGKILL retains uncertainty. Unknown marker observation forbids blind rollback; deletion refusal retains exact owned identities. See dated increments. | Prepare independent-kernel VM/reboot acceptance and retain remaining storage/commit-position boundaries; do not infer production readiness. |
+| G-02 — complete deployment rollback | Native fault and independent VM lifecycle/reboot slices PASS / abrupt/storage matrix open | Both Core startup/post-health/deadline/TERM failures compensate and retry. Publisher EROFS compensates; post-rename SIGKILL retains uncertainty. Unknown marker observation forbids blind rollback; deletion refusal retains exact owned identities. Independent Debian mainflow14/reboot7 pass. | Continue abrupt-VM pending-commit acceptance and retain remaining storage/commit-position boundaries; do not infer production readiness. |
 | G-03 — Core update transaction | Native distinct-version, publication and interruption slices PASS / broader matrix open | Both official Cores retain paired current/previous state and peer evidence across startup failure, previous binary/metadata/applied EROFS, TERM and SIGKILL or retain unresolved state. Curl uses a private HTTPS transport fixture. | Independent-kernel reboot and remaining commit/storage positions; upstream acquisition stays separate. |
-| G-04 — backup/restore safety | Native trusted restore, partial publication and interruption slices PASS / broader matrix open | Actual trusted round trip, partial-write EROFS, TERM/SIGKILL and failed compensation verify bytes/metadata/NSS/applied recovery or retained uncertainty with protected-command refusal. | Independent-kernel VM/reboot and remaining storage/client boundaries; do not equate trusted archive validation with arbitrary executable safety. |
+| G-04 — backup/restore safety | Native restore fault slices and independent VM trusted restore/reboot PASS / broader matrix open | Actual trusted round trip, partial-write EROFS, TERM/SIGKILL and failed compensation verify bytes/metadata/NSS/applied recovery or retained uncertainty with protected-command refusal. Independent VM mainflow includes trusted restore; the subsequent reboot preserves persisted resources and withholds stale bindings. | Remaining abrupt/storage/client boundaries; do not equate trusted archive validation with arbitrary executable safety. |
 | G-05 — dependency preflight | Actual Debian guest19-tool refusal and repeat refusal PASS | A private PATH individually hides all19 declared preflight prerequisites. Actual JSON install returns2 with the matching FAIL class and preserves authority/NSS fingerprints, PNM inventory/transactions and absent Core/service/account state; normal lifecycle then passes. | Upstream acquisition failures, other distributions and remaining fault positions stay separate. |
 | G-06 — HY2 TLS permissions | Native managed TLS, valid reuse and account-tool refusal slices PASS | Actual service TLS access and permission gates pass; preexisting identities are preserved. Real creation refusal compensates prior identities; real deletion refusal retains precise unfinished ownership/recovery evidence. | Other NSS/platform behavior, independent-kernel VM and external clients remain separate; do not infer external reachability. |
 
@@ -1921,6 +1921,45 @@ live-process/serial binding and encrypted full-image/cleanup requirements.
 
 ## Immediate next steps
 
+Independent boot-only acceptance is committed as `102483a`. Stage2 now reuses
+the actual14-case mainflow under a VM guard and this boot's private approval;
+the mapped nspawn route retains its existing UID/namespace checks. A fresh VM
+will request an actual guest reboot and re-enter the same owned disk/kernel.
+Post-reboot checks require changed boot ID and both Core invocations, unchanged
+persisted resources/applied records, withheld stale links, non-promoting ordinary
+restart, and per-Core validated apply without changing its peer. Host refusal
+and stale-approval guards pass15/15 at `pnm-vm-lifecycle-guards.ch_o1q15`;21
+integration sources compile. Full VM execution/archival is still in progress at
+`/var/tmp/pnm-vm-boot-volume.llmpj6is` passes the real14-case lifecycle and
+requests guest reboot. Its reboot test initially expects node-links0 even when
+both unsafe links are withheld. The verified encrypted image's read-only
+debugfs inspection observes both statuses drift, both URI values null and empty
+stderr; product node.sh explicitly returns78 in this case. Correct only the
+test expectation to78 when no Core is confirmed, retaining0 when any link is
+ready. The failed run remains retained with full image readback, detached loop,
+quiescent QEMU, unchanged host databases and empty cleanup. A fresh full rerun
+at `/var/tmp/pnm-vm-boot-volume.nm7fh9va` again passes14 lifecycle checks and
+reaches post-reboot acceptance. It then exposes JSONDecodeError in the test's
+CLI helper: ordinary restart text was parsed as JSON. A focused real-helper
+regression reproduces that error at `pnm-vm-output-red.bkw7854h`; restrict JSON
+parsing to commands explicitly using --json. Reboot PASS remains open while
+this failed image is archived. Its full encrypted2GiB readback and cleanup pass.
+The output-contract regression and host guards pass16/16 at
+`pnm-vm-output-green.wgccpgz1`; all21 integration sources compile. A new complete
+rerun `/var/tmp/pnm-vm-boot-volume.4m0l596i` now passes14 real mainflow checks,
+actual guest-requested reboot and7 reboot acceptance checks. The first kernel
+reports Restarting system/QEMU0; the same owned anonymous disk is relaunched
+with a fresh nonce. Kernel boot ID and both service invocations change while
+persisted Core resources, applied records, authority and NSS stay unchanged.
+Both stale URIs remain withheld through ordinary restart. Each explicit apply
+reconfirms its own applied binding and preserves its peer; both TCP/UDP
+listeners are observed before normal poweroff/QEMU0. Full2GiB encrypted image
+readback now matches the original digest, the owned loop is detached, QEMU is
+quiescent, host NSS/dpkg hashes are unchanged and cleanup is empty. Source is
+unchanged from this actual run; the default31/391 baseline is
+unchanged, not freshly rerun. Independent review remains unavailable; this
+increment has self-review and executed checks.
+
 Startup readiness/harness and initiating-error repairs are committed as
 `ce6713f`, `0bee0d8`, and `580ead7`. Fresh native fault cases now complete the
 recovery-required plan. TLS access, valid-account reuse and per-Core process
@@ -1934,7 +1973,8 @@ tool refusal slices now pass as recorded above. Continue the
 [independent Debian VM plan](superpowers/plans/2026-10-25-independent-debian-vm.md):
 private authenticated tools/initramfs and the independent boot-only slice now
 pass, including clean poweroff and full encrypted image verification. Continue
-with actual PNM lifecycle on the independent kernel and same-disk reboot.
+with abrupt-VM interruption at an observed pending-commit window; real PNM
+lifecycle and same-disk guest-requested reboot now pass14+7 checks.
 Persistent storage, remaining fault positions and
 deployed-host/external-client prerequisites stay separate. The earlier cleanup
 proposal is unnecessary; all original roots are retained.
