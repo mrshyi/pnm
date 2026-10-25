@@ -21,7 +21,7 @@ parser.add_argument('--asset-cache',type=Path,required=True,help='verified pinne
 parser.add_argument('--scenario',choices=('lifecycle','deployment-failure','core-update','core-update-failure',
     'configured-ports','runtime-evidence','restore-failure','restore-publication','startup-readiness',
     'core-recovery-failure-xray','core-recovery-failure-hysteria2','restore-recovery-failure','tls-access',
-    'account-reuse','core-interruption','core-interruption-hysteria2','restart-readiness',
+    'account-reuse','account-creation-failure','core-interruption','core-interruption-hysteria2','restart-readiness',
     'dependency-refusal','deployment-startup-failure','deployment-listener-failure',
     'deployment-term','deployment-sigkill','deployment-commit-readonly','deployment-late-sigkill')+update_interruptions+restore_interruptions+publication_cases,default='lifecycle')
 parser.add_argument('--previous-asset-cache',type=Path)
@@ -150,7 +150,7 @@ if is_update:
     py_compile.compile(str(destination),cfile=str(base/'guest_update_cases.pyc'),doraise=True)
 if options.scenario in ('core-update-failure','restore-failure','restore-publication','startup-readiness',
                         'core-recovery-failure-xray','core-recovery-failure-hysteria2','restore-recovery-failure',
-                        'tls-access','account-reuse','core-interruption','core-interruption-hysteria2',
+                        'tls-access','account-reuse','account-creation-failure','core-interruption','core-interruption-hysteria2',
                         'restart-readiness','dependency-refusal','deployment-startup-failure','deployment-listener-failure',
                           'deployment-term','deployment-sigkill','deployment-commit-readonly','deployment-late-sigkill')+update_interruptions+restore_interruptions+publication_cases:
     destination=root/'opt/guest_start_fault.py'
@@ -158,7 +158,7 @@ if options.scenario in ('core-update-failure','restore-failure','restore-publica
     shutil.copyfile(repo/'tests/integration/guest_start_fault.py',destination)
     destination.chmod(0o700)
     py_compile.compile(str(destination),cfile=str(base/'guest_start_fault.pyc'),doraise=True)
-if options.scenario in publication_cases+('restore-publication','deployment-commit-readonly','deployment-late-sigkill'):
+if options.scenario in publication_cases+('restore-publication','deployment-commit-readonly','deployment-late-sigkill','account-creation-failure'):
     destination=root/'opt/guest_io_fault.py'
     assert not destination.exists() and not destination.is_symlink()
     shutil.copyfile(repo/'tests/integration/guest_io_fault.py',destination)
@@ -182,7 +182,7 @@ if options.scenario in ('startup-readiness','restart-readiness'):
     shutil.copyfile(repo/'tests/integration/guest_readiness_cases.py',destination)
     destination.chmod(0o700)
     py_compile.compile(str(destination),cfile=str(base/'guest_readiness_cases.pyc'),doraise=True)
-if options.scenario.startswith('core-recovery-failure-') or options.scenario in ('restore-recovery-failure','tls-access','account-reuse','core-interruption','core-interruption-hysteria2','dependency-refusal','deployment-startup-failure','deployment-listener-failure','deployment-term','deployment-sigkill','deployment-commit-readonly','deployment-late-sigkill')+update_interruptions+restore_interruptions:
+if options.scenario.startswith('core-recovery-failure-') or options.scenario in ('restore-recovery-failure','tls-access','account-reuse','account-creation-failure','core-interruption','core-interruption-hysteria2','dependency-refusal','deployment-startup-failure','deployment-listener-failure','deployment-term','deployment-sigkill','deployment-commit-readonly','deployment-late-sigkill')+update_interruptions+restore_interruptions:
     destination=root/'opt/guest_recovery_cases.py'
     assert not destination.exists() and not destination.is_symlink()
     shutil.copyfile(repo/'tests/integration/guest_recovery_cases.py',destination)
@@ -194,12 +194,18 @@ if options.scenario=='tls-access':
     shutil.copyfile(repo/'tests/integration/guest_tls_access.py',destination)
     destination.chmod(0o700)
     py_compile.compile(str(destination),cfile=str(base/'guest_tls_access.pyc'),doraise=True)
-if options.scenario=='account-reuse':
+if options.scenario in ('account-reuse','account-creation-failure'):
     destination=root/'opt/guest_account_cases.py'
     assert not destination.exists() and not destination.is_symlink()
     shutil.copyfile(repo/'tests/integration/guest_account_cases.py',destination)
     destination.chmod(0o700)
     py_compile.compile(str(destination),cfile=str(base/'guest_account_cases.pyc'),doraise=True)
+if options.scenario=='account-creation-failure':
+    destination=root/'opt/guest_account_fault.py'
+    assert not destination.exists() and not destination.is_symlink()
+    shutil.copyfile(repo/'tests/integration/guest_account_fault.py',destination)
+    destination.chmod(0o700)
+    py_compile.compile(str(destination),cfile=str(base/'guest_account_fault.pyc'),doraise=True)
 if options.scenario in ('core-interruption','core-interruption-hysteria2','deployment-term','deployment-sigkill','deployment-late-sigkill')+update_interruptions+restore_interruptions:
     destination=root/'opt/guest_signal_cases.py'
     assert not destination.exists() and not destination.is_symlink()

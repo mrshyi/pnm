@@ -353,7 +353,7 @@ try:
           'core-recovery-failure-hysteria2','restore-recovery-failure','tls-access','account-reuse',
           'core-interruption','core-interruption-hysteria2','restart-readiness','dependency-refusal',
           'deployment-startup-failure','deployment-listener-failure','deployment-term',
-          'deployment-sigkill','deployment-commit-readonly','deployment-late-sigkill')+update_interruptions+restore_interruptions+publication_cases,'unknown guest scenario')
+          'deployment-sigkill','deployment-commit-readonly','deployment-late-sigkill','account-creation-failure')+update_interruptions+restore_interruptions+publication_cases,'unknown guest scenario')
     if scenario=='account-reuse':
         from guest_account_cases import prepare_accounts, require_preserved
         reused_accounts=prepare_accounts()
@@ -405,6 +405,10 @@ try:
         stage='actual installation dependency refusal matrix'
         from guest_preflight_cases import run_dependencies
         run_dependencies(logs,env,call,absent,passed)
+    if scenario=='account-creation-failure':
+        stage='actual account creation refusal and compensation'
+        from guest_account_cases import run_creation_failures
+        run_creation_failures(logs,env,call,absent,passed)
     if scenario=='deployment-late-sigkill':
         stage='actual publisher post-rename SIGKILL'
         from guest_commit_signal import run_late_interruption

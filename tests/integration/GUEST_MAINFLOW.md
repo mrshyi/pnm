@@ -297,3 +297,17 @@ listeners. After restoring PATH, four fresh protected commands must refuse70
 without output or persisted/runtime/resource changes. The fixture intentionally
 retains recovery state and reports `mainflow_completed:false` and
 `expected_recovery_required:true`; it is not fsync failure, power loss or VM reboot.
+
+`account-creation-failure` starts from a fresh guest and refuses only the exact
+second identity's normal `groupadd` and `useradd` argv, separately. The real Xray
+identity must already exist; the Hysteria user must be absent and its group must
+match the intended creation point. Each real shadow tool runs under a private
+child read-only `/etc` bind. Record a kernel EROFS probe and the actual tool's
+nonzero result separately; do not label that probe an observed tool syscall.
+Only that child retires its exact bind, and parent mounts remain unchanged.
+Require CLI70,2/3 actual APPLIED identities respectively with matching RESTORED
+receipts, target INTENT without APPLIED, terminal rollback, original primary NSS
+bytes/modes/UIDs/GIDs and authority/directory/service baseline, absent managed
+resources and no commit/applied promotion. Restore PATH between failures, then
+run the complete normal lifecycle and trusted restore. Ancillary shadow backup
+files, other NSS backends and account deletion failures are separate assertions.

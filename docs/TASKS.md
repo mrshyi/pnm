@@ -1781,6 +1781,35 @@ detaches and cleanup errors are empty. Product Bash is unchanged;31/391 remains 
 latest full baseline. This does not close fsync failure, hardware power loss,
 independent VM/reboot, G-01, upstream acquisition/platform or external clients.
 
+## Native account creation refusal — 2026-10-25
+
+Late commit interruption is committed as `6a7e970`. Continue T-08/G-06 with
+actual shadow creation tools, preserving the existing guest and transaction
+model. Exact second-identity hysteria groupadd/useradd invocations are isolated
+in new private child namespaces with a read-only `/etc` bind. Prior actual Xray
+identity and the precise absent-user/present-or-absent-group point are checked
+before running the tool. A kernel EROFS probe and actual nonzero tool result are
+separate evidence; this does not observe or synthesize the tool's internal errno.
+Only the creating child unmounts its exact bind; unrelated/recovery invocations
+delegate normally, and PATH plus parent namespace/mounts are preserved.
+
+Missing implementation first fails the guards. Final11 guards,19 Python
+compilations and syntax/security/ShellCheck pass under
+`/var/tmp/pnm-account-final-gates.bhnu66xg`. Independent pre-execution review
+finds no blocker. Native `uvjp4dv2` passes16/16 under
+`/var/tmp/pnm-account-creation-volume.dye5wq46`: separate real groupadd/useradd
+failures returnCLI70 after2/3 actual APPLIED identities; all have matching
+RESTORED, target INTENT has no APPLIED, terminal rollback and no commit/applied
+promotion. Primary NSS bytes/numeric metadata, authority, directory identity/
+metadata and service baseline recover; all managed identities/resources are
+absent, followed by the complete healthy normal lifecycle/backup/restore retry.
+Primary NSS means passwd/group/shadow/gshadow, not ancillary shadow backup files.
+Native/Make0 leaves host DBs unchanged, scope not-found and no mounts. Full
+encrypted readback verifies, loop detaches and cleanup errors are empty.
+Independent final review finds no blocker. Account deletion failures,
+other NSS/platform/upstream cases and independent VM/client gates remain open.
+Product Bash is unchanged;31/391 remains the current full baseline.
+
 ## Immediate next steps
 
 Startup readiness/harness and initiating-error repairs are committed as
