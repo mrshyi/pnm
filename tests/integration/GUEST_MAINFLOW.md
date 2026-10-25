@@ -19,6 +19,17 @@ worker, followed by the existing7 reboot checks. The bind ends with the owned
 CLI namespace; no host or manager namespace is remounted. It is a selected real
 derived-journal write refusal, not physical media failure acceptance.
 
+`PNM_GUEST_SCENARIO=deployment-rename-readonly` reuses the publisher-only private
+namespace and complete deployment compensation checks. After the actual marker
+candidate is written/fsynced/closed, only that publisher sees a read-only bind
+of its transaction directory. The observer must identify actual os.replace
+EROFS for the exact source and commit.env destination, and remove its owned
+mount before returning. CLI73 must accompany full compensation, no marker and
+retained forensic uncertainty; the normal14-case retry/lifecycle then runs
+without fixture repairs. The independent-VM route additionally runs7 reboot
+checks. The original pending-create fault variant remains mapped-container-only;
+only this explicit rename variant receives the approved VM publisher guard.
+
 The separate `guest_vm_boot.py` worker is a boot-only probe for the privately
 prepared independent Debian VM described in the
 [VM plan](../../docs/superpowers/plans/2026-10-25-independent-debian-vm.md).

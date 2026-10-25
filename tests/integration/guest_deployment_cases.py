@@ -32,9 +32,14 @@ def require_pending_deployment(call, unit_state, passed) -> None:
 
 
 def run_startup_failures(logs, call, absent, passed, *, failure='start', env=None) -> None:
-    require_guest()
-    require(failure in ('start','listener','term','kill','commit'),'unknown deployment startup failure')
-    committing=failure=='commit'
+    rename=failure=='rename'
+    if rename:
+        from guest_commit_signal import require_publisher_guest
+        require_publisher_guest()
+    else:
+        require_guest()
+    require(failure in ('start','listener','term','kill','commit','rename'),'unknown deployment startup failure')
+    committing=failure in ('commit','rename')
     require(not committing or env is not None,'deployment commit fault requires CLI environment')
     delayed=failure=='listener'
     signalled=failure in ('term','kill')
@@ -81,7 +86,7 @@ def run_startup_failures(logs, call, absent, passed, *, failure='start', env=Non
         before_applies=set(applies.iterdir()) if applies.exists() else set()
         if committing:
             from guest_commit_fault import readonly_deployment_commit
-            context=readonly_deployment_commit(logs,env)
+            context=readonly_deployment_commit(logs,env,rename=rename)
         else:
             context=start_fault(core,mode='delay' if failure!='start' else 'reject-once',delay_seconds=12 if delayed else 3)
         with context as fault:
@@ -187,7 +192,8 @@ def run_startup_failures(logs, call, absent, passed, *, failure='start', env=Non
                 'applied_absent':all(not path.exists() and not path.is_symlink() for path in
                     (Path('/var/lib/pnm/cores')/name/'applied.env' for name in ('xray','hysteria2'))),
                 'commit_absent':all(not (transaction/name).exists() and not (transaction/name).is_symlink()
-                                    for name in ('commit.env','commit-uncertain.env'))}
+                                    for name in (('commit.env',) if rename else ('commit.env','commit-uncertain.env'))),
+                'uncertainty_retained':(transaction/'commit-uncertain.env').is_file()}
             observations.append(observation)
             (logs/'deployment-startup-failures.json').write_text(json.dumps(observations))
             require((committing or (fault['attempts']==1 and fault['rejected']==(1 if failure=='start' else 0))) and cause,
@@ -205,13 +211,17 @@ def run_startup_failures(logs, call, absent, passed, *, failure='start', env=Non
                         'incomplete deployment rollback after '+core+' startup failure')
                 absent()
         if committing:
-            require(fault['actual_errno']==30 and fault['pending_creation_refused'] and fault['mount_removed'],
+            cause=fault.get('rename_refused') and fault.get('pending_retained') if rename else fault.get('pending_creation_refused')
+            require(fault['actual_errno']==30 and cause and fault['mount_removed'],
                     'deployment commit has no actual retired publisher EROFS')
+            if rename:
+                require(observation['uncertainty_retained'],'rename refusal lost its persisted uncertainty record')
             observations[-1]['commit_refusal']=fault
             (logs/'deployment-startup-failures.json').write_text(json.dumps(observations))
         if hard:
             passed.append('actual SIGKILL during first deployment retains unfinished resources and absent applied/commit promotion')
             require_pending_deployment(call,unit_state,passed)
             return
-        passed.append('actual deployment commit publisher EROFS restores original resources identities and service baseline'
+        passed.append('actual marker rename EROFS restores resources identities services and retains forensic uncertainty'
+                      if rename else 'actual deployment commit publisher EROFS restores original resources identities and service baseline'
                       if committing else 'actual first-deployment '+core+' '+failure+' failure restores original resources identities and service baseline')

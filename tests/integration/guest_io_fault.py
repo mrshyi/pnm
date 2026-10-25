@@ -30,8 +30,9 @@ def parent_identity(parent):
     return [info.st_dev,info.st_ino]
 
 
-def unmount_owned(parent, mount_id, identity):
-    require_guest()
+def unmount_owned(parent, mount_id, identity, *, guard=None):
+    guard=guard or require_guest
+    guard()
     rows=[row for row in mounts() if row[4]==str(parent)]
     require(len(rows)==1 and int(rows[0][0])==mount_id and parent_identity(parent)==identity,
             'owned publication mount changed')
@@ -40,8 +41,9 @@ def unmount_owned(parent, mount_id, identity):
 
 
 @contextmanager
-def readonly_bind(parent, private, identity, parent_namespace):
-    require_guest()
+def readonly_bind(parent, private, identity, parent_namespace, *, guard=None):
+    guard=guard or require_guest
+    guard()
     info=private.lstat()
     require(private.resolve()==private and info.st_uid==0 and stat.S_IMODE(info.st_mode)==0o700,
             'private publication bind required')
@@ -85,7 +87,7 @@ def readonly_bind(parent, private, identity, parent_namespace):
         yield observed
     finally:
         if mount_id is not None:
-            unmount_owned(parent,mount_id,identity)
+            unmount_owned(parent,mount_id,identity,guard=guard)
             observed['mount_removed']=True
 
 

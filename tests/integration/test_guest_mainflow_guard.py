@@ -18,6 +18,74 @@ DRIVER=Path(__file__).with_name('test_guest_mainflow.py')
 
 
 class GuestGuardTests(unittest.TestCase):
+    @unittest.skipUnless(sys.platform=='linux','Linux marker candidate observer timing')
+    def test_rename_observer_waits_for_written_closed_candidate(self):
+        script='''import contextlib,json,sys,tempfile,time,types
+from pathlib import Path
+sys.path.insert(0,sys.argv[1])
+from guest_commit_fault import RENAME_TRACE_SOURCE
+entered=[]
+guard=types.ModuleType('guest_commit_signal')
+guard.require_publisher_guest=lambda:None
+mount=types.ModuleType('guest_io_fault')
+@contextlib.contextmanager
+def readonly(*args,**kwargs):
+    entered.append(args[0])
+    yield {'private_namespace':True}
+mount.readonly_bind=readonly
+sys.modules['guest_commit_signal']=guard
+sys.modules['guest_io_fault']=mount
+with tempfile.TemporaryDirectory(prefix='pnm-rename-observer.') as directory:
+    root=Path(directory)
+    (root/'config.json').write_text(json.dumps({'transaction':str(root),'identity':[1,2],'parent_namespace':3}))
+    sys.argv=['-','publish',str(root),'test-id','test-deploy',str(int(time.time())+60)]
+    namespace={'__file__':str(root/'sitecustomize.py')}
+    try:
+        exec(compile(RENAME_TRACE_SOURCE,'sitecustomize.py','exec'),namespace)
+        program="""import os,tempfile
+directory=str(root)
+temporary=None
+with (root/'commit-uncertain.env').open('w') as stream:
+    stream.write('pending')
+descriptor,temporary=tempfile.mkstemp(prefix='.commit-',dir=directory)
+assert not entered
+with os.fdopen(descriptor,'wb') as stream:
+    stream.write(b'closed candidate')
+    stream.flush()
+    os.fsync(stream.fileno())
+    assert not entered
+assert entered==[root]
+"""
+        exec(compile(program,'<stdin>','exec'),{'root':root,'entered':entered})
+    finally:
+        sys.settrace(None)
+        namespace['finish']()
+'''
+        result=subprocess.run([sys.executable,'-B','-c',script,str(DRIVER.parent)],
+                              capture_output=True,timeout=10)
+        self.assertEqual(result.returncode,0,result.stderr.decode(errors='replace'))
+
+    @unittest.skipUnless(sys.platform=='linux','Linux marker rename refusal guard')
+    def test_marker_rename_variant_refuses_host_before_controls(self):
+        script='''import sys
+sys.path.insert(0,sys.argv[1])
+import guest_commit_fault as fixture
+def forbidden(*args,**kwargs):
+    raise AssertionError('host reached rename fault control')
+fixture.os.open=forbidden
+fixture.subprocess.run=forbidden
+for entry in (lambda:fixture.run_commit([],None,rename=True),
+              lambda:fixture.readonly_deployment_commit(None,None,rename=True).__enter__()):
+    try:
+        entry()
+        raise AssertionError('host accepted for rename fault')
+    except RuntimeError as error:
+        assert str(error)=='start fault requires mapped guest root'
+'''
+        result=subprocess.run([sys.executable,'-B','-c',script,str(DRIVER.parent)],
+                              capture_output=True,timeout=10)
+        self.assertEqual(result.returncode,0,result.stderr.decode(errors='replace'))
+
     @unittest.skipUnless(sys.platform=='linux','Linux actual directory fsync observer')
     def test_progress_observer_waits_for_final_fsync_return(self):
         script='''import json,sys,tempfile,types

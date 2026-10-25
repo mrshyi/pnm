@@ -2,7 +2,7 @@
 
 **Last reconciled:** 2026-10-25 (fresh default31/394; independent Debian lifecycle/update/reboot and selected abrupt-VM recovery pass; remaining storage/platform and external acceptance are unverified)
 
-**Current increment baseline:** branch `dev`, parent HEAD `bbf8383`, VERSION `0.16.0-rc.1`.
+**Current increment baseline:** branch `dev`, parent HEAD `e07d3d2`, VERSION `0.16.0-rc.1`.
 
 **Environment recheck:** the earlier host EIO/EROFS/CreateInstance failure is no
 longer reproduced: Debian root is writable, real `true`/`df` execute successfully
@@ -2016,7 +2016,7 @@ scenario; dated records above retain its actual results and limitations.
 | T-12 | L1 TLS/SNI/pin/access checks; native real managed-account TLS faults; VM positive TLS loading | External handshake/network and every L2 TLS fault combination |
 | T-13 | L1 configured/applied failure paths; native selected applied/publication EROFS compensation | Every node/applied write-failure position through real VM deployment |
 | T-14 | Native actual outer deadline failure, full compensation and clean retry | All late health/deadline timing interleavings |
-| T-15 | L1 commit failure paths; native real uncertainty-create EROFS and compensation | All actual marker create/write/rename storage failures, including ENOSPC/EIO |
+| T-15 | L1 commit failure paths, native real uncertainty-create EROFS and VM actual marker rename EROFS with full compensation/retry/reboot | Actual marker candidate creation/write failures and physical ENOSPC/EIO positions |
 | T-16 | L1 and actual VM post-durable-commit journal append EROFS preserve install0, valid marker and normal lifecycle/reboot | Other derived logging/cleanup failures and real-device media behavior |
 | T-17 | L1 marker corruption/uncertain publication; native post-rename CLI stop; VM retained marker+uncertainty after abrupt stop | All corruption/fsync/device-failure positions and physical media behavior |
 | T-18 | L1 foreign file/applied metadata drift retention without blind rollback | Every independent-VM external-edit race |
@@ -2108,6 +2108,39 @@ the same command passes the original approval path and executes. No approval
 check is bypassed. The independent code-review agent still reports its usage
 limit; this increment records self-review and actual checks, not independent
 approval. This slice does not establish real-device EIO or physical power loss.
+
+## T-15 actual marker rename refusal — 2026-10-25
+
+After committed-progress refusal is committed as `e07d3d2`, continue the
+[rename refusal plan](superpowers/plans/2026-10-25-marker-rename-refusal.md).
+Extend the existing publisher helper with an explicit rename variant; its
+default pending-creation variant and all ordinary fault callers retain their
+mapped-guest guard. Only the explicit variant uses the already approved VM
+publisher guard, passed through readonly-bind/unmount so mount cleanup keeps
+the same boundary. No production transaction or file API is changed.
+
+The new variant host guard fails before implementation at
+`pnm-marker-rename-red.hx8owab8`. Candidate timing regression additionally
+requires no activation for the empty mkstemp file or an open stream, even when
+the older pending-file stream is already closed. It arms only after candidate
+write/fsync/close. Preboot `pnm-marker-rename-preboot.5e_7w7nh` passes23 guards,
+23 integration Python compilations plus2 operator compilations and static gates.
+
+`/var/tmp/pnm-vm-boot-volume.36t5df2a` now observes actual os.replace EROFS with
+its exact temporary source and commit.env destination, publisher73 and CLI73.
+Only the publisher's private namespace has the late read-only directory bind;
+its owned mount is removed before the caller continues. There is no marker;
+persisted uncertainty is retained for forensics. Actual compensation restores
+original resource bytes/metadata, NSS, directory identities, absent units and
+applied state, with ROLLBACK_COMPLETE/ROLLED_BACK and no COMMIT or recovery error.
+The real next install recognizes that completed rollback and succeeds without
+deleting or repairing the retained uncertainty. Normal14-case lifecycle and7
+same-disk reboot assertions pass. QEMU0/poweroff, host-database equality and
+parent-mount checks pass. Full2GiB encrypted image readback matches its original
+digest, loop is detached, QEMU quiescent and cleanup empty. The stage preserves
+all failure evidence. Other marker creation/write faults and physical media remain
+separate. Independent review remains usage-limited; validation is self-review
+and executed checks, not independent approval.
 
 ## Immediate next steps
 
