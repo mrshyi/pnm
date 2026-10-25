@@ -367,7 +367,8 @@ try:
           'core-interruption','core-interruption-hysteria2','restart-readiness','dependency-refusal',
           'deployment-startup-failure','deployment-listener-failure','deployment-term',
           'deployment-sigkill','deployment-commit-readonly','deployment-late-sigkill',
-          'deployment-progress-readonly','deployment-rename-readonly','account-creation-failure')+update_interruptions+restore_interruptions+publication_cases+account_deletions,'unknown guest scenario')
+          'deployment-progress-readonly','deployment-rename-readonly','deployment-marker-failures',
+          'account-creation-failure')+update_interruptions+restore_interruptions+publication_cases+account_deletions,'unknown guest scenario')
     if scenario=='account-reuse':
         from guest_account_cases import prepare_accounts, require_preserved
         reused_accounts=prepare_accounts()
@@ -447,6 +448,11 @@ try:
             # Its protected result is still written by the shared finally block.
             result={'passed':True,'checks':passed,'expected_recovery_required':True,'mainflow_completed':False}
             raise SystemExit(0)
+    if scenario=='deployment-marker-failures':
+        from guest_deployment_cases import run_startup_failures
+        for failure in ('create','write','rename'):
+            stage='actual marker '+failure+' refusal and compensation'
+            run_startup_failures(logs,call,absent,passed,failure=failure,env=env)
     stage='installation apply'
     if scenario=='deployment-progress-readonly':
         from guest_commit_progress import readonly_committed_progress, verify_committed_progress

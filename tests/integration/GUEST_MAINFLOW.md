@@ -28,7 +28,21 @@ mount before returning. CLI73 must accompany full compensation, no marker and
 retained forensic uncertainty; the normal14-case retry/lifecycle then runs
 without fixture repairs. The independent-VM route additionally runs7 reboot
 checks. The original pending-create fault variant remains mapped-container-only;
-only this explicit rename variant receives the approved VM publisher guard.
+only explicit late-publisher variants receive the approved VM publisher guard.
+
+`PNM_GUEST_SCENARIO=deployment-marker-failures` runs candidate creation, candidate
+write and the established rename refusal in sequence, each through a real install
+and complete compensation before the next attempt. Creation enters the owned
+read-only directory bind at the actual tempfile.mkstemp call and observes EROFS.
+Write validates the new root0600 candidate's exact descriptor/inode, then sets
+only the publisher subprocess's soft RLIMIT_FSIZE to0 while preserving its hard
+limit and Python's existing ignored SIGXFSZ policy. Actual write/flush must fail
+EFBIG; the observer restores and verifies the original limits before writing
+evidence, and the parent limits must remain unchanged. Require original73,
+retained uncertainty without marker, full resources/NSS/directories/services
+compensation and terminal rollback for all three faults, then normal14 lifecycle
+and, on the independent VM,7 same-disk reboot checks. No product file API is
+replaced. EFBIG is a process-scoped file-size refusal, not physical ENOSPC/EIO.
 
 The separate `guest_vm_boot.py` worker is a boot-only probe for the privately
 prepared independent Debian VM described in the

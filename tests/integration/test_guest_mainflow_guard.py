@@ -18,6 +18,128 @@ DRIVER=Path(__file__).with_name('test_guest_mainflow.py')
 
 
 class GuestGuardTests(unittest.TestCase):
+    @unittest.skipUnless(sys.platform=='linux','Linux actual mkstemp observer placement')
+    def test_candidate_create_observer_arms_before_actual_mkstemp(self):
+        script='''import contextlib,json,sys,tempfile,time,types
+from pathlib import Path
+sys.path.insert(0,sys.argv[1])
+from guest_commit_fault import RENAME_TRACE_SOURCE
+entered=[]
+guard=types.ModuleType('guest_commit_signal')
+guard.require_publisher_guest=lambda:None
+mount=types.ModuleType('guest_io_fault')
+@contextlib.contextmanager
+def readonly(parent,*args,**kwargs):
+    assert not list(parent.glob('.commit-*')), 'creation observer was late'
+    entered.append(parent)
+    yield {'private_namespace':True}
+mount.readonly_bind=readonly
+sys.modules['guest_commit_signal']=guard
+sys.modules['guest_io_fault']=mount
+with tempfile.TemporaryDirectory(prefix='pnm-candidate-create.') as directory:
+    root=Path(directory)
+    (root/'config.json').write_text(json.dumps({'transaction':str(root),'identity':[1,2],
+        'parent_namespace':3,'phase':'create'}))
+    (root/'commit-uncertain.env').write_text('pending')
+    sys.argv=['-','publish',str(root),'test-id','test-deploy',str(int(time.time())+60)]
+    namespace={'__file__':str(root/'sitecustomize.py')}
+    try:
+        exec(compile(RENAME_TRACE_SOURCE,'sitecustomize.py','exec'),namespace)
+        program="""import os,tempfile
+directory=str(root)
+temporary=None
+descriptor,temporary=tempfile.mkstemp(prefix='.commit-',dir=directory)
+os.close(descriptor)
+assert entered==[root]
+assert Path(temporary).is_file()
+"""
+        exec(compile(program,'<stdin>','exec'),{'root':root,'entered':entered,'Path':Path})
+    finally:
+        sys.settrace(None)
+        namespace['finish']()
+'''
+        result=subprocess.run([sys.executable,'-B','-c',script,str(DRIVER.parent)],
+                              capture_output=True,timeout=10)
+        self.assertEqual(result.returncode,0,result.stderr.decode(errors='replace'))
+
+    @unittest.skipUnless(sys.platform=='linux','Linux candidate refusal guards')
+    def test_candidate_variants_refuse_host_before_controls(self):
+        script='''import sys
+sys.path.insert(0,sys.argv[1])
+import guest_commit_fault as fixture
+def forbidden(*args,**kwargs):
+    raise AssertionError('host reached candidate fault control')
+fixture.os.open=forbidden
+fixture.subprocess.run=forbidden
+for candidate in ('create','write'):
+    for entry in (lambda:fixture.run_commit([],None,candidate=candidate),
+                  lambda:fixture.readonly_deployment_commit(None,None,candidate=candidate).__enter__()):
+        try:
+            entry()
+            raise AssertionError('host accepted for candidate fault')
+        except RuntimeError as error:
+            assert str(error)=='start fault requires mapped guest root'
+'''
+        result=subprocess.run([sys.executable,'-B','-c',script,str(DRIVER.parent)],
+                              capture_output=True,timeout=10)
+        self.assertEqual(result.returncode,0,result.stderr.decode(errors='replace'))
+
+    @unittest.skipUnless(sys.platform=='linux' and os.geteuid()==0,'Linux root candidate FD policy')
+    def test_candidate_write_observer_gets_real_efbig_and_restores_limit(self):
+        script='''import errno,json,resource,sys,tempfile,time,types
+from pathlib import Path
+sys.path.insert(0,sys.argv[1])
+from guest_commit_fault import RENAME_TRACE_SOURCE
+guard=types.ModuleType('guest_commit_signal')
+guard.require_publisher_guest=lambda:None
+mount=types.ModuleType('guest_io_fault')
+def forbidden(*args,**kwargs):
+    raise AssertionError('write fixture unexpectedly entered a bind')
+mount.readonly_bind=forbidden
+sys.modules['guest_commit_signal']=guard
+sys.modules['guest_io_fault']=mount
+original=resource.getrlimit(resource.RLIMIT_FSIZE)
+with tempfile.TemporaryDirectory(prefix='pnm-candidate-write.') as directory:
+    root=Path(directory)
+    (root/'config.json').write_text(json.dumps({'transaction':str(root),'identity':[1,2],
+        'parent_namespace':3,'phase':'write'}))
+    sys.argv=['-','publish',str(root),'test-id','test-deploy',str(int(time.time())+60)]
+    namespace={'__file__':str(root/'sitecustomize.py')}
+    try:
+        exec(compile(RENAME_TRACE_SOURCE,'sitecustomize.py','exec'),namespace)
+        program="""import os,tempfile
+directory=str(root)
+temporary=None
+with (root/'commit-uncertain.env').open('w') as stream:
+    stream.write('pending')
+descriptor,temporary=tempfile.mkstemp(prefix='.commit-',dir=directory)
+try:
+    with os.fdopen(descriptor,'wb') as stream:
+        stream.write(b'marker candidate')
+        stream.flush()
+        os.fsync(stream.fileno())
+except OSError as error:
+    assert error.errno==errno.EFBIG
+else:
+    raise AssertionError('actual candidate write was not refused')
+finally:
+    os.unlink(temporary)
+"""
+        exec(compile(program,'<stdin>','exec'),{'root':root,'errno':errno})
+    finally:
+        sys.settrace(None)
+        namespace['finish']()
+        assert resource.getrlimit(resource.RLIMIT_FSIZE)==original
+    proof=json.loads((root/'observed-rename.json').read_text())
+    assert proof['actual_errno']==errno.EFBIG and proof['candidate_write_refused']
+    assert proof['file_size_limit_restored'] and proof['pending_retained']
+    assert (root/'commit-uncertain.env').read_text()=='pending'
+    assert not (root/'commit.env').exists()
+'''
+        result=subprocess.run([sys.executable,'-B','-c',script,str(DRIVER.parent)],
+                              capture_output=True,timeout=10)
+        self.assertEqual(result.returncode,0,result.stderr.decode(errors='replace'))
+
     @unittest.skipUnless(sys.platform=='linux','Linux marker candidate observer timing')
     def test_rename_observer_waits_for_written_closed_candidate(self):
         script='''import contextlib,json,sys,tempfile,time,types

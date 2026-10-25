@@ -2,7 +2,7 @@
 
 **Last reconciled:** 2026-10-25 (fresh default31/394; independent Debian lifecycle/update/reboot and selected abrupt-VM recovery pass; remaining storage/platform and external acceptance are unverified)
 
-**Current increment baseline:** branch `dev`, parent HEAD `e07d3d2`, VERSION `0.16.0-rc.1`.
+**Current increment baseline:** branch `dev`, parent HEAD `c859ea5`, VERSION `0.16.0-rc.1`.
 
 **Environment recheck:** the earlier host EIO/EROFS/CreateInstance failure is no
 longer reproduced: Debian root is writable, real `true`/`df` execute successfully
@@ -2016,7 +2016,7 @@ scenario; dated records above retain its actual results and limitations.
 | T-12 | L1 TLS/SNI/pin/access checks; native real managed-account TLS faults; VM positive TLS loading | External handshake/network and every L2 TLS fault combination |
 | T-13 | L1 configured/applied failure paths; native selected applied/publication EROFS compensation | Every node/applied write-failure position through real VM deployment |
 | T-14 | Native actual outer deadline failure, full compensation and clean retry | All late health/deadline timing interleavings |
-| T-15 | L1 commit failure paths, native real uncertainty-create EROFS and VM actual marker rename EROFS with full compensation/retry/reboot | Actual marker candidate creation/write failures and physical ENOSPC/EIO positions |
+| T-15 | L1 commit failure paths, native real uncertainty-create EROFS; VM actual candidate-create/rename EROFS and candidate-write EFBIG with full compensation/retry/reboot | Other commit positions and physical ENOSPC/EIO behavior |
 | T-16 | L1 and actual VM post-durable-commit journal append EROFS preserve install0, valid marker and normal lifecycle/reboot | Other derived logging/cleanup failures and real-device media behavior |
 | T-17 | L1 marker corruption/uncertain publication; native post-rename CLI stop; VM retained marker+uncertainty after abrupt stop | All corruption/fsync/device-failure positions and physical media behavior |
 | T-18 | L1 foreign file/applied metadata drift retention without blind rollback | Every independent-VM external-edit race |
@@ -2141,6 +2141,59 @@ digest, loop is detached, QEMU quiescent and cleanup empty. The stage preserves
 all failure evidence. Other marker creation/write faults and physical media remain
 separate. Independent review remains usage-limited; validation is self-review
 and executed checks, not independent approval.
+
+## T-15 actual candidate creation/write refusals — 2026-10-25
+
+Continue after rename refusal commit `c859ea5` using the
+[candidate refusal plan](superpowers/plans/2026-10-25-marker-candidate-refusal.md).
+The same publisher-only private namespace and fixed approved-guest guard now
+cover explicit candidate create/write variants. Creation arms the existing
+read-only bind at the actual tempfile.mkstemp call, before any candidate exists,
+then observes its real EROFS. Write validates the exact empty root0600 candidate
+FD/inode and changes only the publisher subprocess's soft RLIMIT_FSIZE to0,
+preserving its hard limit and Python's existing ignored SIGXFSZ policy. The
+real write/flush raises EFBIG. Original limits must restore before evidence is
+written; parent limits and mounts remain unchanged. No product file API or
+transaction callback is replaced. EFBIG does not establish physical ENOSPC/EIO.
+
+RED `pnm-marker-candidate-red.ar0ulmg6` records the missing explicit variant and
+unimplemented write-limit observer. GREEN `pnm-marker-candidate-green.0lt_ll1p`
+passes25 guards including actual child EFBIG/restored soft+hard limits; final
+preboot `pnm-marker-candidate-preboot.aiff_uyf` passes26 guards including exact
+pre-mkstemp activation,25 integration/operator compilations and syntax/security/
+ShellCheck. An earlier RED invocation was rejected for approval-review usage
+capacity; after the user renewed continuation, the identical escalation path
+executed successfully. No alternate execution path bypassed that review.
+
+`/var/tmp/pnm-vm-boot-volume.op1m0hdn` passes all three actual faults in order:
+candidate creation EROFS, candidate write EFBIG and the established rename EROFS.
+Each returns original publisher/CLI73, preserves uncertainty without marker,
+fully restores original resources/NSS/directory metadata and identities, absent
+units/applied state, and ends ROLLBACK_COMPLETE/ROLLED_BACK without COMMIT or a
+recovery error. Each next attempt and the normal14-case lifecycle succeed
+without repairing/deleting retained transaction evidence. The same disk then
+passes7 independent-kernel reboot assertions, clean guest reboot/poweroff and
+QEMU0. Host database comparisons and parent mount/limit checks pass. Its D-backed
+export subsequently fails actual EIO at encrypted-output write/flush; no complete
+image readback is claimed for that run. The incomplete ciphertext and protected
+failure receipts remain intact. After raw retirement, Windows and WSL both show
+only2,147,426,304 bytes free on D; an owned1MiB write/fsync/readback passes. This
+is an operator storage-capacity incident, not a PNM transaction or physical-media
+failure result. No filesystem repair, remount or existing-data cleanup is done.
+
+Recheck C at4,761,964,544 bytes free, then use only the exact root0700 `image`
+child of this run's root0700 canonical Linux control directory. The operator
+still rejects other output paths; three focused path-guard cases pass. Fresh
+`/var/tmp/pnm-vm-boot-volume.smlq1v57` repeats all3 faults, normal14 checks and7
+same-disk reboot assertions successfully. Full2GiB encrypted image readback
+matches its original digest, both QEMU runs are quiescent, loop is detached and
+cleanup empty. Final `pnm-marker-candidate-final.sco0sk7e` passes26 guards,
+25 compilations, static gates and17 document paths. A later transport stage's
+unstaged changes are excluded from this commit and these26-guard results.
+Production Bash remains unchanged since `292b682`;31 suites/394 tests is the
+existing full baseline, not a newly run full suite for this test-only increment.
+Independent review remains unavailable by usage capacity; these results are
+self-review and executed validation, not an independent approval.
 
 ## Immediate next steps
 
