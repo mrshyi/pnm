@@ -32,6 +32,10 @@ class AssetServer(socketserver.ThreadingTCPServer):
         self.payloads=payloads
         self.context=context
         self.requests: list[str]=[]
+        self.partial_paths: set[str]=set()
+        self.partial_requests: list[str]=[]
+        self.tls_refusal_budget=0
+        self.tls_refusals=0
         self.errors: list[str]=[]
         self.lock=threading.Lock()
         self.connections: dict[socket.socket,socket.socket]={}
@@ -40,7 +44,8 @@ class AssetServer(socketserver.ThreadingTCPServer):
 
     def process_request(self, request, client_address):
         with self.lock:
-            if len(self.request_threads)>=8:
+            # Two Cores: at most four HTTP attempts and one refused TLS each.
+            if len(self.request_threads)>=10:
                 request.close()
                 self.errors.append('asset connection budget exceeded')
                 return
@@ -117,19 +122,47 @@ class AssetRequest(socketserver.StreamRequestHandler):
         self.wfile.flush()
         with self.server.context.wrap_socket(self.request,server_side=True,do_handshake_on_connect=False) as connection:
             self.server.replace_connection(self.request,connection)
-            connection.do_handshake()
+            try:
+                connection.do_handshake()
+            except ssl.SSLError as error:
+                # Only a deliberately budgeted certificate-trust refusal is
+                # expected. Other TLS/socket failures retain ordinary errors.
+                with self.server.lock:
+                    if error.reason=='TLSV1_ALERT_UNKNOWN_CA' and self.server.tls_refusal_budget>0:
+                        self.server.tls_refusal_budget-=1
+                        self.server.tls_refusals+=1
+                        return
+                raise
             with connection.makefile('rb') as stream:
                 request=self.headers(stream).decode('ascii').split(' ')
             require(len(request)==3 and request[0]=='GET' and request[2]=='HTTP/1.1','unexpected asset method')
             path=unquote(request[1])
             require(path in self.server.payloads,'unexpected asset path')
             body=self.server.payloads[path]
+            with self.server.lock:
+                partial=path in self.server.partial_paths
+            require(not partial or len(body)>1,'partial fixture requires a nontrivial asset')
             connection.sendall(('HTTP/1.1 200 OK\r\nContent-Length: '+str(len(body))+
                                 '\r\nConnection: close\r\nContent-Type: application/octet-stream\r\n\r\n').encode('ascii'))
-            for offset in range(0,len(body),1024*1024):
-                connection.sendall(body[offset:offset+1024*1024])
+            sent=body[:min(1024,len(body)-1)] if partial else body
+            for offset in range(0,len(sent),1024*1024):
+                connection.sendall(sent[offset:offset+1024*1024])
             with self.server.lock:
                 self.server.requests.append(path)
+                if partial:
+                    self.server.partial_requests.append(path)
+            if partial:
+                # Deliver TLS close_notify: an abrupt encrypted socket close
+                # would test TLS receive failure instead of HTTP partial-file18.
+                try:
+                    plain=connection.unwrap()
+                except ssl.SSLEOFError as error:
+                    # curl has already received our close_notify and rejects
+                    # the short body18, then may close without a reciprocal one.
+                    if error.reason!='UNEXPECTED_EOF_WHILE_READING':
+                        raise
+                else:
+                    self.server.replace_connection(self.request,plain)
 
 
 def run_updates(logs: Path, env: dict[str,str], call: Callable,
@@ -338,6 +371,36 @@ def run_updates(logs: Path, env: dict[str,str], call: Callable,
             require(actual_version(core)==prior[core]['version'].removeprefix('v'),
                     'initial Core is not the distinct previous version')
             transactions=set(Path('/var/lib/pnm/transactions').iterdir())
+            approve(core,target[core]['sha256'])
+            for refusal in ('partial','tls'):
+                temporary_before=set(Path('/tmp').glob('pnm.*'))
+                before_requests=server.requests.count(paths[core])
+                before_tls=server.tls_refusals
+                if refusal=='partial':
+                    server.partial_paths.add(paths[core])
+                else:
+                    public_ca=Path('/etc/ssl/certs/ca-certificates.crt')
+                    require(public_ca.is_file(),'public CA trust fixture is missing')
+                    server.tls_refusal_budget=1
+                    env['CURL_CA_BUNDLE']=str(public_ca)
+                try:
+                    failed=call('update-'+refusal+'-'+core,['update',core],accepted=(69,))
+                finally:
+                    server.partial_paths.discard(paths[core])
+                    env['CURL_CA_BUNDLE']=str(certificate)
+                curl_code=18 if refusal=='partial' else 60
+                require(('curl: ('+str(curl_code)+')').encode() in failed.stderr,
+                        'transport refusal lacks the actual expected curl error')
+                require(server.requests.count(paths[core])==before_requests+(refusal=='partial')
+                        and server.tls_refusals==before_tls+(refusal=='tls')
+                        and server.tls_refusal_budget==0,'transport refusal observation differs')
+                require(state(core)==old and state(peer)==peer_before,
+                        'transport refusal changed Core resources or runtime binding')
+                require(transactions==set(Path('/var/lib/pnm/transactions').iterdir()),
+                        'transport refusal began a publication transaction')
+                require(set(Path('/tmp').glob('pnm.*'))==temporary_before,
+                        'transport refusal retained a temporary download candidate')
+                passed.append('actual '+core+' '+refusal+' download refusal preserves both Cores before publication')
             approve(core,'0'*64)
             before_requests=server.requests.count(paths[core])
             call('update-bad-checksum-'+core,['update',core],accepted=(78,))
@@ -401,8 +464,11 @@ def run_updates(logs: Path, env: dict[str,str], call: Callable,
                         and state(core)['resources']==forward['resources'] and state(peer)==peer_before,
                         'publication recovery did not permit a clean swap forward')
                 binding(core)
-        expected_fetches=3 if inject_start_failure or interruption=='term' or publication_fault is not None else 2
+        expected_fetches=4 if inject_start_failure or interruption=='term' or publication_fault is not None else 3
         require(all(server.requests.count(paths[c])==expected_fetches for c in paths),'unexpected asset fetch count')
+        require(all(server.partial_requests.count(paths[c])==1 for c in paths)
+                and server.tls_refusals==2 and server.tls_refusal_budget==0,
+                'transport refusal counts differ')
     finally:
         env.clear()
         env.update(original_env)

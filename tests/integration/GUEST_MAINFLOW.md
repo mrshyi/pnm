@@ -85,8 +85,8 @@ acceptance. General account/mount/startup fault helpers remain container-only;
 only the publisher observer additionally accepts this boot's approved VM guard.
 
 The same lifecycle VM worker can run the existing `core-update` scenario with
-separately verified prior/current assets:14 lifecycle and8 checksum/update/
-rollback/swap-forward assertions. The update helper additionally accepts the
+separately verified prior/current assets:14 lifecycle and12 partial-download/
+certificate-trust/checksum/update/rollback/swap-forward assertions. The update helper additionally accepts the
 approved VM guard; fault-injection helpers keep their original restrictions.
 The reboot baseline includes both previous files and checks actual previous
 binary versions against previous.env. The HTTPS endpoint remains the private
@@ -171,7 +171,8 @@ acquired mode-0700 root-owned cache must match `previous_core_versions.json`:
 Xray v26.9.30 and HY2 v2.12.3. The existing asset verifier checks both old and
 current pairs. The clone initially installs the old pair, then explicitly approves
 the current pair only in its own versions.conf. It runs each real Core through
-checksum refusal, different-version update, rollback and rollback swap forward,
+partial-download and certificate-trust refusal, checksum refusal,
+different-version update, rollback and rollback swap forward,
 checking resource/version/invocation/applied state and the peer's previous-state
 metadata as well as its runtime resources. Final links/health must be ready.
 
@@ -181,6 +182,20 @@ exist only in CLI process env; host trust/network is unchanged. Only github.com
 and the exact release paths are accepted. Headers, connection count, total request
 duration and thread/socket retirement are bounded. This transport substitution
 does not establish upstream DNS/PKI/download behavior or external clients.
+
+For each Core, the permitted path first returns fewer bytes than Content-Length
+with an actual TLS close_notify; real curl must refuse18 and update69. Then the
+CLI uses the guest's unchanged public CA bundle, which must reject this fixture's
+fresh private self-signed certificate with curl60/update69 before any HTTP GET.
+Only one budgeted unknown-CA TLS alert is accepted for that attempt; other server
+errors fail the fixture. Both refusals must preserve both Cores' complete state,
+previous pair and service invocation, create no publication transaction and leave
+no new temporary download directory. Restore only the test transport settings,
+then execute the established checksum/update/rollback/swap path. No curl/API or
+product result is replaced, and no host/guest system trust store is modified.
+The isolated-network regression also checks subsequent normal retrieval and
+bounded retirement of all owned sockets/threads. This covers update acquisition;
+first-install acquisition/ZIP failures remain separate.
 
 Set `PNM_GUEST_SCENARIO=core-update-failure` with the same previous-asset cache
 to add real startup-failure compensation for each Core's update and rollback.

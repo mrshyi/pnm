@@ -89,7 +89,7 @@ def lifecycle() -> dict:
     progress=scenario=='deployment-progress-readonly'
     rename=scenario=='deployment-rename-readonly'
     candidates=scenario=='deployment-marker-failures'
-    expected=22 if update else (17 if candidates else (15 if progress or rename else 14))
+    expected=26 if update else (17 if candidates else (15 if progress or rename else 14))
     need(result.returncode==0 and detail.get('passed') is True
          and detail.get('mainflow_completed') is True and len(detail.get('checks',[]))==expected,
          'independent VM mainflow/update checks did not pass')
@@ -105,7 +105,7 @@ def lifecycle() -> dict:
         json.dump(baseline,stream)
         stream.flush()
         os.fsync(stream.fileno())
-    return {'mainflow_checks':14,'update_checks':8 if update else 0,
+    return {'mainflow_checks':14,'update_checks':12 if update else 0,
             'committed_progress_refusal_checks':1 if progress else 0,
             'marker_rename_refusal_checks':1 if rename else 0,
             'marker_candidate_refusal_checks':3 if candidates else 0,

@@ -628,6 +628,57 @@ with tempfile.TemporaryDirectory(prefix='pnm-trace-guard.') as directory:
                               capture_output=True,timeout=15)
         self.assertEqual(result.returncode,0,result.stderr.decode(errors='replace'))
 
+    @unittest.skipUnless(sys.platform=='linux' and os.geteuid()==0,'private Linux curl transport')
+    def test_asset_transport_refusals_use_real_curl_and_retire_connections(self):
+        script='''import os,ssl,subprocess,sys,tempfile,threading
+from pathlib import Path
+assert os.stat('/proc/self/ns/net').st_ino!=int(sys.argv[2])
+subprocess.run(['ip','link','set','lo','up'],check=True,capture_output=True)
+sys.path.insert(0,sys.argv[1])
+from guest_update_cases import AssetServer
+with tempfile.TemporaryDirectory(prefix='pnm-curl-refusal.') as directory:
+    root=Path(directory)
+    cert=root/'fixture.crt'
+    key=root/'fixture.key'
+    subprocess.run(['openssl','req','-x509','-newkey','rsa:2048','-nodes','-days','1',
+        '-subj','/CN=github.com','-addext','subjectAltName=DNS:github.com',
+        '-keyout',str(key),'-out',str(cert)],check=True,capture_output=True,timeout=10)
+    context=ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    context.load_cert_chain(str(cert),str(key))
+    server=AssetServer({'/expected':b'fixture'},context)
+    worker=threading.Thread(target=server.serve_forever)
+    worker.start()
+    def curl(trust):
+        return subprocess.run(['curl','--silent','--show-error','--fail','--location',
+            '--proto','=https','--tlsv1.2','--max-time','10','--noproxy','',
+            '--proxy','http://127.0.0.1:'+str(server.server_address[1]),
+            '--cacert',str(trust),'https://github.com/expected','--output',str(root/'output')],
+            capture_output=True,timeout=15)
+    try:
+        assert curl(cert).returncode==0
+        assert (root/'output').read_bytes()==b'fixture'
+        server.partial_paths.add('/expected')
+        result=curl(cert)
+        assert result.returncode==18 and b'curl: (18)' in result.stderr
+        assert 0<(root/'output').stat().st_size<7
+        server.partial_paths.clear()
+        server.tls_refusal_budget=1
+        result=curl('/etc/ssl/certs/ca-certificates.crt')
+        assert result.returncode==60 and b'curl: (60)' in result.stderr
+        assert server.tls_refusals==1 and server.tls_refusal_budget==0
+        assert server.requests==['/expected','/expected']
+        assert server.partial_requests==['/expected'] and not server.errors
+        assert curl(cert).returncode==0 and (root/'output').read_bytes()==b'fixture'
+    finally:
+        server.shutdown();server.server_close();worker.join(timeout=2)
+    assert not worker.is_alive() and not server.connections
+    assert not any(t.is_alive() for t in server.request_threads)
+'''
+        result=subprocess.run(['unshare','--net',sys.executable,'-B','-c',script,
+                               str(DRIVER.parent),str(os.stat('/proc/self/ns/net').st_ino)],
+                              capture_output=True,timeout=30)
+        self.assertEqual(result.returncode,0,result.stderr.decode(errors='replace'))
+
     def test_asset_headers_have_line_count_and_total_bounds(self):
         spec=importlib.util.spec_from_file_location('pnm_asset_guard',DRIVER.with_name('guest_update_cases.py'))
         module=importlib.util.module_from_spec(spec)

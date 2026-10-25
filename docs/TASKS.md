@@ -2,7 +2,7 @@
 
 **Last reconciled:** 2026-10-25 (fresh default31/394; independent Debian lifecycle/update/reboot and selected abrupt-VM recovery pass; remaining storage/platform and external acceptance are unverified)
 
-**Current increment baseline:** branch `dev`, parent HEAD `c859ea5`, VERSION `0.16.0-rc.1`.
+**Current increment baseline:** branch `dev`, parent HEAD `6261a8b`, VERSION `0.16.0-rc.1`.
 
 **Environment recheck:** the earlier host EIO/EROFS/CreateInstance failure is no
 longer reproduced: Debian root is writable, real `true`/`df` execute successfully
@@ -2004,7 +2004,7 @@ scenario; dated records above retain its actual results and limitations.
 |---|---|---|
 | T-01 | L1, native and VM positive dual-Core install/lifecycle; real identities, bindings, TLS and listeners | External traffic and the whole supported-platform matrix |
 | T-02 | L1 credential/TLS reuse and corruption refusal; native/VM repeat-install refusal preserves resources | A complete VM replay of every existing-credential corruption/reuse branch |
-| T-03 | Native19 prerequisite refusals; native/VM actual checksum refusal; L1 partial-download/checksum candidate cleanup and real non-ZIP rejection | Upstream DNS/PKI/download failures and all acquisition/ZIP failures through real VM install |
+| T-03 | Native19 prerequisite refusals; native/VM checksum refusal; VM real curl partial-file18 and certificate60 through update69 with unchanged dual-Core state; L1 candidate cleanup and real non-ZIP rejection | Upstream DNS/PKI outages and all acquisition/ZIP failures through real VM first install |
 | T-04 | L1 configured-port checks and native configured/default-port conflict lifecycle | Complete independent-VM conflict replay |
 | T-05 | L1 alias/symlink/managed-path and directory protection; host fixture refusal guards | Cross-process privileged ancestor replacement is outside the protected-parent assumption |
 | T-06 | L1 original/missing byte and numeric metadata compensation; selected native complete-resource checks | Every nondefault metadata combination on every L2 operation |
@@ -2195,6 +2195,48 @@ existing full baseline, not a newly run full suite for this test-only increment.
 Independent review remains unavailable by usage capacity; these results are
 self-review and executed validation, not an independent approval.
 
+## T-03 actual update transport refusals — 2026-10-25
+
+After candidate marker acceptance commit `6261a8b`, continue the
+[transport refusal plan](superpowers/plans/2026-10-25-asset-transport-refusal.md).
+Reuse the guarded loopback HTTPS CONNECT fixture, pinned asset bytes and real
+curl/update path. No product download API, exit status or system trust store is
+replaced. An explicitly selected allowed asset path sends a short body against
+the true Content-Length and then TLS close_notify. Each Core must observe real
+curl18/update69. With the guest's unchanged public CA bundle, its fresh private
+fixture certificate is untrusted: require curl60/update69, exactly one budgeted
+unknown-CA server alert and no HTTP GET. Other TLS/server errors still fail.
+The server's bounded connection budget becomes10 for the maximum two-Core
+fault/retry scenario; owned socket retirement and thread joins remain bounded.
+
+Meaningful RED `pnm-asset-transport-red.y27zefj_` fails on missing partial_paths;
+the earlier wrong test selector is not feature RED evidence. Initial GREENs
+retain their actual failures: abrupt TLS close did not produce HTTP partial18,
+and curl's post18 close omitted a reciprocal close_notify. The fixture now
+sends its proper close_notify and accepts only the precisely observed
+UNEXPECTED_EOF_WHILE_READING during that selected partial shutdown, leaving
+other errors authoritative. `pnm-asset-transport-green.ofm5k3uc` passes all27
+guards including real curl0/18/60 and subsequent normal retrieval in a separate
+network namespace, with no retained sockets/threads. Preboot
+`pnm-asset-transport-preboot.11_2dbrr` passes25 Python compilations and static gates.
+
+Fresh `/var/tmp/pnm-vm-boot-volume.c09hq622` passes normal14 lifecycle and12
+actual update assertions: each Core's partial/trust/checksum refusal, distinct
+version update, rollback and swap forward. The two new refusals preserve full
+Core and peer resources, previous pairing, applied evidence and InvocationIDs,
+create no publication transaction and leave no new temporary download directory.
+Only fixture transport settings are restored before the successful real update;
+no runtime/persisted PNM state is repaired. All7 same-disk independent-kernel
+reboot assertions pass, including paired previous version metadata, stale-link
+withholding and explicit rebind with peer preservation. Both QEMU runs exit0
+with actual reboot/poweroff, are quiescent, and the loop is detached. Full2GiB
+encrypted image readback matches the original digest, cleanup is empty and a
+fresh host NSS/dpkg hash comparison equals the pre-tooling baseline. All18
+document paths pass. This is controlled
+update acquisition evidence, not first-install acquisition/ZIP or upstream outage
+acceptance. Independent review remains usage-limited; this is self-review and
+executed validation. The existing31/394 full Bash baseline remains distinct.
+
 ## Immediate next steps
 
 Selected abrupt-VM recovery is committed as `1f68c03`. The follow-on G-03 slice
@@ -2254,6 +2296,18 @@ identity for G-01, broader storage/commit-position acceptance,
 and external clients for dual-protocol traffic. The stand-in and private-network
 Core/container results do not close those external items;
 Phase 3 remains incomplete and release work has not started.
+
+**Current local execution prerequisite (2026-10-25):** after the final verified
+transport VM is retired and its complete image retained, Windows reports
+C=2,004,451,328 and D=2,147,233,792 bytes free. Both are below the2,147,483,648-byte
+raw test-disk size, before ciphertext, root/tool staging or host operating margin.
+Linux statvfs reports virtual ext4 capacity and must not substitute for Windows
+backing-volume availability. Do not start another heavy VM/storage-fault run
+under this capacity. All owned QEMU processes/loops from the completed runs are
+retired; retained images/keys and the incomplete D export remain untouched.
+Resume remaining first-install acquisition, storage/commit positions and other
+platform work after adequate approved storage is available. No automatic deletion,
+VHD compaction, disk repair or WSL restart is authorized by this checkpoint.
 
 ## Boundaries
 
