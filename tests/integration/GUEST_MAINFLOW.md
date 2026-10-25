@@ -46,6 +46,15 @@ This is a selected abrupt-VM interruption slice, not physical media or power-los
 acceptance. General account/mount/startup fault helpers remain container-only;
 only the publisher observer additionally accepts this boot's approved VM guard.
 
+The same lifecycle VM worker can run the existing `core-update` scenario with
+separately verified prior/current assets:14 lifecycle and8 checksum/update/
+rollback/swap-forward assertions. The update helper additionally accepts the
+approved VM guard; fault-injection helpers keep their original restrictions.
+The reboot baseline includes both previous files and checks actual previous
+binary versions against previous.env. The HTTPS endpoint remains the private
+loopback transport fixture, so this does not prove upstream acquisition or
+external client reachability.
+
 Prerequisites are the signed, private rootfs and successful native boot fixture
 described in [the preparation plan](../../docs/superpowers/plans/2026-10-23-container-mainflow.md):
 root-owned mode-0700 parent, canonical `rootfs`, successful `boot-result.json`,

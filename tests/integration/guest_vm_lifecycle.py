@@ -3,6 +3,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import time
 
@@ -39,10 +40,27 @@ def show(unit: str,field: str) -> str:
 
 def core_state(core: str) -> dict:
     unit=UNITS[core]
+    previous={}
+    for name in ('previous','previous.env'):
+        path=Path('/var/lib/pnm/cores')/core/name
+        need(not path.is_symlink(),'reboot previous-state path is a symlink')
+        previous[name]=fingerprint(str(path)) if path.exists() else None
     return {'invocation':show(unit,'InvocationID'),'pid':show(unit,'MainPID'),
             'active':show(unit,'ActiveState'),'enabled':show(unit,'UnitFileState'),
             'resources':{p:fingerprint(p) for p in RESOURCES[core]},
-            'applied':fingerprint('/var/lib/pnm/cores/'+core+'/applied.env')}
+            'applied':fingerprint('/var/lib/pnm/cores/'+core+'/applied.env'),'previous':previous}
+
+
+def previous_pair(core: str) -> None:
+    directory=Path('/var/lib/pnm/cores')/core
+    metadata=dict(line.split('=',1) for line in (directory/'previous.env').read_text().splitlines())
+    need(set(metadata)=={'SCHEMA_VERSION','CORE','VERSION'} and metadata['SCHEMA_VERSION']=='1'
+         and metadata['CORE']==core,'reboot previous-state metadata identity differs')
+    result=subprocess.run([str(directory/'previous'),'version'],capture_output=True,text=True,timeout=10)
+    found=re.search(r'(?m)^Xray (\d+\.\d+\.\d+)' if core=='xray'
+                    else r'(?m)^Version:\s*v?(\d+\.\d+\.\d+)',result.stdout+result.stderr)
+    need(result.returncode==0 and found is not None and found.group(1)==metadata['VERSION'].removeprefix('v'),
+         'reboot previous binary and metadata version differ')
 
 
 def binding(core: str) -> None:
@@ -63,12 +81,18 @@ def lifecycle() -> dict:
         result=subprocess.run(['/usr/bin/python3','-B','/opt/pnm-install-cases.py'],
                               stdout=output,stderr=subprocess.STDOUT,timeout=600)
     detail=json.loads(Path('/var/tmp/pnm-install-result.json').read_text())
+    scenario=Path('/opt/pnm-test-scenario').read_text().strip()
+    need(scenario in ('lifecycle','core-update'),'unknown VM lifecycle scenario')
+    update=scenario=='core-update'
+    expected=22 if update else 14
     need(result.returncode==0 and detail.get('passed') is True
-         and detail.get('mainflow_completed') is True and len(detail.get('checks',[]))==14,
-         'independent VM mainflow did not pass14 checks')
+         and detail.get('mainflow_completed') is True and len(detail.get('checks',[]))==expected,
+         'independent VM mainflow/update checks did not pass')
     for core in UNITS:
         binding(core)
-    baseline={'schema':1,'boot_id':identity.boot_id,
+        if update:
+            previous_pair(core)
+    baseline={'schema':1,'boot_id':identity.boot_id,'update_matrix':update,
               'cores':{core:core_state(core) for core in UNITS},
               'authority':{p:fingerprint(p) for p in ('/etc/pnm/node.conf','/etc/pnm/versions.conf',
                            '/etc/passwd','/etc/group','/etc/shadow','/etc/gshadow')}}
@@ -76,7 +100,8 @@ def lifecycle() -> dict:
         json.dump(baseline,stream)
         stream.flush()
         os.fsync(stream.fileno())
-    return {'mainflow_checks':14,'both_bindings_confirmed':True,'baseline_persisted':True}
+    return {'mainflow_checks':14,'update_checks':8 if update else 0,
+            'both_bindings_confirmed':True,'baseline_persisted':True}
 
 
 def reboot_acceptance() -> dict:
@@ -94,8 +119,11 @@ def reboot_acceptance() -> dict:
         original=baseline['cores'][core]
         need(current['active']=='active' and current['enabled']=='enabled'
              and current['invocation']!=original['invocation']
-             and current['resources']==original['resources'] and current['applied']==original['applied'],
+             and current['resources']==original['resources'] and current['applied']==original['applied']
+             and current['previous']==original['previous'],
              'reboot changed persisted resources or retained old invocation')
+        if baseline['update_matrix']:
+            previous_pair(core)
     need(baseline['authority']=={p:fingerprint(p) for p in baseline['authority']},
          'reboot changed authority or NSS baseline')
     logs=Path('/var/tmp/pnm-vm-reboot-evidence')
@@ -151,6 +179,7 @@ def reboot_acceptance() -> dict:
         need(any(line.split()[3].rsplit(':',1)[-1]==str(port) for line in output.splitlines()),
              'reboot actual Core listener is absent')
     return {'reboot_checks':count+1,'kernel_boot_id_changed':True,'both_invocations_changed':True,
+            'paired_previous_preserved':baseline['update_matrix'],
             'persisted_resources_preserved':True,'stale_links_withheld':True,
             'ordinary_restart_did_not_promote':True,'both_bindings_reconfirmed':True,
             'tcp_udp_listeners_observed':True}

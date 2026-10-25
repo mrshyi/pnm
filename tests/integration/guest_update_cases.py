@@ -139,10 +139,15 @@ def run_updates(logs: Path, env: dict[str,str], call: Callable,
                 interruption: str = 'none',
                 publication_fault: str | None = None) -> dict[str,str] | None:
     mapping=[int(x) for x in Path('/proc/self/uid_map').read_text().split()]
-    require(os.geteuid()==0 and len(mapping)==3 and mapping[0]==0 and mapping[1]>0
-            and mapping[2]==65536,'updates require isolated mapped guest root')
-    require(Path('/run/host/container-manager').read_text().strip()=='systemd-nspawn',
-            'updates require native guest')
+    if os.geteuid()==0 and len(mapping)==3 and mapping[0]==0 and mapping[1]>0 and mapping[2]==65536:
+        require(Path('/run/host/container-manager').read_text().strip()=='systemd-nspawn',
+                'updates require native guest')
+    else:
+        try:
+            from guest_vm_boot import require_approved_vm
+            require_approved_vm()
+        except (ImportError,RuntimeError):
+            raise RuntimeError('updates require isolated mapped guest root') from None
     require({p.name for p in Path('/sys/class/net').iterdir()}=={'lo'},'updates require private lo')
     require(interruption in ('none','term','kill-update-xray','kill-update-hysteria2',
                              'kill-rollback-xray','kill-rollback-hysteria2'),'unknown update interruption mode')

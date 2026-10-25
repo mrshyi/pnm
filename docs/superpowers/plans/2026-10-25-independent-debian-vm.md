@@ -64,6 +64,20 @@ does not yet prove a VM can be created or booted.
       evidence. Deployed identity G-01 and independent external clients still
       require authorized targets; do not infer them from local tests.
 
+## Follow-on G-03 slice: distinct-version update state across kernel reboot
+
+- [x] Reuse the exact verified prior/current Core assets and existing actual
+      CLI update/checksum-refusal/rollback/swap-forward assertions inside the
+      already guarded independent VM. Only the update success route gains that
+      approved VM guard; existing fault helpers remain container-only.
+- [x] Retain both previous binary and previous.env fingerprints in the reboot
+      baseline, execute each trusted previous binary's version command to
+      validate metadata pairing, and repeat after the same-disk guest reboot.
+      Confirm existing stale-link/restart/apply/peer and listener assertions.
+- [x] Run guard/compile/static checks, review, full encrypted image readback and
+      host cleanup checks; update exact evidence and locally commit the stage.
+      The loopback HTTPS fixture does not prove upstream acquisition or L3.
+
 Preparation must stop and retain evidence on identity, signature, resource or
 cleanup uncertainty. Missing software is a preparation task, not evidence that
 WSL cannot support an independent guest kernel.
@@ -118,7 +132,17 @@ read-only inspection confirms the torn bytes. Final guards18/18,22 integration
 compilations and static checks pass. Full final2GiB encrypted-image readback
 matches its original digest, loop detached, QEMU quiescent, host NSS/dpkg
 unchanged and cleanup empty. Broader storage/commit positions and the distinct-
-version update/previous-state matrix across VM reboot remain separately open.
+version update/previous-state matrix across VM reboot remain separately scoped.
+
+Follow-on G-03 `pnm-vm-boot-volume.eq48angk` passes14 mainflow +8 actual distinct-
+version checksum/update/rollback/swap-forward assertions and7 same-disk reboot
+checks. Both previous files retain their fingerprints and actual previous binary
+versions match metadata before/after reboot. Guards19/19 (including real-version
+mismatch rejection),22 integration compilations and static checks pass. Full2GiB
+encrypted readback matches its original digest; loop detached, QEMU quiescent,
+host NSS/dpkg hashes unchanged and cleanup empty. Review is self-review because
+the independent reviewer remains usage-limited; no independent approval is
+claimed. Upstream acquisition, remaining storage positions and L3 stay separate.
 Primary references: [KVM API](https://docs.kernel.org/virt/kvm/api.html),
 [APT configuration order](https://manpages.debian.org/trixie/apt/apt.conf.5.en.html),
 [QEMU options](https://www.qemu.org/docs/master/system/qemu-manpage.html).

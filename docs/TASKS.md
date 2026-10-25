@@ -2,7 +2,7 @@
 
 **Last reconciled:** 2026-10-25 (default31/391; native faults, independent Debian lifecycle/reboot and selected abrupt-VM recovery pass; broader storage/update matrix and external acceptance remain open)
 
-**Current increment baseline:** branch `dev`, parent HEAD `4561782`, VERSION `0.16.0-rc.1`.
+**Current increment baseline:** branch `dev`, parent HEAD `1f68c03`, VERSION `0.16.0-rc.1`.
 
 **Environment recheck:** the earlier host EIO/EROFS/CreateInstance failure is no
 longer reproduced: Debian root is writable, real `true`/`df` execute successfully
@@ -1991,6 +1991,30 @@ unchanged, not freshly rerun. Independent review remains unavailable; this
 increment has self-review and executed checks.
 
 ## Immediate next steps
+
+Selected abrupt-VM recovery is committed as `1f68c03`. The follow-on G-03 slice
+reuses the existing verified prior/current Core assets and private loopback HTTPS
+transport for checksum refusal, actual distinct-version update, rollback and swap
+forward. Its separately approved VM route preserves the original mapped guest
+guard and does not enable container-only startup/account/mount fault helpers.
+Reboot baselines now retain previous/previous.env fingerprints and compare each
+trusted previous binary's actual version with its metadata before/after reboot.
+`pnm-vm-update-preboot.zgepo12i` passes18 guards,22 integration compilations and
+static checks. The additional actual-version pairing regression passes with
+the19-guard suite at `pnm-vm-update-final-guards.0t7xz72w`, including rejection of
+mismatched metadata for each Core without modifying it. Fresh
+`/var/tmp/pnm-vm-boot-volume.eq48angk` passes14 lifecycle +8 distinct-version
+update/checksum/rollback/swap checks and7 same-disk reboot checks. Both paired
+previous files persist with unchanged fingerprints and actual version/metadata
+agreement; stale links stay withheld through ordinary restart, independent apply
+reconfirms bindings without changing the peer, and both listeners are observed.
+Normal guest-requested reboot/poweroff and QEMU0 pass. Full2GiB encrypted image
+readback matches the original digest, QEMU is quiescent, loop detached and cleanup
+empty. A fresh host NSS/dpkg hash comparison also matches the pre-tooling
+baseline. Production Bash remains unchanged since `292b682`;31/391 is the
+existing full baseline, not a fresh full-suite run for this test-only increment.
+Independent review is still unavailable; self-review and actual checks are
+recorded separately.
 
 Startup readiness/harness and initiating-error repairs are committed as
 `ce6713f`, `0bee0d8`, and `580ead7`. Fresh native fault cases now complete the

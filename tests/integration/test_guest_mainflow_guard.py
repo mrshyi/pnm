@@ -18,6 +18,37 @@ DRIVER=Path(__file__).with_name('test_guest_mainflow.py')
 
 
 class GuestGuardTests(unittest.TestCase):
+    @unittest.skipUnless(sys.platform=='linux','Linux previous executable fixture')
+    def test_vm_previous_pair_checks_actual_binary_version(self):
+        script='''import sys,tempfile
+from pathlib import Path
+sys.path.insert(0,sys.argv[1])
+import guest_vm_lifecycle as fixture
+with tempfile.TemporaryDirectory(prefix='pnm-previous-pair.') as directory:
+    root=Path(directory)
+    fixture.Path=lambda unused:root
+    for core,output in (('xray','Xray 1.2.3'),('hysteria2','Version: v1.2.3')):
+        folder=root/core
+        folder.mkdir()
+        binary=folder/'previous'
+        binary.write_text('#!'+sys.executable+'\\nprint('+repr(output)+')\\n')
+        binary.chmod(0o700)
+        metadata=folder/'previous.env'
+        metadata.write_text('SCHEMA_VERSION=1\\nCORE='+core+'\\nVERSION=1.2.3\\n')
+        fixture.previous_pair(core)
+        wrong='SCHEMA_VERSION=1\\nCORE='+core+'\\nVERSION=9.9.9\\n'
+        metadata.write_text(wrong)
+        try:
+            fixture.previous_pair(core)
+            raise AssertionError('mismatched previous metadata accepted')
+        except RuntimeError as error:
+            assert str(error)=='reboot previous binary and metadata version differ'
+        assert metadata.read_text()==wrong
+'''
+        result=subprocess.run([sys.executable,'-B','-c',script,str(DRIVER.parent)],
+                              capture_output=True,timeout=15)
+        self.assertEqual(result.returncode,0,result.stderr.decode(errors='replace'))
+
     def test_abrupt_vm_journal_observation_retains_torn_bytes(self):
         script='''import sys,tempfile
 from pathlib import Path
