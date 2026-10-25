@@ -1,4 +1,4 @@
-"""Real shadow account creation refusal in a private child mount namespace."""
+"""Real shadow account-tool refusal in a private child mount namespace."""
 from contextlib import contextmanager
 import errno
 import grp
@@ -19,6 +19,8 @@ ARGUMENTS={
     'groupadd':['--system','hysteria'],
     'useradd':['--system','--gid','hysteria','--home-dir','/nonexistent',
                '--shell','/usr/sbin/nologin','--no-create-home','hysteria'],
+    'userdel':['--','hysteria'],
+    'groupdel':['--','hysteria'],
 }
 
 
@@ -29,25 +31,38 @@ def run_account_tool(arguments, wrapper, *, isolated=False):
     require(private.resolve()==private and info.st_uid==0 and stat.S_IMODE(info.st_mode)==0o700,
             'private account launcher required')
     program=Path(wrapper).name
-    require(program in ARGUMENTS,'unexpected account creation tool')
+    require(program in ARGUMENTS,'unexpected account tool')
     if arguments!=ARGUMENTS[program] or (private/'attempted').exists():
         return subprocess.run(['/usr/sbin/'+program,*arguments],timeout=20).returncode
     config=json.loads((private/'config.json').read_text())
-    require(config['program']==program and pwd.getpwnam('xray').pw_uid>0
-            and grp.getgrnam('xray').gr_gid>0,'account failure lacks prior real Xray identity')
+    require(config['program']==program and grp.getgrnam('xray').gr_gid>0,
+            'account failure lacks prior real Xray identity')
+    if program!='groupdel':
+        require(pwd.getpwnam('xray').pw_uid>0,'account failure lacks prior real Xray user')
     try:
-        pwd.getpwnam('hysteria')
+        target_user=pwd.getpwnam('hysteria')
     except KeyError:
-        pass
+        require(program!='userdel','user deletion target is missing')
     else:
-        raise RuntimeError('refusal target already exists')
+        require(program=='userdel' and target_user.pw_uid>0
+                and target_user.pw_dir=='/nonexistent' and target_user.pw_shell=='/usr/sbin/nologin',
+                'account refusal target user is unexpected')
     try:
         target_group=grp.getgrnam('hysteria')
     except KeyError:
         require(program=='groupadd','user creation target group is missing')
     else:
-        require(program=='useradd' and target_group.gr_gid>0,
-                'group creation target already exists')
+        require(program!='groupadd' and target_group.gr_gid>0,
+                'account refusal target group is unexpected')
+        if program=='userdel':
+            require(target_user.pw_gid==target_group.gr_gid,'user deletion primary group mismatch')
+    if program in ('userdel','groupdel'):
+        for unit in ('xray.service','hysteria-server.service'):
+            output=subprocess.check_output(['systemctl','show',unit,
+                '--property=LoadState,ActiveState,MainPID'],text=True,timeout=10)
+            require(dict(line.split('=',1) for line in output.splitlines() if line)=={
+                'LoadState':'not-found','ActiveState':'inactive','MainPID':'0'},
+                'account deletion preceded original absent service recovery')
     if not isolated:
         require(os.stat('/proc/self/ns/mnt').st_ino==config['mount_namespace'],
                 'account launcher parent namespace changed')
@@ -66,9 +81,9 @@ def run_account_tool(arguments, wrapper, *, isolated=False):
 
 
 @contextmanager
-def readonly_account_creation(logs, env, program):
+def readonly_account_tool(logs, env, program):
     require_guest()
-    require(program in ARGUMENTS,'unexpected account creation tool')
+    require(program in ARGUMENTS,'unexpected account tool')
     private=logs/('readonly-account-'+uuid.uuid4().hex)
     private.mkdir(mode=0o700)
     namespace=os.stat('/proc/self/ns/mnt').st_ino
@@ -96,6 +111,14 @@ def readonly_account_creation(logs, env, program):
             require(observation['private_namespace'] and observation['probe_errno']==errno.EROFS
                     and observation['mount_removed'] and observation['tool_rc']>0
                     and observation['prior_xray_identity'],'account refusal receipt incomplete')
+
+
+@contextmanager
+def readonly_account_creation(logs, env, program):
+    require_guest()
+    require(program in ('groupadd','useradd'),'unexpected account creation tool')
+    with readonly_account_tool(logs,env,program) as observation:
+        yield observation
 
 
 if __name__=='__main__':

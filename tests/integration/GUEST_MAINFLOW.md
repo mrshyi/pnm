@@ -311,3 +311,23 @@ bytes/modes/UIDs/GIDs and authority/directory/service baseline, absent managed
 resources and no commit/applied promotion. Restore PATH between failures, then
 run the complete normal lifecycle and trusted restore. Ancillary shadow backup
 files, other NSS backends and account deletion failures are separate assertions.
+
+`account-deletion-userdel` and `account-deletion-groupdel` each require a fresh
+guest. Combine the real precommit publisher EROFS73 with a real shadow deletion
+tool refusal in the reviewed child read-only `/etc` namespace. Exact target argv,
+NSS removal point and both units already not-found/inactive/PID0 are required.
+The groupdel fixture sets the real guest `USERGROUPS_ENAB=no` before its baseline,
+retaining file ownership/mode/identity and including login.defs in resource
+comparisons. Debian's default yes lets userdel remove the empty private group,
+which would skip PNM's explicit groupdel call; that default remains in userdel
+acceptance. This is a guest policy branch, not a product argv change.
+CLI70 must retain original73/recovery70, RECOVERY_REQUIRED and owned APPLIED
+receipts without RESTORED for precisely the remaining Hysteria user+group or
+group alone. Original ordinary resources/services must recover without a marker
+or commit; primary NSS and owned directories are explicitly not fully recovered.
+After restoring both PATH scopes, four fresh protected commands refuse70 with
+the exact unresolved deployment reason and no stdout. Compare PNM receipts,
+primary NSS, resources, directory identities/metadata and units for no mutation.
+Retain the unresolved guest and report `mainflow_completed:false` with
+`expected_recovery_required:true`. Re-run creation-failure acceptance after
+changing the shared tool fixture; do not infer other NSS/media/VM acceptance.

@@ -95,6 +95,8 @@ for entry in (
     lambda: __import__('guest_account_fault').run_account_tool([],None),
     lambda: __import__('guest_account_fault').run_account_tool([],None,isolated=True),
     lambda: accounts.run_creation_failures(None,None,forbidden,forbidden,[]),
+    lambda: __import__('guest_account_fault').readonly_account_tool(None,None,'userdel').__enter__(),
+    lambda: accounts.run_deletion_failure(None,None,forbidden,[],program='userdel'),
     lambda: readiness.run_restart_readiness(None,forbidden,forbidden,forbidden,forbidden,[]),
     lambda: preflight.run_dependencies(None,None,forbidden,forbidden,[]),
     lambda: deployment.run_startup_failures(None,forbidden,forbidden,[]),

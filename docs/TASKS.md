@@ -1,8 +1,8 @@
 # PNM Current Tasks
 
-**Last reconciled:** 2026-10-25 (default31/391; deployment marker observation repaired, native publisher EROFS15/15; later commit/VM/external acceptance remains open)
+**Last reconciled:** 2026-10-25 (default31/391; native commit and account-tool failure slices pass; independent-kernel VM/reboot and external acceptance remain open)
 
-**Current increment baseline:** branch `dev`, parent HEAD `236b566`, VERSION `0.16.0-rc.1`.
+**Current increment baseline:** branch `dev`, parent HEAD `1b49c04`, VERSION `0.16.0-rc.1`.
 
 **Environment recheck:** the earlier host EIO/EROFS/CreateInstance failure is no
 longer reproduced: Debian root is writable, real `true`/`df` execute successfully
@@ -103,11 +103,11 @@ not close G-02 or prove systemd recovery, reboot or public client connectivity.
 | Item | Current status | Evidence / blocker | Next action |
 |---|---|---|---|
 | G-01 — runtime/config/link state | BLOCKED for production acceptance | Current `lib/node.sh` source prints an HY2 runtime row. Prior production output reportedly omitted it despite the same VERSION; deployed executable/source identity has not been verified in this session. | On an authorized host, perform read-only path/version/source-hash comparison; do not apply or upgrade as diagnosis. |
-| G-02 — complete deployment rollback | Actual startup/post-health/deadline and TERM compensation PASS; deployment SIGKILL guard PASS / broader matrix open | Both Core failures and TERM compensate original baselines without commit/applied promotion, then retry passes. SIGKILL retains unfinished candidate state; fresh writer/protected reads refuse70 without mutation. | Continue other publication failures and independent VM reboot; do not infer production readiness. |
-| G-03 — Core update transaction | Actual distinct-version operations and startup/recovery failure PASS / broader matrix open | Both official Cores change real versions, retain paired previous state and preserve peer evidence. Native start-once failures compensate; start-twice failures retain RECOVERY_REQUIRED and block protected commands. Curl uses a private HTTPS transport fixture. | Extend late publication/commit and interruption matrix; upstream acquisition and VM reboot remain separate. |
-| G-04 — backup/restore safety | Actual trusted round trip and startup/recovery failure PASS / broader matrix open | Real CLI restores bytes/metadata and applied bindings. Native startup failure compensates and retries; failed compensation retains uncertainty and blocks further protected operations. | Accept interruption, other publication failures and reboot separately. |
+| G-02 — complete deployment rollback | Native compensation/publication/interruption slices PASS / VM/storage matrix open | Both Core startup/post-health/deadline/TERM failures compensate and retry. Publisher EROFS compensates; post-rename SIGKILL retains uncertainty. Unknown marker observation forbids blind rollback; deletion refusal retains exact owned identities. See dated increments. | Prepare independent-kernel VM/reboot acceptance and retain remaining storage/commit-position boundaries; do not infer production readiness. |
+| G-03 — Core update transaction | Native distinct-version, publication and interruption slices PASS / broader matrix open | Both official Cores retain paired current/previous state and peer evidence across startup failure, previous binary/metadata/applied EROFS, TERM and SIGKILL or retain unresolved state. Curl uses a private HTTPS transport fixture. | Independent-kernel reboot and remaining commit/storage positions; upstream acquisition stays separate. |
+| G-04 — backup/restore safety | Native trusted restore, partial publication and interruption slices PASS / broader matrix open | Actual trusted round trip, partial-write EROFS, TERM/SIGKILL and failed compensation verify bytes/metadata/NSS/applied recovery or retained uncertainty with protected-command refusal. | Independent-kernel VM/reboot and remaining storage/client boundaries; do not equate trusted archive validation with arbitrary executable safety. |
 | G-05 — dependency preflight | Actual Debian guest19-tool refusal and repeat refusal PASS | A private PATH individually hides all19 declared preflight prerequisites. Actual JSON install returns2 with the matching FAIL class and preserves authority/NSS fingerprints, PNM inventory/transactions and absent Core/service/account state; normal lifecycle then passes. | Upstream acquisition failures, other distributions and remaining fault positions stay separate. |
-| G-06 — HY2 TLS permissions | Actual managed-account TLS, permission failures and valid reuse PASS | Wrong key owner/non-traversable parent fail real gates; permission recovery and restart pass. Valid preexisting identities survive preview, refusal, late compensation and full lifecycle with unchanged NSS and no PNM creation ownership. | Account-tool failures, independent VM and external clients remain separate; do not infer external reachability. |
+| G-06 — HY2 TLS permissions | Native managed TLS, valid reuse and account-tool refusal slices PASS | Actual service TLS access and permission gates pass; preexisting identities are preserved. Real creation refusal compensates prior identities; real deletion refusal retains precise unfinished ownership/recovery evidence. | Other NSS/platform behavior, independent-kernel VM and external clients remain separate; do not infer external reachability. |
 
 ## G-02 deployment transaction — working-tree implementation
 
@@ -1810,6 +1810,60 @@ Independent final review finds no blocker. Account deletion failures,
 other NSS/platform/upstream cases and independent VM/client gates remain open.
 Product Bash is unchanged;31/391 remains the current full baseline.
 
+## Native account deletion refusal — 2026-10-25
+
+Creation compensation is committed as `1b49c04`. T-08 now covers incomplete
+recovery when actual userdel or groupdel fails. The existing account fixture
+accepts exact `-- hysteria` deletion commands only at the expected NSS removal
+point, with both services already not-found/inactive/PID0. The reviewed shared
+child read-only `/etc` bind preserves mount ownership and parent isolation.
+Creation retains its restricted wrapper and original behavior. Combine this
+with the existing real publisher EROFS73; each deletion case uses a fresh guest.
+
+New generic/deletion entries first fail, then11 guards,19 Python compilations
+and syntax/security/ShellCheck pass under
+`/var/tmp/pnm-account-delete-gates.48oxnj46`. Independent pre-execution review
+finds no blocker. Userdel guest `03i3l3z_` passes5/5 under
+`/var/tmp/pnm-account-delete-user-volume.qia_bd8w`: actual deletion refusal,
+CLI70 with original73/recovery70, exact remaining owned user/group and unfinished
+APPLIED receipts, RECOVERY_REQUIRED, ordinary resource/service baseline restored,
+no marker/commit and four fresh protected command refusals without stdout or
+receipt/NSS/resource/directory/unit mutation. Its intentional result is
+mainflow_completed:false and expected_recovery_required:true; it does not claim
+complete NSS or directory compensation. Its full encrypted-image readback and
+cleanup verify. Initial groupdel `plytlxc6` under
+`/var/tmp/pnm-account-delete-group-volume.vwhvltu5` fails at CLI73 rather than70;
+its failed image still verifies full encrypted readback, detached loop, unchanged
+host DBs/not-found scope/no mounts and no cleanup errors. Read-only verified-image
+inspection proves USERGROUPS_ENAB=yes, no remaining Hysteria group, its RESTORED
+receipt and no groupdel wrapper attempt. Actual userdel had removed the private
+group, so the intended tool fault never ran. The installed userdel manual also
+documents this policy. The first inspector incorrectly assumed a single tx and
+was corrected to select OPERATION=deployment; only read-only extraction occurred.
+
+Only the fresh groupdel fixture now configures USERGROUPS_ENAB=no before taking
+its baseline. It verifies the protected regular policy file and unique setting,
+preserves mode/UID/GID/inode and compares login.defs across recovery and refusals.
+The userdel case retains the default yes policy. No PNM argv or product code is
+changed. Independent review accepts this smaller policy branch instead of adding
+foreign group members (which would itself prevent explicit groupdel). Final
+groupdel `kxu3cfbs` passes5/5 under
+`/var/tmp/pnm-account-delete-group-final-volume.qluan8iw`, including actual
+groupdel refusal under the explicit no policy and exact remaining owned group.
+Full encrypted readback/cleanup verify, with host DBs unchanged, scope not-found
+and no mounts. Final default-policy userdel `g7re80jp` also passes5/5 under
+`/var/tmp/pnm-account-delete-user-final-volume.ehcq2731`; its full encrypted
+readback/cleanup verifies with the same unchanged host/not-found scope/no mounts.
+Shared creation regression `pqxtqvyd` passes16/16 under
+`/var/tmp/pnm-account-creation-final-regression-volume.zpaqug3_`, including normal
+complete lifecycle/restore; full encrypted readback and cleanup verify, host DBs
+remain unchanged, scope is not-found and no mounts remain. These runs use the
+updated19 compiled Python sources. Independent final review finds no blocker.
+No failed fixture run is counted as a refusal PASS. Production Bash has no diff
+from the verified `292b682` full31/391 baseline; it was not rerun for this
+integration-only increment.
+Product Bash is unchanged;31/391 remains the full baseline.
+
 ## Immediate next steps
 
 Startup readiness/harness and initiating-error repairs are committed as
@@ -1820,10 +1874,15 @@ All19 declared prerequisite tools and first-deployment Core startup failures now
 pass real checks. Actual post-health listener absence now passes as well.
 Update/rollback and restore startup interruption now pass. Native transient
 previous binary/metadata/applied publication failures and partial restore EROFS
-also pass. Continue commit/marker and other remaining fault-position acceptance.
-Persistent storage and the following VM/deployed-host/external-client prerequisites
-remain separate. The earlier cleanup proposal is unnecessary; all original roots
-are retained.
+also pass. Native publisher EROFS, late post-rename SIGKILL and all four account
+tool refusal slices now pass as recorded above. Continue the
+[independent Debian VM plan](superpowers/plans/2026-10-25-independent-debian-vm.md):
+read-only preflight observes KVM API12 and APT candidates but no emulator or boot
+artifacts; package authentication, private preparation and actual VM boot remain
+unverified. Missing tools are a preparation task, not proof that WSL cannot run
+an independent guest kernel. Persistent storage, remaining fault positions and
+deployed-host/external-client prerequisites stay separate. The earlier cleanup
+proposal is unnecessary; all original roots are retained.
 Successful main flow, update/rollback and late-deadline compensation cannot replace
 the following VM/reboot, deployed-host and external-client prerequisites.
 

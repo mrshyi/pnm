@@ -348,12 +348,13 @@ try:
                           'core-rollback-sigkill-xray','core-rollback-sigkill-hysteria2')
     restore_interruptions=('restore-term','restore-sigkill-xray','restore-sigkill-hysteria2')
     publication_cases=('core-publication-previous','core-publication-metadata','core-publication-applied')
+    account_deletions=('account-deletion-userdel','account-deletion-groupdel')
     check(scenario in ('lifecycle','deployment-failure','core-update','core-update-failure','configured-ports','restore-publication',
           'runtime-evidence','restore-failure','startup-readiness','core-recovery-failure-xray',
           'core-recovery-failure-hysteria2','restore-recovery-failure','tls-access','account-reuse',
           'core-interruption','core-interruption-hysteria2','restart-readiness','dependency-refusal',
           'deployment-startup-failure','deployment-listener-failure','deployment-term',
-          'deployment-sigkill','deployment-commit-readonly','deployment-late-sigkill','account-creation-failure')+update_interruptions+restore_interruptions+publication_cases,'unknown guest scenario')
+          'deployment-sigkill','deployment-commit-readonly','deployment-late-sigkill','account-creation-failure')+update_interruptions+restore_interruptions+publication_cases+account_deletions,'unknown guest scenario')
     if scenario=='account-reuse':
         from guest_account_cases import prepare_accounts, require_preserved
         reused_accounts=prepare_accounts()
@@ -405,6 +406,12 @@ try:
         stage='actual installation dependency refusal matrix'
         from guest_preflight_cases import run_dependencies
         run_dependencies(logs,env,call,absent,passed)
+    if scenario in account_deletions:
+        stage='actual account deletion refusal retains incomplete recovery'
+        from guest_account_cases import run_deletion_failure
+        run_deletion_failure(logs,env,call,passed,program=scenario.rsplit('-',1)[1])
+        result={'passed':True,'checks':passed,'expected_recovery_required':True,'mainflow_completed':False}
+        raise SystemExit(0)
     if scenario=='account-creation-failure':
         stage='actual account creation refusal and compensation'
         from guest_account_cases import run_creation_failures

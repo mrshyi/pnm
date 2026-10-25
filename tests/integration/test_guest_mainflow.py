@@ -15,6 +15,7 @@ update_interruptions=('core-update-term','core-update-sigkill-xray','core-update
                       'core-rollback-sigkill-xray','core-rollback-sigkill-hysteria2')
 restore_interruptions=('restore-term','restore-sigkill-xray','restore-sigkill-hysteria2')
 publication_cases=('core-publication-previous','core-publication-metadata','core-publication-applied')
+account_deletions=('account-deletion-userdel','account-deletion-groupdel')
 parser.add_argument('--baseline',type=Path,required=True,help='private verified boot fixture parent')
 parser.add_argument('--nspawn',type=Path,required=True,help='trusted native systemd-nspawn executable')
 parser.add_argument('--asset-cache',type=Path,required=True,help='verified pinned Core asset cache')
@@ -23,7 +24,7 @@ parser.add_argument('--scenario',choices=('lifecycle','deployment-failure','core
     'core-recovery-failure-xray','core-recovery-failure-hysteria2','restore-recovery-failure','tls-access',
     'account-reuse','account-creation-failure','core-interruption','core-interruption-hysteria2','restart-readiness',
     'dependency-refusal','deployment-startup-failure','deployment-listener-failure',
-    'deployment-term','deployment-sigkill','deployment-commit-readonly','deployment-late-sigkill')+update_interruptions+restore_interruptions+publication_cases,default='lifecycle')
+    'deployment-term','deployment-sigkill','deployment-commit-readonly','deployment-late-sigkill')+update_interruptions+restore_interruptions+publication_cases+account_deletions,default='lifecycle')
 parser.add_argument('--previous-asset-cache',type=Path)
 parser.add_argument('--work-dir',type=Path,help='optional canonical private root-owned POSIX fixture directory')
 options=parser.parse_args()
@@ -224,6 +225,14 @@ if options.scenario in ('deployment-startup-failure','deployment-listener-failur
     shutil.copyfile(repo/'tests/integration/guest_deployment_cases.py',destination)
     destination.chmod(0o700)
     py_compile.compile(str(destination),cfile=str(base/'guest_deployment_cases.pyc'),doraise=True)
+if options.scenario in account_deletions:
+    for name in ('guest_start_fault.py','guest_io_fault.py','guest_commit_fault.py',
+                 'guest_recovery_cases.py','guest_account_fault.py','guest_account_cases.py'):
+        destination=root/'opt'/name
+        assert not destination.exists() and not destination.is_symlink()
+        shutil.copyfile(repo/'tests/integration'/name,destination)
+        destination.chmod(0o700)
+        py_compile.compile(str(destination),cfile=str(base/(name+'c')),doraise=True)
 unit=root/'etc/systemd/system/pnm-boot-probe.service'
 assert unit.is_file() and not unit.is_symlink()
 assert 'ExecStart=/usr/bin/python3 /opt/pnm-boot-worker.py' in unit.read_text(), 'dedicated boot fixture unit required'
