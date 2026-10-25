@@ -2,7 +2,7 @@
 
 **Last reconciled:** 2026-10-26 (bounded publisher tmpfs ENOSPC checks added; independent Debian lifecycle/update/reboot and selected abrupt-VM recovery remain recorded; broader storage/platform and external acceptance are unverified)
 
-**Current increment baseline:** branch `dev`, parent HEAD `4078e75`, VERSION `0.16.0-rc.1`.
+**Current increment baseline:** branch `dev`, parent HEAD `d2712d1`, VERSION `0.16.0-rc.1`.
 
 **Environment recheck:** the earlier host EIO/EROFS/CreateInstance failure is no
 longer reproduced: Debian root is writable, real `true`/`df` execute successfully
@@ -2016,7 +2016,7 @@ scenario; dated records above retain its actual results and limitations.
 | T-12 | L1 TLS/SNI/pin/access checks; native real managed-account TLS faults; VM positive TLS loading | External handshake/network and every L2 TLS fault combination |
 | T-13 | L1 configured/applied failure paths; native selected applied/publication EROFS compensation | Every node/applied write-failure position through real VM deployment |
 | T-14 | Native actual outer deadline failure, full compensation and clean retry | All late health/deadline timing interleavings |
-| T-15 | L1 commit failure paths and bounded actual tmpfs uncertainty/candidate inode/data ENOSPC; native uncertainty-create EROFS; VM candidate-create/rename EROFS and candidate-write EFBIG with full compensation/retry/reboot | Whole-deployment/independent-VM ENOSPC, other commit positions and physical media behavior |
+| T-15 | L1 and bounded tmpfs uncertainty/candidate ENOSPC; native uncertainty-create EROFS; VM candidate-create/rename EROFS, candidate-write EFBIG and real ext4 candidate ENOSPC with full compensation/retry/reboot | Other whole-deployment storage/commit positions, full inode exhaustion on VM and physical media behavior |
 | T-16 | L1 and actual VM post-durable-commit journal append EROFS preserve install0, valid marker and normal lifecycle/reboot | Other derived logging/cleanup failures and real-device media behavior |
 | T-17 | L1 marker corruption/uncertain publication; native post-rename CLI stop; VM retained marker+uncertainty after abrupt stop | All corruption/fsync/device-failure positions and physical media behavior |
 | T-18 | L1 foreign file/applied metadata drift retention without blind rollback | Every independent-VM external-edit race |
@@ -2308,6 +2308,38 @@ real ENOSPC cases,28 guards, the actual nobody guard,24 Python compilations and
 syntax/security/ShellCheck.20 document paths pass. Independent review remains
 unavailable by usage capacity; the boundary is self-review and execution.
 
+## Independent VM real ext4 ENOSPC recovery — 2026-10-26
+
+After commit `d2712d1`, fresh Windows C capacity recovers to4,059,680,768 bytes,
+and a preboot recheck confirms4,040,536,064. No prior evidence is deleted. Continue
+the [VM disk-space plan](superpowers/plans/2026-10-26-vm-commit-enospc.md) in the
+existing2GiB independent VM using its exact protected Linux output path.
+
+The explicit new space publisher variant requires this boot's approved VM guard;
+host/container routes refuse before allocation. It verifies root ext4 /dev/vda,
+at most2GiB filesystem, protected root0700 evidence and an anonymous root0600
+filler on the transaction's own filesystem. At the actual empty candidate FD,
+bounded fallocate operations exhaust available VM blocks. The unchanged original
+publisher encounters actual ENOSPC28 and returns73. Only the owned anonymous
+filler is closed; available blocks must recover before evidence is recorded and
+the real CLI proceeds with compensation. No limits, file APIs, publisher stdin
+or transaction resources are substituted.
+
+Meaningful host-refusal RED `pnm-vm-space-red.ycn5vm3q` precedes implementation.
+Preboot `pnm-vm-space-preboot.3n5tg1w4` passes29 guards,4 bounded tmpfs regressions,
+27 integration/operator Python compilations and static gates. Actual independent
+VM `/var/tmp/pnm-vm-boot-volume.5nul5yug` now passes original publisher/CLI73,
+retained pending/no marker and complete original resource/NSS/directory/unit/
+applied compensation with terminal rollback. Without state repairs, normal14
+lifecycle checks and7 same-disk reboot checks pass. QEMU exits0 with actual
+guest reboot/poweroff, both runs are quiescent, loop is detached and cleanup empty.
+Full2GiB encrypted image readback matches the original digest. Fresh host NSS/dpkg
+hashes equal the pre-tooling baseline and all21 document paths pass.
+This closes the selected candidate-write virtual ext4 space refusal, not other
+commit positions, physical EIO, deployed identity or external-client acceptance.
+The recent31/394 full Bash result remains separate from this test-only increment;
+independent review is still unavailable, so review is self-review and execution.
+
 ## Immediate next steps
 
 Selected abrupt-VM recovery is committed as `1f68c03`. The follow-on G-03 slice
@@ -2368,17 +2400,25 @@ and external clients for dual-protocol traffic. The stand-in and private-network
 Core/container results do not close those external items;
 Phase 3 remains incomplete and release work has not started.
 
-**Current local execution prerequisite (2026-10-25):** after the final verified
+**Local execution capacity history (2026-10-25):** after the final verified
 transport VM is retired and its complete image retained, Windows reports
 C=2,004,451,328 and D=2,147,233,792 bytes free. Both are below the2,147,483,648-byte
 raw test-disk size, before ciphertext, root/tool staging or host operating margin.
 Linux statvfs reports virtual ext4 capacity and must not substitute for Windows
 backing-volume availability. Do not start another heavy VM/storage-fault run
-under this capacity. All owned QEMU processes/loops from the completed runs are
+under that capacity. All owned QEMU processes/loops from the completed runs are
 retired; retained images/keys and the incomplete D export remain untouched.
 Resume remaining first-install acquisition, storage/commit positions and other
 platform work after adequate approved storage is available. No automatic deletion,
 VHD compaction, disk repair or WSL restart is authorized by this checkpoint.
+
+**Current capacity gate (2026-10-26):** later physical C availability recovers
+to about4GB without this task deleting retained data. The selected real ext4
+ENOSPC VM then completes with verified image and cleanup as recorded above.
+Recheck physical backing-volume availability before every additional heavy run;
+Linux virtual capacity alone is insufficient. Use only the exact owned Linux
+output directory, one VM at a time, with space for the disk, ciphertext and host
+margin. Retained evidence and the earlier incomplete D export remain untouched.
 
 ## Boundaries
 

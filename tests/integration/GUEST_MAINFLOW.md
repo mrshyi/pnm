@@ -22,6 +22,20 @@ All four cases retain the same bounds, owned unmount and parent/host checks.
 The worker also checks the live parent's actual mount namespace; a supplied
 namespace number alone cannot authorize a mount in the caller's namespace.
 
+The independent VM lifecycle worker also accepts `deployment-space-full`.
+Its explicit publisher variant requires this boot's approved VM identity,
+root ext4 /dev/vda and a filesystem of at most2GiB before creating an anonymous
+root0600 filler on the transaction's filesystem. At the actual empty candidate
+FD, bounded fallocate operations exhaust available blocks; require original
+publisher ENOSPC28/73. Closing only the owned anonymous filler must recover
+space before recording evidence and returning to the real CLI compensation.
+Require original CLI73, complete resources/NSS/directory/unit/applied rollback,
+retained pending/no marker and terminal ROLLED_BACK, then normal14 checks and7
+same-disk reboot checks without state repair. Host/container execution refuses
+before allocation. The mapped guest CLI driver intentionally does not expose
+this VM-only scenario. Physical media EIO and other failure positions remain
+separate from this controlled virtual-disk space refusal.
+
 This explicit opt-in test clones a separately prepared trusted Debian 13 boot
 fixture. It never bootstraps packages, downloads assets, installs host packages,
 binds host directories or changes host accounts/network/firewall configuration.

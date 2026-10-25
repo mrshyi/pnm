@@ -18,6 +18,31 @@ DRIVER=Path(__file__).with_name('test_guest_mainflow.py')
 
 
 class GuestGuardTests(unittest.TestCase):
+    @unittest.skipUnless(sys.platform=='linux','Linux VM-only space refusal')
+    def test_disk_space_fault_refuses_host_before_controls(self):
+        script='''import sys
+sys.path.insert(0,sys.argv[1])
+import guest_commit_fault as fixture
+from guest_commit_space import SpaceFault
+from guest_vm_boot import GuestRefusal
+def forbidden(*args,**kwargs):
+    raise AssertionError('host reached disk-space fault mutation')
+fixture.subprocess.run=forbidden
+fixture.os.open=forbidden
+for entry in (lambda:fixture.run_commit([],None,candidate='space'),
+              lambda:fixture.readonly_deployment_commit(None,None,candidate='space').__enter__(),
+              lambda:SpaceFault(None,None)):
+    try:
+        entry()
+    except GuestRefusal:
+        pass
+    else:
+        raise AssertionError('host accepted for disk-space fault')
+'''
+        result=subprocess.run([sys.executable,'-B','-c',script,str(DRIVER.parent)],
+                              capture_output=True,timeout=10)
+        self.assertEqual(result.returncode,0,result.stderr.decode(errors='replace'))
+
     @unittest.skipUnless(sys.platform=='linux','Linux bounded storage refusal')
     def test_bounded_storage_worker_refuses_parent_before_mounts(self):
         script='''import os,sys

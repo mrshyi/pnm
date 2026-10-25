@@ -52,11 +52,16 @@ phase=config.get('phase','rename')
 armed=False
 original_limit=None
 candidate_identity=None
+space_fault=None
 finished=False
 def finish():
     global finished
     if finished:
         return
+    if space_fault is not None:
+        space_fault.release()
+        if observation is not None:
+            observation['space_recovered']=True
     if original_limit is not None:
         resource.setrlimit(resource.RLIMIT_FSIZE,original_limit)
         if resource.getrlimit(resource.RLIMIT_FSIZE)!=original_limit:
@@ -79,7 +84,7 @@ def arm():
     observation=context.__enter__()
     armed=True
 def observe(frame,event,arg):
-    global context,observation,actual,armed,original_limit,candidate_identity
+    global context,observation,actual,armed,original_limit,candidate_identity,space_fault
     if (phase=='create' and not armed and event=='call'
             and frame.f_code is tempfile.mkstemp.__code__
             and frame.f_back is not None and frame.f_back.f_code.co_filename=='<stdin>'
@@ -97,7 +102,7 @@ def observe(frame,event,arg):
             and time.time()<=int(sys.argv[5])):
         if phase=='rename' and Path(temporary).stat().st_size>0:
             arm()
-        elif phase=='write' and Path(temporary).stat().st_size==0:
+        elif phase in ('write','space') and Path(temporary).stat().st_size==0:
             require_publisher_guest()
             descriptor=frame.f_globals.get('descriptor')
             info=os.fstat(descriptor)
@@ -107,13 +112,18 @@ def observe(frame,event,arg):
                     or (info.st_dev,info.st_ino)!=(candidate.st_dev,candidate.st_ino)
                     or signal.getsignal(signal.SIGXFSZ)!=signal.SIG_IGN):
                 raise RuntimeError('candidate FD or Python file-size signal policy differs')
-            limit=resource.getrlimit(resource.RLIMIT_FSIZE)
-            if limit[0]==0:
-                raise RuntimeError('publisher already has a zero file-size limit')
-            original_limit=limit
             candidate_identity=(info.st_dev,info.st_ino)
-            observation={'private_namespace':True}
-            resource.setrlimit(resource.RLIMIT_FSIZE,(0,original_limit[1]))
+            if phase=='space':
+                from guest_commit_space import SpaceFault
+                space_fault=SpaceFault(transaction,private,config['parent_namespace'])
+                observation=space_fault.fill()
+            else:
+                limit=resource.getrlimit(resource.RLIMIT_FSIZE)
+                if limit[0]==0:
+                    raise RuntimeError('publisher already has a zero file-size limit')
+                original_limit=limit
+                observation={'private_namespace':True}
+                resource.setrlimit(resource.RLIMIT_FSIZE,(0,original_limit[1]))
             armed=True
     if event=='exception' and armed:
         error=arg[1]
@@ -129,11 +139,12 @@ def observe(frame,event,arg):
             actual={'actual_errno':error.errno,'candidate_create_refused':True,
                     'pending_retained':(transaction/'commit-uncertain.env').is_file()}
             matched=True
-        elif (phase=='write' and isinstance(error,OSError) and error.errno==errno.EFBIG
+        elif (phase in ('write','space') and isinstance(error,OSError)
+              and error.errno==(errno.ENOSPC if phase=='space' else errno.EFBIG)
               and isinstance(temporary,str) and Path(temporary).parent==transaction):
             candidate=Path(temporary).lstat()
             if (candidate.st_dev,candidate.st_ino)==candidate_identity:
-                actual={'actual_errno':error.errno,'candidate_write_refused':True,
+                actual={'actual_errno':error.errno,'candidate_'+phase+'_refused':True,
                         'pending_retained':(transaction/'commit-uncertain.env').is_file()}
                 matched=True
         if matched:
@@ -143,7 +154,10 @@ sys.settrace(observe)
 '''
 
 
-def commit_guard(rename):
+def commit_guard(rename, *, space=False):
+    if space:
+        from guest_vm_boot import require_approved_vm
+        return require_approved_vm
     if rename:
         # Resolve lazily: guest_commit_signal reuses transaction_for below.
         from guest_commit_signal import require_publisher_guest
@@ -179,9 +193,9 @@ def transaction_for(arguments):
 
 def run_commit(arguments, wrapper, *, isolated=False, rename=False, candidate=None):
     late=rename or candidate is not None
-    guard=commit_guard(late)
+    guard=commit_guard(late,space=candidate=='space')
     guard()
-    require(type(rename) is bool and candidate in (None,'create','write') and not (rename and candidate),
+    require(type(rename) is bool and candidate in (None,'create','write','space') and not (rename and candidate),
             'unknown or conflicting marker fault variants')
     private=Path(wrapper).parent
     info=private.lstat()
@@ -217,8 +231,8 @@ def run_commit(arguments, wrapper, *, isolated=False, rename=False, candidate=No
             env={**os.environ,'PYTHONPATH':str(observer)},capture_output=True,timeout=90)
         observed=json.loads((observer/'observed-rename.json').read_text())
         event='candidate_'+candidate+'_refused' if candidate else 'rename_refused'
-        expected_errno=errno.EFBIG if candidate=='write' else errno.EROFS
-        retired=observed.get('file_size_limit_restored') if candidate=='write' else observed.get('mount_removed')
+        expected_errno=errno.ENOSPC if candidate=='space' else (errno.EFBIG if candidate=='write' else errno.EROFS)
+        retired=observed.get('space_recovered') if candidate=='space' else (observed.get('file_size_limit_restored') if candidate=='write' else observed.get('mount_removed'))
         require(result.returncode==73 and not result.stdout
                 and observed.get('actual_errno')==expected_errno and observed.get(event) is True
                 and observed.get('pending_retained') is True and retired is True
@@ -252,8 +266,8 @@ def run_commit(arguments, wrapper, *, isolated=False, rename=False, candidate=No
 @contextmanager
 def readonly_deployment_commit(logs, env, *, rename=False, candidate=None):
     late=rename or candidate is not None
-    commit_guard(late)()
-    require(type(rename) is bool and candidate in (None,'create','write') and not (rename and candidate),
+    commit_guard(late,space=candidate=='space')()
+    require(type(rename) is bool and candidate in (None,'create','write','space') and not (rename and candidate),
             'unknown or conflicting marker fault variants')
     parent_limit=None
     if candidate=='write':
@@ -293,9 +307,12 @@ def readonly_deployment_commit(logs, env, *, rename=False, candidate=None):
             require(receipt.is_file() and not receipt.is_symlink(),
                     'publisher refusal receipt missing; inspect protected CLI output')
             observation.update(json.loads(receipt.read_text()))
-            expected={'private_namespace':True,'actual_errno':errno.EFBIG if candidate=='write' else errno.EROFS,'publisher_rc':73,
+            expected={'private_namespace':True,'actual_errno':errno.ENOSPC if candidate=='space' else (errno.EFBIG if candidate=='write' else errno.EROFS),'publisher_rc':73,
                 'commit_intent_recorded':True,'both_applied_recorded':True}
-            if candidate=='write':
+            if candidate=='space':
+                expected.update({'candidate_space_refused':True,'pending_retained':True,
+                                 'fill_errno':errno.ENOSPC,'space_recovered':True})
+            elif candidate=='write':
                 require(resource.getrlimit(resource.RLIMIT_FSIZE)==parent_limit,'publisher fault changed parent limits')
                 observation['parent_file_size_limit_unchanged']=True
                 expected.update({'candidate_write_refused':True,'pending_retained':True,
@@ -310,7 +327,7 @@ def readonly_deployment_commit(logs, env, *, rename=False, candidate=None):
 
 
 if __name__=='__main__':
-    if sys.argv[1:2] in (['--candidate-create'],['--candidate-write']):
+    if sys.argv[1:2] in (['--candidate-create'],['--candidate-write'],['--candidate-space']):
         raise SystemExit(run_commit(sys.argv[3:],sys.argv[2],isolated=True,
                                     candidate=sys.argv[1].removeprefix('--candidate-')))
     elif sys.argv[1:2]==['--rename']:
