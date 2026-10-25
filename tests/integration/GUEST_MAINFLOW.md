@@ -1,5 +1,17 @@
 # Private guest main-flow checks
 
+`make test-commit-storage` is a separate explicit Linux-root publisher check that
+does not clone or boot a guest. Its child mount namespaces own a64KiB tmpfs with
+64 inodes and nodev/nosuid/noexec. Synthetic protected records exercise the
+unchanged marker helper: an observer exhausts only tmpfs inodes immediately
+before real mkstemp, or data blocks before the real candidate write/flush.
+Require observed kernel ENOSPC28 and publisher73, retained complete pending
+record, unchanged original records, no marker/candidate, exact owned unmount and
+unchanged parent namespace/mount table and host NSS/dpkg hashes. Only fixed labels
+and counts are reported; protected per-run evidence remains under /var/tmp.
+This is a bounded L1/Linux publisher slice, not full deployment compensation,
+independent-VM ENOSPC or physical EIO. Default `make check` does not run mounts.
+
 This explicit opt-in test clones a separately prepared trusted Debian 13 boot
 fixture. It never bootstraps packages, downloads assets, installs host packages,
 binds host directories or changes host accounts/network/firewall configuration.

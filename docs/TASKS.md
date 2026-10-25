@@ -1,8 +1,8 @@
 # PNM Current Tasks
 
-**Last reconciled:** 2026-10-25 (fresh default31/394; independent Debian lifecycle/update/reboot and selected abrupt-VM recovery pass; remaining storage/platform and external acceptance are unverified)
+**Last reconciled:** 2026-10-26 (bounded publisher tmpfs ENOSPC checks added; independent Debian lifecycle/update/reboot and selected abrupt-VM recovery remain recorded; broader storage/platform and external acceptance are unverified)
 
-**Current increment baseline:** branch `dev`, parent HEAD `6261a8b`, VERSION `0.16.0-rc.1`.
+**Current increment baseline:** branch `dev`, parent HEAD `08630bc`, VERSION `0.16.0-rc.1`.
 
 **Environment recheck:** the earlier host EIO/EROFS/CreateInstance failure is no
 longer reproduced: Debian root is writable, real `true`/`df` execute successfully
@@ -2016,7 +2016,7 @@ scenario; dated records above retain its actual results and limitations.
 | T-12 | L1 TLS/SNI/pin/access checks; native real managed-account TLS faults; VM positive TLS loading | External handshake/network and every L2 TLS fault combination |
 | T-13 | L1 configured/applied failure paths; native selected applied/publication EROFS compensation | Every node/applied write-failure position through real VM deployment |
 | T-14 | Native actual outer deadline failure, full compensation and clean retry | All late health/deadline timing interleavings |
-| T-15 | L1 commit failure paths, native real uncertainty-create EROFS; VM actual candidate-create/rename EROFS and candidate-write EFBIG with full compensation/retry/reboot | Other commit positions and physical ENOSPC/EIO behavior |
+| T-15 | L1 commit failure paths and bounded actual tmpfs candidate inode/data ENOSPC; native uncertainty-create EROFS; VM candidate-create/rename EROFS and candidate-write EFBIG with full compensation/retry/reboot | Whole-deployment/independent-VM ENOSPC, other commit positions and physical media behavior |
 | T-16 | L1 and actual VM post-durable-commit journal append EROFS preserve install0, valid marker and normal lifecycle/reboot | Other derived logging/cleanup failures and real-device media behavior |
 | T-17 | L1 marker corruption/uncertain publication; native post-rename CLI stop; VM retained marker+uncertainty after abrupt stop | All corruption/fsync/device-failure positions and physical media behavior |
 | T-18 | L1 foreign file/applied metadata drift retention without blind rollback | Every independent-VM external-edit race |
@@ -2236,6 +2236,44 @@ document paths pass. This is controlled
 update acquisition evidence, not first-install acquisition/ZIP or upstream outage
 acceptance. Independent review remains usage-limited; this is self-review and
 executed validation. The existing31/394 full Bash baseline remains distinct.
+
+## Bounded candidate ENOSPC publisher slice — 2026-10-26
+
+Continue after transport acceptance commit `08630bc` with the
+[bounded storage plan](superpowers/plans/2026-10-26-bounded-commit-enospc.md).
+Fresh Windows checks show only C/D volumes, C=2,049,884,160 and D=2,146,570,240
+bytes free, so the existing2GiB VM plus ciphertext/margin remains blocked.
+No retained evidence is deleted. A new explicit `make test-commit-storage`
+target uses only a64KiB/64-inode tmpfs with nodev/nosuid/noexec in each owned
+child mount namespace. Default `make check` still performs no mounts.
+
+The original deployment marker Bash helper and its stdin Python publisher run
+unchanged against synthetic root0600 transaction records. A scoped interpreter
+observer fills only that tmpfs immediately before actual candidate mkstemp or
+write/flush. No file API/result or product program is replaced. Each actual
+ENOSPC28 produces publisher73, preserves the complete pending record and original
+record bytes, removes the incomplete candidate and never publishes commit.env.
+The exact owned tmpfs is unmounted; parent namespace/mount table and host primary
+NSS/dpkg hashes are checked unchanged. This is a Linux publisher-only slice,
+not complete deployment compensation, independent-kernel or physical media proof.
+
+Meaningful host-refusal RED `pnm-bounded-storage-red.d4plgzfj` fails before the
+fixture module exists. `pnm-bounded-storage-final.138tyvnl` passes both actual
+refusals (56 bounded inode allocations,13 bounded block writes),28 guards,
+24 Python compilations and syntax/security/ShellCheck. Additional
+`pnm-bounded-storage-refusals.vkf1dz2s` and `pnm-bounded-entry-refusals.ymgvrs39`
+prove missing opt-in, actual nobody and optimized-Python entry refusals before
+storage mutation, rather than successful skipped explicit checks.
+
+The first full source copy at `pnm-bounded-full.99nobvbg` was under the root0700
+log directory, so nobody could not read bin/pnm and the real non-root diagnostics
+case failed before its intended policy checks. This is a test-operator layout
+error, not a product change. Keep that failed run. A separate trusted public
+source copy retains Git executable modes and .shellcheckrc; logs stay root0700.
+`pnm-bounded-full-corrected.omxdc7dv` first passes the unchanged read-access case,
+then fresh `make check` passes all31 suites/394 tests and28 guards pass.19 document
+paths pass. Independent review remains usage-limited; validation is self-review
+and actual execution. Product Bash, VERSION and production services are unchanged.
 
 ## Immediate next steps
 

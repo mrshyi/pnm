@@ -1,10 +1,14 @@
 SHELL := /usr/bin/env bash
 PNM_GUEST_SCENARIO ?= lifecycle
 
-.PHONY: test test-systemd test-real-cores test-guest-mainflow syntax security-scan shellcheck release-check check
+.PHONY: test test-systemd test-real-cores test-guest-mainflow test-commit-storage syntax security-scan shellcheck release-check check
 
 test:
 	./tests/run.sh
+
+# Explicit opt-in: at most64KiB tmpfs, only in owned child mount namespaces.
+test-commit-storage:
+	PNM_RUN_STORAGE_TESTS=1 python3 -B tests/integration/test_commit_storage.py
 
 # Explicit opt-in: creates only uniquely named temporary systemd test units.
 test-systemd:

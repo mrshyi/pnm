@@ -18,6 +18,31 @@ DRIVER=Path(__file__).with_name('test_guest_mainflow.py')
 
 
 class GuestGuardTests(unittest.TestCase):
+    @unittest.skipUnless(sys.platform=='linux','Linux bounded storage refusal')
+    def test_bounded_storage_worker_refuses_parent_before_mounts(self):
+        script='''import os,sys
+sys.path.insert(0,sys.argv[1])
+import test_commit_storage as fixture
+def forbidden(*args,**kwargs):
+    raise AssertionError('parent reached storage mutation')
+fixture.subprocess.run=forbidden
+fixture.tempfile.mkdtemp=forbidden
+for enabled in (False,True):
+    os.environ['PNM_RUN_STORAGE_TESTS']='1' if enabled else '0'
+    expected=('bounded storage requires a private mount namespace' if os.geteuid()==0
+              else 'bounded storage requires Linux root') if enabled else 'explicit bounded storage opt-in required'
+    try:
+        fixture.run_case('create',os.stat('/proc/self/ns/mnt').st_ino)
+    except RuntimeError as error:
+        assert str(error)==expected
+    else:
+        raise AssertionError('parent accepted as storage child')
+'''
+        result=subprocess.run([sys.executable,'-B','-c',script,str(DRIVER.parent)],
+                              env={**os.environ,'PNM_RUN_STORAGE_TESTS':'1'},
+                              capture_output=True,timeout=10)
+        self.assertEqual(result.returncode,0,result.stderr.decode(errors='replace'))
+
     @unittest.skipUnless(sys.platform=='linux','Linux actual mkstemp observer placement')
     def test_candidate_create_observer_arms_before_actual_mkstemp(self):
         script='''import contextlib,json,sys,tempfile,time,types
