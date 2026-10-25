@@ -13,6 +13,19 @@ from guest_start_fault import require, require_guest
 from guest_commit_fault import transaction_for
 
 
+def require_publisher_guest():
+    try:
+        require_guest()
+    except RuntimeError as original:
+        # Only this publisher observer gains the separately approved VM route;
+        # account, mount and general startup-fault guards remain unchanged.
+        try:
+            from guest_vm_boot import require_approved_vm
+            require_approved_vm()
+        except (ImportError,RuntimeError):
+            raise original from None
+
+
 # Observe a call after the real rename; do not replace any filesystem operation.
 # The receipt contains no marker content, resource hashes, credentials or locals.
 TRACE_SOURCE='''import json,sys,time
@@ -37,7 +50,7 @@ sys.settrace(observe)
 
 
 def run_late_commit(arguments, wrapper):
-    require_guest()
+    require_publisher_guest()
     private=Path(wrapper).parent
     info=private.lstat()
     require(private.resolve()==private and info.st_uid==0 and stat.S_IMODE(info.st_mode)==0o700,
@@ -55,7 +68,7 @@ def run_late_commit(arguments, wrapper):
 
 @contextmanager
 def late_deployment_commit(logs, env):
-    require_guest()
+    require_publisher_guest()
     private=logs/('late-commit-'+uuid.uuid4().hex)
     private.mkdir(mode=0o700)
     observer=private/'observer'

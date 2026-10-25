@@ -1,8 +1,8 @@
 # PNM Current Tasks
 
-**Last reconciled:** 2026-10-25 (default31/391; native fault slices and independent Debian boot/lifecycle/reboot pass; abrupt VM/storage fault and external acceptance remain open)
+**Last reconciled:** 2026-10-25 (default31/391; native faults, independent Debian lifecycle/reboot and selected abrupt-VM recovery pass; broader storage/update matrix and external acceptance remain open)
 
-**Current increment baseline:** branch `dev`, parent HEAD `102483a`, VERSION `0.16.0-rc.1`.
+**Current increment baseline:** branch `dev`, parent HEAD `4561782`, VERSION `0.16.0-rc.1`.
 
 **Environment recheck:** the earlier host EIO/EROFS/CreateInstance failure is no
 longer reproduced: Debian root is writable, real `true`/`df` execute successfully
@@ -1919,7 +1919,37 @@ The [separate plan](superpowers/plans/2026-10-25-independent-debian-vm.md) retai
 raw exclusive owned storage, explicit QEMU device/config restrictions, nonce/
 live-process/serial binding and encrypted full-image/cleanup requirements.
 
-## Immediate next steps
+## Independent VM lifecycle/reboot and abrupt-stop acceptance — 2026-10-25
+
+VM lifecycle/reboot acceptance is committed as `4561782`. The next abrupt-VM
+slice compiles22 integration Python sources and passes17 guards plus static
+checks at `pnm-vm-abrupt-preboot.ao15em3i`. Only the publisher pause helper gains
+the approved VM route; general startup/account/mount fault guards stay mapped-
+container-only. `/var/tmp/pnm-vm-boot-volume.ytr_5uep` reaches the actual
+post-rename/uncertainty window, validates the live QEMU PID/start/argv/executable/
+disk again and stops that QEMU with SIGKILL/-9. Same-disk next-kernel acceptance
+reads the persistent uncertainty record, then hits IndexError while the test
+parses journal rows. The failed image is fully encrypted/readback-verified,
+QEMU is quiescent, loop detached, host databases unchanged and cleanup empty.
+Read-only verified-image inspection confirms2935 journal bytes,8 rows including
+one NUL-containing malformed row, no retained COMMIT_INTENT or terminal event,
+and intact uncertainty. Progress appends are not the commit authority and are
+not individually fsynced by pnm_tx_journal; requiring their complete persistence
+was a test error. Preserve the exact damaged bytes and inspect them safely;
+acceptance still requires real four-command refusal without mutation, rather
+than inferring safety from an inspector result. Recheck the live pause/markers
+after persisting its baseline so stale observations cannot authorize a VM kill.
+Guards now pass18/18,22 integration sources compile and static checks pass at
+`pnm-vm-abrupt-final-preboot.pr90cmyr`. A fresh complete run is in progress at
+`/var/tmp/pnm-vm-boot-volume.6fb5o_my` now passes the observed live-owner VM kill
+(-9) and same-disk next-kernel recovery checks. Uncertainty and the valid marker
+remain; the journal again contains one malformed row and no persisted commit
+intent/terminal event. Both service invocations change, managed resources and
+authority/NSS are preserved, and four actual fresh commands refuse70 with the
+deployment-specific cause, empty stdout and no receipt/resource/runtime mutation.
+No recovery record is repaired by the fixture. Normal recovery-guest poweroff
+and QEMU0 pass. Full2GiB encrypted image readback matches its original digest;
+loop detached, QEMU quiescent, host NSS/dpkg unchanged and cleanup empty.
 
 Independent boot-only acceptance is committed as `102483a`. Stage2 now reuses
 the actual14-case mainflow under a VM guard and this boot's private approval;
@@ -1960,6 +1990,8 @@ unchanged from this actual run; the default31/391 baseline is
 unchanged, not freshly rerun. Independent review remains unavailable; this
 increment has self-review and executed checks.
 
+## Immediate next steps
+
 Startup readiness/harness and initiating-error repairs are committed as
 `ce6713f`, `0bee0d8`, and `580ead7`. Fresh native fault cases now complete the
 recovery-required plan. TLS access, valid-account reuse and per-Core process
@@ -1973,23 +2005,23 @@ tool refusal slices now pass as recorded above. Continue the
 [independent Debian VM plan](superpowers/plans/2026-10-25-independent-debian-vm.md):
 private authenticated tools/initramfs and the independent boot-only slice now
 pass, including clean poweroff and full encrypted image verification. Continue
-with abrupt-VM interruption at an observed pending-commit window; real PNM
-lifecycle and same-disk guest-requested reboot now pass14+7 checks.
+with the remaining matrix audit; real PNM lifecycle and same-disk guest-requested
+reboot pass14+7 checks, and the selected abrupt-VM pending-commit slice now passes.
 Persistent storage, remaining fault positions and
 deployed-host/external-client prerequisites stay separate. The earlier cleanup
 proposal is unnecessary; all original roots are retained.
 Successful main flow, update/rollback and late-deadline compensation cannot replace
 the following VM/reboot, deployed-host and external-client prerequisites.
 
-1. Confirm deployed PNM source identity for G-01 using read-only checks.
-2. Accept the repaired A-03/A-04 paths in a disposable systemd VM, including explicit commands versus reboot/external restart; do not treat local results as completed Phase 3 acceptance.
-3. Use a disposable Debian 13 systemd VM for real lifecycle/recovery acceptance. The local WSL environment already provides Bash, make, ShellCheck, Python, ripgrep, zip/unzip, flock and OpenSSL for source and mock tests.
-4. Isolated WSL stand-ins pass8/8, real Core/local-client checks pass10/10, and the private guest main flow passes14/14. Distinct-version update/rollback and selected injected failure/concurrency/interruption slices now pass as recorded above; remaining positions, reboot and external clients stay separate.
-5. Reassess Phase 3 completion. Do not start Phase 4 automatically.
+1. Continue G-03 with actual distinct-version update/rollback and paired previous-state persistence across the independent VM reboot; the current14+7 slice did not run the update matrix.
+2. Reconcile remaining T-01–T-27 positions against source/unit/native/VM evidence, retaining unexecuted storage/commit positions explicitly.
+3. Confirm deployed PNM source identity for G-01 using read-only checks when an authorized target is provided; none is currently available.
+4. Record external dual-protocol client handshake/traffic separately when clients/targets are supplied; local listeners and private clients do not replace L3.
+5. Reassess Phase3 completion against those remaining gates. Do not start Phase4 or release work automatically.
 
 Local account/lifecycle acceptance can now continue in the verified Debian WSL
 container. Remaining external prerequisites include an authorized deployed source
-identity for G-01, same-disk independent-kernel reboot/fault acceptance,
+identity for G-01, broader storage/commit-position acceptance,
 and external clients for dual-protocol traffic. The stand-in and private-network
 Core/container results do not close those external items;
 Phase 3 remains incomplete and release work has not started.

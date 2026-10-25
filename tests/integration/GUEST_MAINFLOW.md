@@ -33,6 +33,19 @@ and both real listeners before clean poweroff. Its private records and outputs
 may contain credentials and must remain inside the protected guest evidence and
 fully encrypted image. Default checks never launch this worker.
 
+`guest_vm_abrupt.py` pauses the unchanged real deployment publisher after marker
+rename while uncertainty remains. It persists the observed pre-stop baseline,
+rechecks the pending state and announces the window over the same approved
+serial channel. The live host owner may then stop only that QEMU with SIGKILL;
+the guest never substitutes a CLI signal for stopping its kernel. The next boot
+requires intact uncertainty, preserved managed resources and actual fresh
+writer/links/show/check refusal without output or mutation. Progress journal
+appends may be lost or torn by this stop; the test observes and retains those
+bytes instead of repairing them or treating the journal as commit authority.
+This is a selected abrupt-VM interruption slice, not physical media or power-loss
+acceptance. General account/mount/startup fault helpers remain container-only;
+only the publisher observer additionally accepts this boot's approved VM guard.
+
 Prerequisites are the signed, private rootfs and successful native boot fixture
 described in [the preparation plan](../../docs/superpowers/plans/2026-10-23-container-mainflow.md):
 root-owned mode-0700 parent, canonical `rootfs`, successful `boot-result.json`,

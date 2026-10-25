@@ -56,7 +56,7 @@ does not yet prove a VM can be created or booted.
 
 ## Stage3: bounded abrupt-VM interruption
 
-- [ ] If boot and lifecycle are verified, terminate only the exact owned QEMU
+- [x] If boot and lifecycle are verified, terminate only the exact owned QEMU
       process at an observed pending-commit window, reboot its retained owned
       disk and verify on-disk uncertainty and fresh protected-command refusals.
       This is abrupt VM termination, not physical media/power-loss acceptance.
@@ -105,6 +105,20 @@ unavailable because of the review agent's usage limit; self-review and executed
 checks are the evidence for this increment. Two earlier
 test-contract failures (all-links-withheld exit78, plain restart output) remain
 retained as failed runs; neither is counted as a reboot PASS.
+
+Stage3 fresh `pnm-vm-boot-volume.6fb5o_my` now stops the observed, revalidated
+owned QEMU at the real publisher window with SIGKILL/-9. The same-disk next
+kernel keeps uncertainty and the marker, preserves Core/authority/NSS resources,
+changes both invocations and refuses4 fresh protected commands70 without stdout
+or mutation. Progress journal rows are torn (one malformed row, commit intent
+tail lost), retained unchanged; the test uses durable uncertainty and actual
+command refusals rather than requiring progress append durability. First failed
+`ytr_5uep` exposed the parser's IndexError and is retained encrypted; verified
+read-only inspection confirms the torn bytes. Final guards18/18,22 integration
+compilations and static checks pass. Full final2GiB encrypted-image readback
+matches its original digest, loop detached, QEMU quiescent, host NSS/dpkg
+unchanged and cleanup empty. Broader storage/commit positions and the distinct-
+version update/previous-state matrix across VM reboot remain separately open.
 Primary references: [KVM API](https://docs.kernel.org/virt/kvm/api.html),
 [APT configuration order](https://manpages.debian.org/trixie/apt/apt.conf.5.en.html),
 [QEMU options](https://www.qemu.org/docs/master/system/qemu-manpage.html).

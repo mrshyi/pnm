@@ -92,7 +92,7 @@ def require_approved_vm() -> VmIdentity:
 def main(*, action: Callable[[],dict] | None=None, scope: str='boot-only',
          power_action: str='poweroff') -> None:
     identity=require_vm()
-    if (scope not in ('boot-only','pnm-lifecycle','pnm-reboot')
+    if (scope not in ('boot-only','pnm-lifecycle','pnm-reboot','deployment-abrupt','deployment-recovery')
             or (action is None)!=(scope=='boot-only') or power_action not in ('poweroff','reboot')):
         raise GuestRefusal('VM action scope is invalid')
     # The identity guard above must remain before every serial/power operation.
@@ -132,7 +132,7 @@ def main(*, action: Callable[[],dict] | None=None, scope: str='boot-only',
         stage='fresh managed-resource absence'
         absent=not any(Path(name).exists() or Path(name).is_symlink()
                        for name in ('/etc/pnm','/usr/local/bin/xray','/usr/local/bin/hysteria'))
-        if absent!=(scope!='pnm-reboot'):
+        if absent!=(scope not in ('pnm-reboot','deployment-recovery')):
             raise RuntimeError('guest managed-resource baseline differs from scope')
         stage='Debian operating-system identity'
         os_release={}

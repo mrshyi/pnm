@@ -18,6 +18,44 @@ DRIVER=Path(__file__).with_name('test_guest_mainflow.py')
 
 
 class GuestGuardTests(unittest.TestCase):
+    def test_abrupt_vm_journal_observation_retains_torn_bytes(self):
+        script='''import sys,tempfile
+from pathlib import Path
+sys.path.insert(0,sys.argv[1])
+from guest_vm_abrupt import journal_observation
+with tempfile.TemporaryDirectory(prefix='pnm-torn-journal.') as directory:
+    path=Path(directory)/'journal.tsv'
+    original=b'time\\tBEGIN\\toperation=deployment\\n'+bytes([0])*64
+    path.write_bytes(original)
+    report=journal_observation(path)
+    assert report['malformed_rows']==1 and report['row_count']==2
+    assert not report['commit_intent_present'] and not report['terminal_present']
+    assert path.read_bytes()==original
+'''
+        result=subprocess.run([sys.executable,'-B','-c',script,str(DRIVER.parent)],
+                              capture_output=True,timeout=10)
+        self.assertEqual(result.returncode,0,result.stderr.decode(errors='replace'))
+
+    @unittest.skipUnless(sys.platform=='linux','Linux abrupt VM worker refusal')
+    def test_abrupt_vm_worker_refuses_host_before_controls(self):
+        script='''import sys
+sys.path.insert(0,sys.argv[1])
+import guest_vm_abrupt as fixture
+def forbidden(*args,**kwargs):
+    raise AssertionError('host reached abrupt VM control')
+fixture.os.open=forbidden
+fixture.subprocess.Popen=forbidden
+fixture.subprocess.run=forbidden
+try:
+    fixture.main()
+    raise AssertionError('host accepted for abrupt VM test')
+except fixture.GuestRefusal:
+    pass
+'''
+        result=subprocess.run([sys.executable,'-B','-c',script,str(DRIVER.parent)],
+                              capture_output=True,timeout=10)
+        self.assertEqual(result.returncode,0,result.stderr.decode(errors='replace'))
+
     def test_vm_reboot_cli_preserves_plain_and_json_output_contracts(self):
         tree=ast.parse(DRIVER.with_name('guest_vm_lifecycle.py').read_text())
         outer=next(node for node in tree.body if isinstance(node,ast.FunctionDef)
