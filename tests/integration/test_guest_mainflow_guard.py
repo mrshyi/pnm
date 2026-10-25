@@ -18,6 +18,66 @@ DRIVER=Path(__file__).with_name('test_guest_mainflow.py')
 
 
 class GuestGuardTests(unittest.TestCase):
+    @unittest.skipUnless(sys.platform=='linux','Linux actual directory fsync observer')
+    def test_progress_observer_waits_for_final_fsync_return(self):
+        script='''import json,sys,tempfile,types
+from pathlib import Path
+sys.path.insert(0,sys.argv[1])
+from guest_commit_progress import TRACE_SOURCE
+observed=[]
+fake=types.ModuleType('guest_commit_progress')
+fake.seal_progress=lambda control,transaction:observed.append(transaction)
+sys.modules['guest_commit_progress']=fake
+with tempfile.TemporaryDirectory(prefix='pnm-progress-observer.') as directory:
+    root=Path(directory)
+    (root/'config.json').write_text(json.dumps({'transaction':str(root)}))
+    try:
+        exec(compile(TRACE_SOURCE,'sitecustomize.py','exec'),{'__file__':str(root/'sitecustomize.py')})
+        program="""import os
+temporary=None
+def sync_directory(path):
+    descriptor=os.open(path,os.O_RDONLY|os.O_DIRECTORY)
+    try: os.fsync(descriptor)
+    finally: os.close(descriptor)
+sync_directory(str(root))
+assert not observed
+(root/'commit.env').write_text('test marker')
+(root/'commit-uncertain.env').write_text('pending')
+sync_directory(str(root))
+assert not observed
+(root/'commit-uncertain.env').unlink()
+sync_directory(str(root))
+"""
+        exec(compile(program,'<stdin>','exec'),{'root':root,'observed':observed})
+    finally:
+        sys.settrace(None)
+    assert observed==[root], 'final fsync return was not observed exactly once'
+'''
+        result=subprocess.run([sys.executable,'-B','-c',script,str(DRIVER.parent)],
+                              capture_output=True,timeout=10)
+        self.assertEqual(result.returncode,0,result.stderr.decode(errors='replace'))
+
+    @unittest.skipUnless(sys.platform=='linux','Linux committed progress refusal guard')
+    def test_committed_progress_fault_refuses_host_before_controls(self):
+        script='''import sys
+sys.path.insert(0,sys.argv[1])
+import guest_commit_progress as fixture
+def forbidden(*args,**kwargs):
+    raise AssertionError('host reached committed-progress control')
+fixture.os.open=forbidden
+fixture.subprocess.run=forbidden
+for entry in (lambda:fixture.run_publisher([],None),
+              lambda:fixture.readonly_committed_progress(None,None).__enter__()):
+    try:
+        entry()
+        raise AssertionError('host accepted for committed progress fault')
+    except RuntimeError as error:
+        assert str(error)=='start fault requires mapped guest root'
+'''
+        result=subprocess.run([sys.executable,'-B','-c',script,str(DRIVER.parent)],
+                              capture_output=True,timeout=10)
+        self.assertEqual(result.returncode,0,result.stderr.decode(errors='replace'))
+
     @unittest.skipUnless(sys.platform=='linux','Linux previous executable fixture')
     def test_vm_previous_pair_checks_actual_binary_version(self):
         script='''import sys,tempfile

@@ -37,6 +37,8 @@ def check(condition,label):
 def call(label,args,accepted=(0,),*,process_slot=None):
     (logs/'operation.json').write_text(json.dumps({'label':label,'state':'started'}))
     command=['bash','/opt/pnm/bin/pnm']+args
+    if label=='install-apply' and scenario=='deployment-progress-readonly':
+        command=['/usr/bin/unshare','--mount','--propagation','private',*command]
     # A CLI descendant can retain PIPE fds after Bash exits. Own a separate
     # session so timeout retires the whole command group with bounded waits.
     with subprocess.Popen(command,stdin=subprocess.DEVNULL,stdout=subprocess.PIPE,
@@ -364,7 +366,8 @@ try:
           'core-recovery-failure-hysteria2','restore-recovery-failure','tls-access','account-reuse',
           'core-interruption','core-interruption-hysteria2','restart-readiness','dependency-refusal',
           'deployment-startup-failure','deployment-listener-failure','deployment-term',
-          'deployment-sigkill','deployment-commit-readonly','deployment-late-sigkill','account-creation-failure')+update_interruptions+restore_interruptions+publication_cases+account_deletions,'unknown guest scenario')
+          'deployment-sigkill','deployment-commit-readonly','deployment-late-sigkill',
+          'deployment-progress-readonly','account-creation-failure')+update_interruptions+restore_interruptions+publication_cases+account_deletions,'unknown guest scenario')
     if scenario=='account-reuse':
         from guest_account_cases import prepare_accounts, require_preserved
         reused_accounts=prepare_accounts()
@@ -444,7 +447,13 @@ try:
             result={'passed':True,'checks':passed,'expected_recovery_required':True,'mainflow_completed':False}
             raise SystemExit(0)
     stage='installation apply'
-    call('install-apply',['install','--apply','--yes'])
+    if scenario=='deployment-progress-readonly':
+        from guest_commit_progress import readonly_committed_progress, verify_committed_progress
+        with readonly_committed_progress(logs,env) as observed:
+            installed=call('install-apply',['install','--apply','--yes'])
+        verify_committed_progress(observed,installed,passed)
+    else:
+        call('install-apply',['install','--apply','--yes'])
     check(fields('/etc/pnm/node.conf')['PNM_CONFIGURED']=='yes','successful install lacks committed node state')
     for protocol,port in (('tcp',ports['xray']),('udp',ports['hysteria2'])):
         observed=subprocess.check_output(['ss','-H','-lnt' if protocol=='tcp' else '-lnu'],text=True,timeout=10)

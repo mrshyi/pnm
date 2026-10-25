@@ -82,9 +82,10 @@ def lifecycle() -> dict:
                               stdout=output,stderr=subprocess.STDOUT,timeout=600)
     detail=json.loads(Path('/var/tmp/pnm-install-result.json').read_text())
     scenario=Path('/opt/pnm-test-scenario').read_text().strip()
-    need(scenario in ('lifecycle','core-update'),'unknown VM lifecycle scenario')
+    need(scenario in ('lifecycle','core-update','deployment-progress-readonly'),'unknown VM lifecycle scenario')
     update=scenario=='core-update'
-    expected=22 if update else 14
+    progress=scenario=='deployment-progress-readonly'
+    expected=22 if update else (15 if progress else 14)
     need(result.returncode==0 and detail.get('passed') is True
          and detail.get('mainflow_completed') is True and len(detail.get('checks',[]))==expected,
          'independent VM mainflow/update checks did not pass')
@@ -101,6 +102,7 @@ def lifecycle() -> dict:
         stream.flush()
         os.fsync(stream.fileno())
     return {'mainflow_checks':14,'update_checks':8 if update else 0,
+            'committed_progress_refusal_checks':1 if progress else 0,
             'both_bindings_confirmed':True,'baseline_persisted':True}
 
 

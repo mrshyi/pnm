@@ -6,6 +6,19 @@ binds host directories or changes host accounts/network/firewall configuration.
 Default `make check` does not run it. It currently targets the verified hybrid
 WSL cgroup layout; another layout fails closed.
 
+`PNM_GUEST_SCENARIO=deployment-progress-readonly` runs the install CLI in its
+own private mount namespace. A guarded trace observes the unchanged publisher's
+final directory-sync return after uncertainty removal, then binds only its
+regular progress journal read-only in that namespace. The real Bash append
+encounters EROFS; install must still return0 with its committed-progress warning,
+retain a product-verified marker, have no uncertainty or rollback promotion, and
+leave the parent's mounts unchanged. The normal14-case lifecycle then checks
+real Core/account/configuration/binding/health behavior, adding one refusal
+assertion. The same scenario can run under the approved independent-VM lifecycle
+worker, followed by the existing7 reboot checks. The bind ends with the owned
+CLI namespace; no host or manager namespace is remounted. It is a selected real
+derived-journal write refusal, not physical media failure acceptance.
+
 The separate `guest_vm_boot.py` worker is a boot-only probe for the privately
 prepared independent Debian VM described in the
 [VM plan](../../docs/superpowers/plans/2026-10-25-independent-debian-vm.md).

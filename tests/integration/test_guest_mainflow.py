@@ -24,7 +24,8 @@ parser.add_argument('--scenario',choices=('lifecycle','deployment-failure','core
     'core-recovery-failure-xray','core-recovery-failure-hysteria2','restore-recovery-failure','tls-access',
     'account-reuse','account-creation-failure','core-interruption','core-interruption-hysteria2','restart-readiness',
     'dependency-refusal','deployment-startup-failure','deployment-listener-failure',
-    'deployment-term','deployment-sigkill','deployment-commit-readonly','deployment-late-sigkill')+update_interruptions+restore_interruptions+publication_cases+account_deletions,default='lifecycle')
+    'deployment-term','deployment-sigkill','deployment-commit-readonly','deployment-late-sigkill',
+    'deployment-progress-readonly')+update_interruptions+restore_interruptions+publication_cases+account_deletions,default='lifecycle')
 parser.add_argument('--previous-asset-cache',type=Path)
 parser.add_argument('--work-dir',type=Path,help='optional canonical private root-owned POSIX fixture directory')
 options=parser.parse_args()
@@ -225,6 +226,14 @@ if options.scenario in ('deployment-startup-failure','deployment-listener-failur
     shutil.copyfile(repo/'tests/integration/guest_deployment_cases.py',destination)
     destination.chmod(0o700)
     py_compile.compile(str(destination),cfile=str(base/'guest_deployment_cases.pyc'),doraise=True)
+if options.scenario=='deployment-progress-readonly':
+    for name in ('guest_commit_progress.py','guest_commit_signal.py','guest_commit_fault.py',
+                 'guest_io_fault.py','guest_start_fault.py'):
+        destination=root/'opt'/name
+        assert not destination.is_symlink()
+        shutil.copyfile(repo/'tests/integration'/name,destination)
+        destination.chmod(0o700)
+        py_compile.compile(str(destination),cfile=str(base/(name+'.pyc')),doraise=True)
 if options.scenario in account_deletions:
     for name in ('guest_start_fault.py','guest_io_fault.py','guest_commit_fault.py',
                  'guest_recovery_cases.py','guest_account_fault.py','guest_account_cases.py'):

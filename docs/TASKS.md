@@ -2,7 +2,7 @@
 
 **Last reconciled:** 2026-10-25 (fresh default31/394; independent Debian lifecycle/update/reboot and selected abrupt-VM recovery pass; remaining storage/platform and external acceptance are unverified)
 
-**Current increment baseline:** branch `dev`, parent HEAD `1e8c4ad`, VERSION `0.16.0-rc.1`.
+**Current increment baseline:** branch `dev`, parent HEAD `bbf8383`, VERSION `0.16.0-rc.1`.
 
 **Environment recheck:** the earlier host EIO/EROFS/CreateInstance failure is no
 longer reproduced: Debian root is writable, real `true`/`df` execute successfully
@@ -2017,7 +2017,7 @@ scenario; dated records above retain its actual results and limitations.
 | T-13 | L1 configured/applied failure paths; native selected applied/publication EROFS compensation | Every node/applied write-failure position through real VM deployment |
 | T-14 | Native actual outer deadline failure, full compensation and clean retry | All late health/deadline timing interleavings |
 | T-15 | L1 commit failure paths; native real uncertainty-create EROFS and compensation | All actual marker create/write/rename storage failures, including ENOSPC/EIO |
-| T-16 | L1 derived progress failure after durable commit preserves committed status | Actual post-marker logging/cleanup storage failures on independent VM/media |
+| T-16 | L1 and actual VM post-durable-commit journal append EROFS preserve install0, valid marker and normal lifecycle/reboot | Other derived logging/cleanup failures and real-device media behavior |
 | T-17 | L1 marker corruption/uncertain publication; native post-rename CLI stop; VM retained marker+uncertainty after abrupt stop | All corruption/fsync/device-failure positions and physical media behavior |
 | T-18 | L1 foreign file/applied metadata drift retention without blind rollback | Every independent-VM external-edit race |
 | T-19 | Native actual TERM/SIGKILL slices; VM SIGKILL of owned QEMU at observed publisher window, same-disk new-kernel refusal with torn journal | Other VM interruption points and physical power loss |
@@ -2066,6 +2066,48 @@ selected native/VM evidence from the complete L2/L3 matrix. All protected images
 failed-run evidence and unrelated untracked cache are retained. No VERSION,
 production service, firewall, host package installation, push, tag or release is
 changed by this increment.
+
+## T-16 real committed-progress append refusal — 2026-10-25
+
+Continue the already authorized storage/commit acceptance with the existing
+publisher, transaction engine and private VM. The
+[bounded plan](superpowers/plans/2026-10-25-commit-progress-refusal.md) isolates
+only install's CLI mount namespace and observes the final directory-sync return
+after uncertainty removal. A read-only bind of its owned regular journal makes
+the actual caller Bash append fail EROFS; product fsync/rename/unlink and service
+functions are not replaced. Parent mount identity/propagation and exact bind
+identity are checked; parent mounts must remain unchanged when the CLI exits.
+
+The host guard first fails for the missing helper at
+`pnm-progress-refusal-red.171uw683`. A focused real-directory-fsync observer test
+then reproduces a missing return event at `pnm-progress-trace-red.e8zxfuwx`:
+Python tracing must retain a local callback for the sync_directory call in order
+to observe its return. The corrected observer keeps that callback only for the
+real stdin function. `pnm-progress-final-preboot.22sscryq` passes21 guards and
+compiles23 integration sources plus the2 private operators; static checks also
+pass in `pnm-progress-preboot.bclu9nmo`. The existing warning is on stdout, while
+the kernel append refusal is on stderr; the assertions retain that CLI contract.
+
+Fresh `/var/tmp/pnm-vm-boot-volume.q9afkgcu` passes the real T-16 refusal and
+normal14-case lifecycle, then7 same-disk reboot checks. Install returns0 with
+the committed-progress warning and actual read-only-file-system refusal. The
+authoritative marker passes the real product verifier, uncertainty is absent,
+and the journal ends COMMIT_INTENT without COMMIT or rollback events. Both real
+Core generations remain applied-bound; subsequent links/check/restart/apply and
+trusted backup/restore succeed. Reboot preserves resources, withholds stale
+links through ordinary restart and reconfirms each Core independently. Guest
+poweroff/QEMU0, parent-mount equality and host NSS/dpkg equality pass. Full2GiB
+encrypted image readback now matches its original digest, loop is detached,
+QEMU is quiescent and cleanup is empty. Product Bash has no diff from the
+verified source baseline; the default31/394 result remains the prior full run,
+not a new full-suite run for this integration-only increment.
+
+The automatic WSL approval review initially fails because of its own usage
+limit; that command does not execute. After the user's renewed continue request,
+the same command passes the original approval path and executes. No approval
+check is bypassed. The independent code-review agent still reports its usage
+limit; this increment records self-review and actual checks, not independent
+approval. This slice does not establish real-device EIO or physical power loss.
 
 ## Immediate next steps
 
