@@ -32,6 +32,8 @@ from pathlib import Path
 private=Path(__file__).parent
 config=json.loads((private/'observer.json').read_text())
 transaction=Path(config['transaction'])
+pending=transaction/'commit-uncertain.env'
+phase=config['phase']
 armed=False
 proof={}
 def save():
@@ -46,13 +48,17 @@ def exhaust():
     row=next(r for r in rows if r[4]==config['mount'])
     if row[0]!=config['mount_id'] or row[row.index('-')+1]!='tmpfs':
         raise RuntimeError('storage observer mount differs')
-    pending=transaction/'commit-uncertain.env'
-    if pending.read_bytes()!=b'SCHEMA_VERSION=1\\nORIGINAL_RC=70\\n':
-        raise RuntimeError('pending was not persisted before exhaustion')
+    if phase=='pending-create':
+        if pending.exists():
+            raise RuntimeError('pending creation observer was late')
+    else:
+        expected=b'' if phase=='pending-write' else b'SCHEMA_VERSION=1\\nORIGINAL_RC=70\\n'
+        if pending.read_bytes()!=expected:
+            raise RuntimeError('pending contents differ before exhaustion')
     fill=Path(config['mount'])/'fill'
     consumed=0
     try:
-        if config['phase']=='create':
+        if phase in ('create','pending-create'):
             for index in range(128):
                 descriptor=os.open(fill/str(index),os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)
                 os.close(descriptor)
@@ -69,8 +75,16 @@ def exhaust():
     else:
         raise RuntimeError('bounded tmpfs did not fill')
     armed=True
+def exhaust_write(descriptor,path):
+    info=os.fstat(descriptor)
+    candidate=path.lstat()
+    if (not stat.S_ISREG(info.st_mode) or info.st_size!=0 or info.st_nlink!=1
+            or info.st_uid!=0 or stat.S_IMODE(info.st_mode)!=0o600
+            or (info.st_dev,info.st_ino)!=(candidate.st_dev,candidate.st_ino)):
+        raise RuntimeError('write target FD identity differs')
+    exhaust()
 def observe(frame,event,arg):
-    if (not armed and config['phase']=='create' and event=='call'
+    if (not armed and phase=='create' and event=='call'
             and frame.f_code is tempfile.mkstemp.__code__
             and frame.f_back is not None and frame.f_back.f_code.co_filename=='<stdin>'
             and frame.f_locals.get('dir')==str(transaction)
@@ -79,21 +93,28 @@ def observe(frame,event,arg):
     if frame.f_code.co_filename!='<stdin>':
         return None
     temporary=frame.f_globals.get('temporary')
-    if (not armed and config['phase']=='write' and event=='line'
+    if (not armed and event=='line' and frame.f_code.co_name=='<module>'
+            and frame.f_globals.get('pending')==str(pending)):
+        if phase=='pending-create' and not pending.exists():
+            exhaust()
+        elif (phase=='pending-write' and pending.is_file()
+              and not getattr(frame.f_globals.get('stream'),'closed',True)):
+            exhaust_write(frame.f_globals['descriptor'],pending)
+    if (not armed and phase=='write' and event=='line'
             and frame.f_code.co_name=='<module>' and isinstance(temporary,str)
             and Path(temporary).parent==transaction
             and getattr(frame.f_globals.get('stream'),'closed',False)):
-        info=os.fstat(frame.f_globals['descriptor'])
-        candidate=Path(temporary).lstat()
-        if (not stat.S_ISREG(info.st_mode) or info.st_size!=0 or info.st_nlink!=1
-                or info.st_uid!=0 or stat.S_IMODE(info.st_mode)!=0o600
-                or (info.st_dev,info.st_ino)!=(candidate.st_dev,candidate.st_ino)):
-            raise RuntimeError('candidate FD identity differs')
-        exhaust()
+        exhaust_write(frame.f_globals['descriptor'],Path(temporary))
     if armed and event=='exception':
         error=arg[1]
         if isinstance(error,OSError) and error.errno==errno.ENOSPC:
-            if config['phase']=='create':
+            if phase=='pending-create':
+                if error.filename!=str(pending) or temporary is not None:
+                    return observe
+            elif phase=='pending-write':
+                if temporary is not None or frame.f_globals.get('pending')!=str(pending):
+                    return observe
+            elif phase=='create':
                 if (not isinstance(error.filename,str) or Path(error.filename).parent!=transaction
                         or not Path(error.filename).name.startswith('.commit-') or temporary is not None):
                     return observe
@@ -110,8 +131,10 @@ def run_case(phase: str, parent_namespace: int) -> dict:
     require(os.environ.get(OPT_IN)=='1','explicit bounded storage opt-in required')
     require(sys.platform=='linux' and os.geteuid()==0,'bounded storage requires Linux root')
     namespace=os.stat('/proc/self/ns/mnt').st_ino
-    require(namespace!=parent_namespace,'bounded storage requires a private mount namespace')
-    require(phase in ('create','write'),'unknown bounded storage phase')
+    observed_parent=os.stat('/proc/'+str(os.getppid())+'/ns/mnt').st_ino
+    require(parent_namespace==observed_parent and namespace!=observed_parent,
+            'bounded storage requires a private mount namespace')
+    require(phase in ('create','write','pending-create','pending-write'),'unknown bounded storage phase')
     for row in mount_rows():
         require(not any(x.startswith(('shared:','master:')) for x in row[6:row.index('-')]),
                 'bounded storage requires private propagation')
@@ -154,12 +177,18 @@ def run_case(phase: str, parent_namespace: int) -> dict:
                 and proof.get('fill_errno')==errno.ENOSPC,'actual publisher ENOSPC73 not observed')
         require(not (transaction/'commit.env').exists() and not list(transaction.glob('.commit-*')),
                 'storage refusal left a commit marker or candidate')
-        require((transaction/'commit-uncertain.env').read_bytes()==b'SCHEMA_VERSION=1\nORIGINAL_RC=70\n',
-                'storage refusal lost the persisted pending record')
+        pending=transaction/'commit-uncertain.env'
+        pending_state='absent' if phase=='pending-create' else ('empty' if phase=='pending-write' else 'complete')
+        if pending_state=='absent':
+            require(not pending.exists() and not pending.is_symlink(),'failed pending creation left a record')
+        else:
+            expected=b'' if pending_state=='empty' else b'SCHEMA_VERSION=1\nORIGINAL_RC=70\n'
+            require(pending.read_bytes()==expected,'pending state differs after refusal')
         require(all(hashlib.sha256((transaction/name).read_bytes()).hexdigest()==digest
                     for name,digest in baseline.items()),'storage refusal changed original records')
         report.update({'passed':True,'publisher_rc':73,'actual_errno':errno.ENOSPC,
-                       'pending_preserved':True,'original_records_preserved':True,
+                       'pending_preserved':pending_state=='complete','pending_state':pending_state,
+                       'original_records_preserved':True,
                        'marker_absent':True,'candidate_absent':True,'bounded_consumed':proof['bounded_consumed']})
     except Exception as error:
         report.update({'passed':False,'error_class':type(error).__name__})
@@ -200,6 +229,12 @@ class StorageTests(unittest.TestCase):
 
     def test_candidate_write_block_enospc(self) -> None:
         self.check_phase('write')
+
+    def test_pending_creation_inode_enospc(self) -> None:
+        self.check_phase('pending-create')
+
+    def test_pending_write_block_enospc(self) -> None:
+        self.check_phase('pending-write')
 
 
 if __name__=='__main__':

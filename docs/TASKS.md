@@ -2,7 +2,7 @@
 
 **Last reconciled:** 2026-10-26 (bounded publisher tmpfs ENOSPC checks added; independent Debian lifecycle/update/reboot and selected abrupt-VM recovery remain recorded; broader storage/platform and external acceptance are unverified)
 
-**Current increment baseline:** branch `dev`, parent HEAD `08630bc`, VERSION `0.16.0-rc.1`.
+**Current increment baseline:** branch `dev`, parent HEAD `4078e75`, VERSION `0.16.0-rc.1`.
 
 **Environment recheck:** the earlier host EIO/EROFS/CreateInstance failure is no
 longer reproduced: Debian root is writable, real `true`/`df` execute successfully
@@ -2016,7 +2016,7 @@ scenario; dated records above retain its actual results and limitations.
 | T-12 | L1 TLS/SNI/pin/access checks; native real managed-account TLS faults; VM positive TLS loading | External handshake/network and every L2 TLS fault combination |
 | T-13 | L1 configured/applied failure paths; native selected applied/publication EROFS compensation | Every node/applied write-failure position through real VM deployment |
 | T-14 | Native actual outer deadline failure, full compensation and clean retry | All late health/deadline timing interleavings |
-| T-15 | L1 commit failure paths and bounded actual tmpfs candidate inode/data ENOSPC; native uncertainty-create EROFS; VM candidate-create/rename EROFS and candidate-write EFBIG with full compensation/retry/reboot | Whole-deployment/independent-VM ENOSPC, other commit positions and physical media behavior |
+| T-15 | L1 commit failure paths and bounded actual tmpfs uncertainty/candidate inode/data ENOSPC; native uncertainty-create EROFS; VM candidate-create/rename EROFS and candidate-write EFBIG with full compensation/retry/reboot | Whole-deployment/independent-VM ENOSPC, other commit positions and physical media behavior |
 | T-16 | L1 and actual VM post-durable-commit journal append EROFS preserve install0, valid marker and normal lifecycle/reboot | Other derived logging/cleanup failures and real-device media behavior |
 | T-17 | L1 marker corruption/uncertain publication; native post-rename CLI stop; VM retained marker+uncertainty after abrupt stop | All corruption/fsync/device-failure positions and physical media behavior |
 | T-18 | L1 foreign file/applied metadata drift retention without blind rollback | Every independent-VM external-edit race |
@@ -2274,6 +2274,39 @@ source copy retains Git executable modes and .shellcheckrc; logs stay root0700.
 then fresh `make check` passes all31 suites/394 tests and28 guards pass.19 document
 paths pass. Independent review remains usage-limited; validation is self-review
 and actual execution. Product Bash, VERSION and production services are unchanged.
+
+## Bounded uncertainty-file ENOSPC — 2026-10-26
+
+After commit `4078e75`, continue the
+[uncertainty ENOSPC plan](superpowers/plans/2026-10-26-pending-enospc.md).
+The same64KiB/64-inode publisher-only fixture now observes two earlier original
+operations. Before pending os.open, inode exhaustion causes real ENOSPC73 and
+leaves no pending file. At its validated empty root0600 FD, block exhaustion
+causes real ENOSPC73 and leaves an empty incomplete pending file. Neither may
+publish a marker/candidate or alter original record bytes. Report absent/empty/
+complete states explicitly; the empty file is not claimed durable uncertainty.
+The existing candidate create/write cases still require complete pending bytes.
+
+RED `pnm-pending-storage-red.t92zj6b_` fails both new unsupported phases with77.
+GREEN `pnm-pending-storage-green.4c05vhie` passes all4 actual kernel refusals,
+including57 bounded inode allocations for pending creation and14 bounded block
+writes for pending write, plus28 guards. Every own tmpfs is retired; unchanged
+parent mount table/namespace and host primary NSS/dpkg hashes are required.
+This remains synthetic-record publisher evidence, not outer deployment recovery
+or independent-kernel storage fault acceptance. Product Bash stays unchanged;
+the immediately preceding fresh31-suite/394-test full baseline is preserved and
+is not described as a second full run for this test-only extension.
+
+Self-review identifies that a supplied parent namespace number alone is not
+proof of the actual parent boundary. Wrong-number RED
+`pnm-storage-parent-red.ygcq6jxd` bypasses that comparison but is still stopped by
+the host propagation check; mutation controls are forbidden by the regression,
+so no host mount occurs. The guard now requires the supplied number to match
+the live parent's /proc/PID/ns/mnt and the worker's namespace to differ, before
+any directory/mount operation. `pnm-storage-parent-green.39wbf1nm` passes all4
+real ENOSPC cases,28 guards, the actual nobody guard,24 Python compilations and
+syntax/security/ShellCheck.20 document paths pass. Independent review remains
+unavailable by usage capacity; the boundary is self-review and execution.
 
 ## Immediate next steps
 

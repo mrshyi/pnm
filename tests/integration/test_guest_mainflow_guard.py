@@ -27,12 +27,12 @@ def forbidden(*args,**kwargs):
     raise AssertionError('parent reached storage mutation')
 fixture.subprocess.run=forbidden
 fixture.tempfile.mkdtemp=forbidden
-for enabled in (False,True):
+for enabled,parent_override in ((False,None),(True,None),(True,0)):
     os.environ['PNM_RUN_STORAGE_TESTS']='1' if enabled else '0'
     expected=('bounded storage requires a private mount namespace' if os.geteuid()==0
               else 'bounded storage requires Linux root') if enabled else 'explicit bounded storage opt-in required'
     try:
-        fixture.run_case('create',os.stat('/proc/self/ns/mnt').st_ino)
+        fixture.run_case('create',os.stat('/proc/self/ns/mnt').st_ino if parent_override is None else parent_override)
     except RuntimeError as error:
         assert str(error)==expected
     else:

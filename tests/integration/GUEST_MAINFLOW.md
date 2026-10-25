@@ -12,6 +12,16 @@ and counts are reported; protected per-run evidence remains under /var/tmp.
 This is a bounded L1/Linux publisher slice, not full deployment compensation,
 independent-VM ENOSPC or physical EIO. Default `make check` does not run mounts.
 
+The same target also tests the earlier uncertainty-file creation and write.
+Inode exhaustion before the original pending os.open must leave no pending file;
+data exhaustion at its exact empty root0600 FD must leave an empty incomplete
+file. Both require actual ENOSPC28/publisher73 and no marker/candidate. Report
+pending_state as absent, empty or complete; an empty file is not durable complete
+uncertainty. The two candidate cases still require the complete pending bytes.
+All four cases retain the same bounds, owned unmount and parent/host checks.
+The worker also checks the live parent's actual mount namespace; a supplied
+namespace number alone cannot authorize a mount in the caller's namespace.
+
 This explicit opt-in test clones a separately prepared trusted Debian 13 boot
 fixture. It never bootstraps packages, downloads assets, installs host packages,
 binds host directories or changes host accounts/network/firewall configuration.
