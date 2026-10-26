@@ -1,8 +1,8 @@
 # PNM Current Tasks
 
-**Last reconciled:** 2026-10-26 (VM uncertainty/candidate block ENOSPC recovery; fresh33 guards/26 Python compilations/static checks and VM2 refusals+14 lifecycle+7 reboot pass; full32-suite/399-test baseline inherited from `5d15ab6`; broader storage/platform and external acceptance remain unverified)
+**Last reconciled:** 2026-10-26 (VM runtime evidence and consistency lock; fresh33 guards/26 Python compilations/static checks and VM14 lifecycle+5 runtime/lock+7 reboot pass; full32-suite/399-test baseline inherited from `5d15ab6`; broader storage/platform and external acceptance remain unverified)
 
-**Current increment baseline:** branch `dev`, parent HEAD `5141e7a`, VERSION `0.16.0-rc.1`.
+**Current increment baseline:** branch `dev`, parent HEAD `112cdd3`, VERSION `0.16.0-rc.1`.
 
 **Environment recheck:** the earlier host EIO/EROFS/CreateInstance failure is no
 longer reproduced: Debian root is writable, real `true`/`df` execute successfully
@@ -2021,7 +2021,7 @@ scenario; dated records above retain its actual results and limitations.
 | T-17 | L1 marker corruption/uncertain publication; native post-rename CLI stop; VM retained marker+uncertainty after abrupt stop | All corruption/fsync/device-failure positions and physical media behavior |
 | T-18 | L1 foreign file/applied metadata drift retention without blind rollback | Every independent-VM external-edit race |
 | T-19 | Native actual TERM/SIGKILL slices; VM SIGKILL of owned QEMU at observed publisher window, same-disk new-kernel refusal with torn journal | Other VM interruption points and physical power loss |
-| T-20 | L1 actual flock; native independent lock holder refuses apply/links without mutation | Every install/apply/reader scheduling interleaving |
+| T-20 | L1 actual flock; native and independent-VM lock holder refuses real apply/links73 without stdout/Core/transaction mutation; release and apply retry succeed | Every install/apply/reader scheduling interleaving |
 | T-21 | L1 old/unknown schema, unsafe paths/fields and read-only inspection boundaries | This L1 item does not imply safe execution of arbitrary records |
 | T-22 | Native distinct-version startup/publication/TERM/SIGKILL slices; VM update/checksum/rollback/swap and paired previous-state reboot | Remaining commit/storage failures and abrupt-VM update/rollback positions |
 | T-23 | L1 malformed/untrusted archive and resource-budget refusal before candidate execution | Arbitrary executable safety is excluded by trusted-input policy |
@@ -2515,6 +2515,31 @@ checks pass, including stale-binding suppression and independent reconfirmation.
 Actual reboot/poweroff, QEMU0/quiescence, unchanged host databases, detached loop,
 empty cleanup errors and full encrypted2GiB readback with matching digest pass.
 This slice preserves the remaining storage/platform/deployed-identity/client gates.
+
+## T-20/T-26 independent VM runtime evidence and lock — 2026-10-26
+
+Continue from `112cdd3` by replaying the existing `runtime-evidence` cases on an
+approved independent VM. The only executable change admits that scenario in the
+existing VM result validator and requires14 normal+5 runtime/lock checks. No
+product code, native case behavior, external host or firewall setting changes.
+
+Fresh `/var/tmp/pnm-inode-check.fv8hh3xb` passes26 integration Python compilations,
+33 guards, syntax/security-scan/ShellCheck (exit0). Independent read-only review
+finds no blocking admission/count or existing-case coverage issue. Product/unit
+source is unchanged; the full32-suite/399-test baseline at `5d15ab6` is inherited,
+not a newly executed full suite.
+
+Fresh `/var/tmp/pnm-vm-boot-volume.md536vk0` passes14 lifecycle and5 runtime/lock
+checks. Real external systemctl restart and another PNM restart change each
+Core's generation without promoting stale applied bytes/URIs or changing its
+peer. Actual validated apply reconfirms the binding. While a separate open-file
+description holds real exclusive flock, fresh writer and protected-reader CLI
+processes return73 without stdout, Core-state changes or new transactions; release
+and apply retry succeed without changing the peer. All7 same-disk reboot checks
+pass. Actual reboot/poweroff, QEMU0/quiescence, unchanged host databases, detached
+loop, empty cleanup errors and complete encrypted2GiB readback with matching
+digest pass. Other scheduling interleavings, deployed identity, other platforms
+and external clients remain unverified.
 
 ## Immediate next steps
 

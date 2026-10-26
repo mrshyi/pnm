@@ -82,7 +82,7 @@ def lifecycle() -> dict:
                               stdout=output,stderr=subprocess.STDOUT,timeout=600)
     detail=json.loads(Path('/var/tmp/pnm-install-result.json').read_text())
     scenario=Path('/opt/pnm-test-scenario').read_text().strip()
-    need(scenario in ('lifecycle','core-update','deployment-progress-readonly','deployment-rename-readonly',
+    need(scenario in ('lifecycle','runtime-evidence','core-update','deployment-progress-readonly','deployment-rename-readonly',
                      'deployment-marker-failures','deployment-space-full','deployment-inode-full','deployment-acquisition-failures',
                      'deployment-version-failures'),
          'unknown VM lifecycle scenario')
@@ -92,9 +92,11 @@ def lifecycle() -> dict:
     candidates=scenario=='deployment-marker-failures'
     space=scenario=='deployment-space-full'
     inodes=scenario=='deployment-inode-full'
+    evidence=scenario=='runtime-evidence'
     acquisition=scenario in ('deployment-acquisition-failures','deployment-version-failures')
     acquisition_checks=9 if scenario=='deployment-version-failures' else 7
-    expected=26 if update else (14+acquisition_checks if acquisition else (17 if candidates else (16 if inodes or space else (15 if progress or rename else 14))))
+    expected=(26 if update else 19 if evidence else 14+acquisition_checks if acquisition
+              else 17 if candidates else 16 if inodes or space else 15 if progress or rename else 14)
     need(result.returncode==0 and detail.get('passed') is True
          and detail.get('mainflow_completed') is True and len(detail.get('checks',[]))==expected,
          'independent VM mainflow/update checks did not pass')
@@ -111,6 +113,7 @@ def lifecycle() -> dict:
         stream.flush()
         os.fsync(stream.fileno())
     return {'mainflow_checks':14,'update_checks':12 if update else 0,
+            'runtime_evidence_checks':5 if evidence else 0,
             'committed_progress_refusal_checks':1 if progress else 0,
             'marker_rename_refusal_checks':1 if rename else 0,
             'marker_candidate_refusal_checks':3 if candidates else 0,

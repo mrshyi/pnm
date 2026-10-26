@@ -239,8 +239,10 @@ Core's URI, and checks that PNM restart cannot promote it. Fully validated apply
 then rebuilds the confirmed binding. A separate real flock holder collides with
 the writer and protected link reader; both refuse without output/Core changes
 or a new transaction, then normal operations resume after release. This covers
-held-lock contention and external service restart, not all timing interleavings
-or VM/kernel reboot.
+held-lock contention and external service restart. The independent VM lifecycle
+worker also accepts this existing scenario: require14 normal+5 runtime/lock
+checks before the separate7-check same-disk reboot. This does not establish all
+timing interleavings, external clients or other supported platforms.
 
 For distinct-version testing, set `PNM_GUEST_SCENARIO=core-update` and
 `PNM_PREVIOUS_CORE_ASSETS=/var/tmp/pnm-update-core-assets`. That separately
