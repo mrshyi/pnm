@@ -11,9 +11,10 @@ source "$PROJECT_ROOT/lib/sandbox-install.sh"
 source "$TEST_ROOT/testlib.sh"
 
 check_staged_versions() (
-    local behavior="$1" expected_rc="$2" temp_dir rc
+    local behavior="$1" expected_rc="$2" temp_dir rc expected_queries=xray
     temp_dir="$(mktemp -d)"
     trap 'rm -rf -- "$temp_dir"' EXIT
+    export PNM_TEST_VERSION_QUERIES="$temp_dir/queries"
     PNM_CONFIG_DIR="$TEST_ROOT/fixtures/config-secrets"
     PNM_SANDBOX_ROOT=/
     PNM_SANDBOX_STAGING="$temp_dir/staging"
@@ -21,14 +22,18 @@ check_staged_versions() (
     PNM_SANDBOX_HY2_BINARY="$temp_dir/hysteria"
     : >"$PNM_SANDBOX_XRAY_ARCHIVE"
     printf '%s\n' '#!/usr/bin/env bash' '[[ "${1-}" == version ]] || exit 99' \
+        'printf "xray\\n" >>"$PNM_TEST_VERSION_QUERIES"' \
         'printf "Xray 1.0.0\\n"' >"$temp_dir/xray"
     printf '%s\n' '#!/usr/bin/env bash' '[[ "${1-}" == version ]] || exit 99' \
+        'printf "hysteria2\\n" >>"$PNM_TEST_VERSION_QUERIES"' \
         'printf "Version: v2.0.0\\n"' >"$temp_dir/hysteria"
     case "$behavior" in
         xray-mismatch) sed -i 's/Xray 1.0.0/Xray 0.9.0/' "$temp_dir/xray" ;;
         hy2-mismatch) sed -i 's/v2.0.0/v1.9.0/' "$temp_dir/hysteria" ;;
         xray-unparseable) sed -i 's/Xray 1.0.0/unknown/' "$temp_dir/xray" ;;
-        hy2-failed) printf '%s\n' '#!/usr/bin/env bash' 'exit 23' >"$temp_dir/hysteria" ;;
+        hy2-unparseable) sed -i 's/Version: v2.0.0/unknown/' "$temp_dir/hysteria" ;;
+        xray-failed) printf 'exit 23\n' >>"$temp_dir/xray" ;;
+        hy2-failed) printf 'exit 23\n' >>"$temp_dir/hysteria" ;;
         matched) ;;
         *) return 1 ;;
     esac
@@ -41,6 +46,8 @@ check_staged_versions() (
     pnm_tx_write_file() { printf '%s\n' "$3" >>"$temp_dir/writes"; }
     if pnm_sandbox_step_assets; then rc=0; else rc=$?; fi
     assert_eq "$expected_rc" "$rc" || return 1
+    [[ "$behavior" == xray-* ]] || expected_queries=$'xray\nhysteria2'
+    assert_eq "$expected_queries" "$(<"$temp_dir/queries")" || return 1
     if ((expected_rc == 0)); then
         assert_eq $'xray_binary\nhysteria_binary' "$(<"$temp_dir/writes")"
     else
@@ -51,12 +58,16 @@ check_staged_versions() (
 test_wrong_xray() { check_staged_versions xray-mismatch 78; }
 test_wrong_hy2() { check_staged_versions hy2-mismatch 78; }
 test_unknown_xray() { check_staged_versions xray-unparseable 78; }
+test_unknown_hy2() { check_staged_versions hy2-unparseable 78; }
+test_failed_xray() { check_staged_versions xray-failed 78; }
 test_failed_hy2() { check_staged_versions hy2-failed 78; }
 test_matched_pair() { check_staged_versions matched 0; }
 
 run_test 'first-install Xray version mismatch refuses before either binary publication' test_wrong_xray
 run_test 'first-install HY2 version mismatch refuses before either binary publication' test_wrong_hy2
 run_test 'first-install unparseable Xray version refuses before publication' test_unknown_xray
-run_test 'first-install failed HY2 version query refuses before publication' test_failed_hy2
+run_test 'first-install unparseable HY2 version refuses before either publication' test_unknown_hy2
+run_test 'first-install failed Xray query refuses despite a matching version banner' test_failed_xray
+run_test 'first-install failed HY2 query refuses despite a matching version banner' test_failed_hy2
 run_test 'first-install matching approved pair permits both publications' test_matched_pair
 finish_tests

@@ -7,6 +7,18 @@
 Ubuntu22.04/24.04 CI/regressions. Local preparation checks below used parent
 `65c8109` plus that increment; the remote CI checks used exactly `39312aa`.
 
+## Continuation checkpoint
+
+- Local stage commits:166e828 (CI evidence),6ec55cc (asset publication),5eb8be9
+  (ZIP observation/mode errors). They have not been pushed.
+- Stage4 changes only the approved-version test fixture and this record;
+  focused7/7 and full32-suite/406-test gates passed. Its validation parent is
+  5eb8be9; resolve final stage commit identity with Git. Runtime code is unchanged
+  since5eb8be9. Logs: `/tmp/pnm-stage4-versions.S7jmiGqQ/`.
+- Next integration work needs an explicitly authorized disposable Debian13
+  x86_64/root/systemd environment; the environment question is pending.
+  Do not provision, run faults on the development host, push or start Phase4.
+
 ## Current environment
 
 - `dev-sanjose`: Ubuntu 22.04.5 LTS ARM64, UID/GID1001, OpenSSL3.0.2.
@@ -220,12 +232,29 @@ both exit0. Existing root-only skips remain; neither storage failure on a real
 device nor L2/Core runtime is newly validated. Private logs:
 `/tmp/pnm-stage3-zip.2QudjIGe/`.
 
+## Stage 4: first-install version-query refusal symmetry
+
+Validation parent5eb8be9. Added unparseable HY2 and failed Xray query cases;
+both failed-query fixtures now emit a matching-looking banner before exit23.
+Per-process receipt files prove the correct version command ran and preserve
+fail-fast Xray-before-HY2 behavior. Each refusal returns78 without publishing
+either managed binary; the matching pair still permits both publications.
+Only fixed safe fixture programs execute and their publication function is
+substituted. Runtime code and manifests did not change in this stage.
+
+The focused approved-version suite passes7/7. Standard and supplemental
+test-script ShellCheck pass. `make release-check` exits0:32 suites,406 passed,
+0 failed, including syntax/security scanning. Root-only skip labels remain the
+same. No additional independent full run is counted. Private logs:
+`/tmp/pnm-stage4-versions.S7jmiGqQ/`. These remain L1 boundary checks, not official
+Core execution, a failed real filesystem, root identity or L2 acceptance.
+
 ## Next priorities
 
-1. Stage4: complete first-install version-query refusal symmetry in the existing
-   approved-version suite: failed Xray query with matching-looking output,
-   unparseable HY2 output, and failed HY2 query despite a matching banner. This
-   remains L1 trusted-script evidence, not execution of official Core assets.
+1. Stage5 prerequisite: provide/authorize a disposable Debian13 x86_64 root/systemd
+   fixture for changed TLS, acquisition and permission paths. The environment
+   question is pending; no approved fixture/asset cache has been supplied here.
+   Replay changed paths only after those prerequisites are established.
 2. Replay changed TLS and permission paths as root in an approved disposable
    Debian13 x86_64 fixture; prepare assets/identity/cleanup prerequisites first.
 3. Continue the remaining L2 commit/storage/interruption positions from the
