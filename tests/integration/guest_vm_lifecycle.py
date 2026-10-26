@@ -82,7 +82,7 @@ def lifecycle() -> dict:
                               stdout=output,stderr=subprocess.STDOUT,timeout=600)
     detail=json.loads(Path('/var/tmp/pnm-install-result.json').read_text())
     scenario=Path('/opt/pnm-test-scenario').read_text().strip()
-    need(scenario in ('lifecycle','runtime-evidence','core-update','deployment-progress-readonly','deployment-rename-readonly',
+    need(scenario in ('lifecycle','runtime-evidence','configured-ports','core-update','deployment-progress-readonly','deployment-rename-readonly',
                      'deployment-marker-failures','deployment-space-full','deployment-inode-full','deployment-acquisition-failures',
                      'deployment-version-failures'),
          'unknown VM lifecycle scenario')
@@ -93,10 +93,11 @@ def lifecycle() -> dict:
     space=scenario=='deployment-space-full'
     inodes=scenario=='deployment-inode-full'
     evidence=scenario=='runtime-evidence'
+    configured=scenario=='configured-ports'
     acquisition=scenario in ('deployment-acquisition-failures','deployment-version-failures')
     acquisition_checks=9 if scenario=='deployment-version-failures' else 7
     expected=(26 if update else 19 if evidence else 14+acquisition_checks if acquisition
-              else 17 if candidates else 16 if inodes or space else 15 if progress or rename else 14)
+              else 17 if candidates else 16 if inodes or space or configured else 15 if progress or rename else 14)
     need(result.returncode==0 and detail.get('passed') is True
          and detail.get('mainflow_completed') is True and len(detail.get('checks',[]))==expected,
          'independent VM mainflow/update checks did not pass')
@@ -104,7 +105,12 @@ def lifecycle() -> dict:
         binding(core)
         if update:
             previous_pair(core)
-    baseline={'schema':1,'boot_id':identity.boot_id,'update_matrix':update,
+    listener_ports={'tcp':10443,'udp':18443} if configured else {'tcp':443,'udp':8443}
+    node=dict(line.split('=',1) for line in Path('/etc/pnm/node.conf').read_text().splitlines()
+              if line and not line.startswith('#'))
+    need(node['XRAY_PORT']==str(listener_ports['tcp']) and node['HY2_PORT']==str(listener_ports['udp']),
+         'persisted VM ports differ from selected scenario')
+    baseline={'schema':1,'boot_id':identity.boot_id,'update_matrix':update,'listener_ports':listener_ports,
               'cores':{core:core_state(core) for core in UNITS},
               'authority':{p:fingerprint(p) for p in ('/etc/pnm/node.conf','/etc/pnm/versions.conf',
                            '/etc/passwd','/etc/group','/etc/shadow','/etc/gshadow')}}
@@ -114,6 +120,7 @@ def lifecycle() -> dict:
         os.fsync(stream.fileno())
     return {'mainflow_checks':14,'update_checks':12 if update else 0,
             'runtime_evidence_checks':5 if evidence else 0,
+            'configured_port_checks':2 if configured else 0,
             'committed_progress_refusal_checks':1 if progress else 0,
             'marker_rename_refusal_checks':1 if rename else 0,
             'marker_candidate_refusal_checks':3 if candidates else 0,
@@ -128,6 +135,11 @@ def reboot_acceptance() -> dict:
     baseline=json.loads(BASELINE.read_text())
     need(baseline['schema']==1 and baseline['boot_id']!=identity.boot_id,
          'independent kernel boot identity did not change')
+    # Older retained private test baselines used only the default listeners.
+    listener_ports=baseline.get('listener_ports',{'tcp':443,'udp':8443})
+    need(type(listener_ports) is dict and set(listener_ports)=={'tcp','udp'}
+         and all(type(port) is int and 1<=port<=65535 for port in listener_ports.values()),
+         'reboot listener-port baseline is invalid')
     deadline=time.monotonic()+30
     while time.monotonic()<deadline:
         if all(show(unit,'ActiveState')=='active' for unit in UNITS.values()):
@@ -193,7 +205,7 @@ def reboot_acceptance() -> dict:
         ready.add(core)
         links('applied-links-'+core,ready)
         count+=1
-    for protocol,port in (('tcp',443),('udp',8443)):
+    for protocol,port in listener_ports.items():
         output=subprocess.check_output(['ss','-H','-lnt' if protocol=='tcp' else '-lnu'],text=True,timeout=10)
         need(any(line.split()[3].rsplit(':',1)[-1]==str(port) for line in output.splitlines()),
              'reboot actual Core listener is absent')
@@ -201,6 +213,7 @@ def reboot_acceptance() -> dict:
             'paired_previous_preserved':baseline['update_matrix'],
             'persisted_resources_preserved':True,'stale_links_withheld':True,
             'ordinary_restart_did_not_promote':True,'both_bindings_reconfirmed':True,
+            'custom_ports_preserved':listener_ports!={'tcp':443,'udp':8443},
             'tcp_udp_listeners_observed':True}
 
 

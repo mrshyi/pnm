@@ -1,8 +1,8 @@
 # PNM Current Tasks
 
-**Last reconciled:** 2026-10-26 (VM runtime evidence and consistency lock; fresh33 guards/26 Python compilations/static checks and VM14 lifecycle+5 runtime/lock+7 reboot pass; full32-suite/399-test baseline inherited from `5d15ab6`; broader storage/platform and external acceptance remain unverified)
+**Last reconciled:** 2026-10-26 (independent VM custom-port conflict/lifecycle/reboot; fresh33 guards/26 Python compilations/static checks and VM14 lifecycle+2 configured-port+7 reboot pass; full32-suite/399-test baseline inherited from `5d15ab6`; broader storage/platform and external acceptance remain unverified)
 
-**Current increment baseline:** branch `dev`, parent HEAD `112cdd3`, VERSION `0.16.0-rc.1`.
+**Current increment baseline:** branch `dev`, parent HEAD `ce55287`, VERSION `0.16.0-rc.1`.
 
 **Environment recheck:** the earlier host EIO/EROFS/CreateInstance failure is no
 longer reproduced: Debian root is writable, real `true`/`df` execute successfully
@@ -2005,7 +2005,7 @@ scenario; dated records above retain its actual results and limitations.
 | T-01 | L1, native and VM positive dual-Core install/lifecycle; real identities, bindings, TLS and listeners | External traffic and the whole supported-platform matrix |
 | T-02 | L1 credential/TLS reuse and corruption refusal; native/VM repeat-install refusal preserves resources | A complete VM replay of every existing-credential corruption/reuse branch |
 | T-03 | Native19 prerequisite refusals; VM first-install partial/trust/checksum and official prior-version pair refusal for both Cores plus verified non-ZIP Xray refusal, complete outer recovery; VM update transport/checksum refusal | Upstream DNS/PKI outages, timeouts/other ZIP combinations, unparseable/failed version queries beyond L1 and other distributions |
-| T-04 | L1 configured-port checks and native configured/default-port conflict lifecycle | Complete independent-VM conflict replay |
+| T-04 | L1, native and independent-VM configured/default-port conflict lifecycle; actual custom-port listeners persist through same-disk reboot | Other port/topology combinations and external-client routing |
 | T-05 | L1 alias/symlink/managed-path and directory protection; host fixture refusal guards | Cross-process privileged ancestor replacement is outside the protected-parent assumption |
 | T-06 | L1 original/missing byte and numeric metadata compensation; selected native complete-resource checks | Every nondefault metadata combination on every L2 operation |
 | T-07 | L1 directory enrollment/drift/empty removal; native directory compensation checks | All externally modified directory timings on the independent kernel |
@@ -2540,6 +2540,31 @@ pass. Actual reboot/poweroff, QEMU0/quiescence, unchanged host databases, detach
 loop, empty cleanup errors and complete encrypted2GiB readback with matching
 digest pass. Other scheduling interleavings, deployed identity, other platforms
 and external clients remain unverified.
+
+## T-04 independent VM custom-port conflict and reboot — 2026-10-26
+
+Continue from `ce55287` by replaying the existing `configured-ports` cases on an
+approved independent VM. The validator requires14 normal+2 port checks. Its
+private reboot baseline binds expected TCP10443/UDP18443 to the selected fixture
+and actual persisted node fields; post-reboot ss checks use those ports after
+strict protocol-key/integer/range validation. Older private records lacking the
+optional port field retain the previous default443/8443 fallback. No product,
+configuration format, native scenario or host listener is changed.
+
+Fresh `/var/tmp/pnm-inode-check.h6mxn4ah` passes26 integration Python compilations,
+33 guards, syntax/security-scan/ShellCheck (exit0). Independent read-only review
+finds no blocking baseline/count/listener issue. The unchanged product/unit
+source retains the inherited32-suite/399-test baseline from `5d15ab6`.
+
+Fresh `/var/tmp/pnm-vm-boot-volume.ce5ev2bd` passes the actual selected TCP/UDP
+conflict refusal before publication with unchanged configuration/NSS/transaction
+inventory,14 normal custom-port lifecycle checks and both unrelated default-port
+fixture sockets remaining intact through that pre-reboot process. All7 same-disk
+reboot checks pass, including actual TCP10443/UDP18443 listeners, preserved
+resources, withheld stale bindings and independent per-Core reconfirmation.
+Default fixture processes are not expected to survive reboot. Actual reboot/
+poweroff, QEMU0/quiescence, unchanged host databases, encrypted2GiB archive
+readback with matching digest, detached loop and empty cleanup errors all pass.
 
 ## Immediate next steps
 

@@ -202,7 +202,12 @@ default scenario remains `lifecycle`; no production function is replaced.
 default443/8443 listeners in the private guest, and first checks that conflicts
 on the actual selected ports refuse before any managed write. It then runs the
 real installation/lifecycle/restore, verifies actual listeners and URI ports,
-and requires both unrelated default sockets to remain untouched.
+and requires both unrelated default sockets to remain untouched. The independent
+VM worker also accepts this scenario, requiring14 normal+2 port checks before
+its7-check same-disk reboot. The private reboot baseline records the expected
+ports after comparing persisted node values; post-reboot listener checks use
+TCP10443/UDP18443. The unrelated fixture sockets belong to the pre-reboot process
+and are not expected to survive the new kernel.
 
 `PNM_GUEST_SCENARIO=account-reuse` first creates valid system identities only
 inside the guarded clean guest. It then runs the existing dependency-refusal,
