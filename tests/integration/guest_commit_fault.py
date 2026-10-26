@@ -90,6 +90,29 @@ def arm():
     armed=True
 def observe(frame,event,arg):
     global context,observation,actual,armed,original_limit,candidate_identity,space_fault,inode_fault
+    if (phase=='inode-pending' and not armed and event=='line'
+            and frame.f_code.co_filename=='<stdin>' and frame.f_code.co_name=='<module>'
+            and frame.f_globals.get('directory')==str(transaction)
+            and frame.f_globals.get('pending')==str(transaction/'commit-uncertain.env')
+            and not (transaction/'commit-uncertain.env').exists()
+            and not (transaction/'commit.env').exists() and time.time()<=int(sys.argv[5])):
+        from guest_commit_space import InodeFault
+        inode_fault=InodeFault(transaction,private,config['parent_namespace'])
+        observation=inode_fault.fill()
+        armed=True
+    if (phase=='inode-pending' and inode_fault is not None and event=='exception'
+            and frame.f_code.co_filename=='<stdin>' and frame.f_code.co_name=='<module>'):
+        error=arg[1]
+        if (isinstance(error,OSError) and error.errno==errno.ENOSPC
+                and error.filename==str(transaction/'commit-uncertain.env')
+                and observation.get('inode_exhausted') is True):
+            inode_fault.release()
+            inode_fault=None
+            actual={'actual_errno':error.errno,'pending_creation_inode_refused':True,
+                    'pending_retained':(transaction/'commit-uncertain.env').exists(),
+                    'inode_exhausted':True,'inodes_recovered':True}
+            sys.settrace(None)
+            return None
     if (phase=='create' and not armed and event=='call'
             and frame.f_code is tempfile.mkstemp.__code__
             and frame.f_back is not None and frame.f_back.f_code.co_filename=='<stdin>'
@@ -226,9 +249,9 @@ def transaction_for(arguments):
 
 def run_commit(arguments, wrapper, *, isolated=False, rename=False, candidate=None):
     late=rename or candidate is not None
-    guard=commit_guard(late,space=candidate in ('space','inode'))
+    guard=commit_guard(late,space=candidate in ('space','inode','inode-pending'))
     guard()
-    require(type(rename) is bool and candidate in (None,'create','write','space','inode') and not (rename and candidate),
+    require(type(rename) is bool and candidate in (None,'create','write','space','inode','inode-pending') and not (rename and candidate),
             'unknown or conflicting marker fault variants')
     private=Path(wrapper).parent
     info=private.lstat()
@@ -245,7 +268,7 @@ def run_commit(arguments, wrapper, *, isolated=False, rename=False, candidate=No
                        'original_mounts':[row for row in mounts() if row[4]==str(transaction)]})
         (private/'config.json').write_text(json.dumps(config))
         variant=['--candidate-'+candidate] if candidate else (['--rename'] if rename else [])
-        timeout=280 if candidate=='inode' else 130
+        timeout=280 if candidate in ('inode','inode-pending') else 130
         return subprocess.run(['/usr/bin/unshare','--mount','--propagation','private',
             '/usr/bin/python3','-B','/opt/guest_commit_fault.py',*variant,wrapper,*arguments],timeout=timeout).returncode
     require(config['transaction']==str(transaction) and config['parent_identity']==identity,
@@ -263,17 +286,18 @@ def run_commit(arguments, wrapper, *, isolated=False, rename=False, candidate=No
         # the owned bind or file-size limit before the parent CLI compensates.
         result=subprocess.run(['/usr/bin/python3',*arguments],
             env={**os.environ,'PYTHONPATH':str(observer)},capture_output=True,
-            timeout=240 if candidate=='inode' else 90)
+            timeout=240 if candidate in ('inode','inode-pending') else 90)
         observed=json.loads((observer/'observed-rename.json').read_text())
-        event=('candidate_create_inode_refused' if candidate=='inode'
+        event=('pending_creation_inode_refused' if candidate=='inode-pending'
+               else 'candidate_create_inode_refused' if candidate=='inode'
                else 'candidate_'+candidate+'_refused' if candidate else 'rename_refused')
-        expected_errno=errno.ENOSPC if candidate in ('space','inode') else (errno.EFBIG if candidate=='write' else errno.EROFS)
+        expected_errno=errno.ENOSPC if candidate in ('space','inode','inode-pending') else (errno.EFBIG if candidate=='write' else errno.EROFS)
         retired=(observed.get('space_recovered') if candidate=='space' else
-                 observed.get('inodes_recovered') if candidate=='inode' else
+                 observed.get('inodes_recovered') if candidate in ('inode','inode-pending') else
                  observed.get('file_size_limit_restored') if candidate=='write' else observed.get('mount_removed'))
         require(result.returncode==73 and not result.stdout
                 and observed.get('actual_errno')==expected_errno and observed.get(event) is True
-                and observed.get('pending_retained') is True and retired is True
+                and observed.get('pending_retained') is (candidate!='inode-pending') and retired is True
                 and not (transaction/'commit.env').exists(),
                 'actual marker refusal or fault retirement was not observed')
         observed.update({'publisher_rc':result.returncode,'commit_intent_recorded':True,
@@ -304,8 +328,8 @@ def run_commit(arguments, wrapper, *, isolated=False, rename=False, candidate=No
 @contextmanager
 def readonly_deployment_commit(logs, env, *, rename=False, candidate=None):
     late=rename or candidate is not None
-    commit_guard(late,space=candidate in ('space','inode'))()
-    require(type(rename) is bool and candidate in (None,'create','write','space','inode') and not (rename and candidate),
+    commit_guard(late,space=candidate in ('space','inode','inode-pending'))()
+    require(type(rename) is bool and candidate in (None,'create','write','space','inode','inode-pending') and not (rename and candidate),
             'unknown or conflicting marker fault variants')
     parent_limit=None
     if candidate=='write':
@@ -345,13 +369,14 @@ def readonly_deployment_commit(logs, env, *, rename=False, candidate=None):
             require(receipt.is_file() and not receipt.is_symlink(),
                     'publisher refusal receipt missing; inspect protected CLI output')
             observation.update(json.loads(receipt.read_text()))
-            expected={'private_namespace':True,'actual_errno':errno.ENOSPC if candidate in ('space','inode') else (errno.EFBIG if candidate=='write' else errno.EROFS),'publisher_rc':73,
+            expected={'private_namespace':True,'actual_errno':errno.ENOSPC if candidate in ('space','inode','inode-pending') else (errno.EFBIG if candidate=='write' else errno.EROFS),'publisher_rc':73,
                 'commit_intent_recorded':True,'both_applied_recorded':True}
             if candidate=='space':
                 expected.update({'candidate_space_refused':True,'pending_retained':True,
                                  'fill_errno':errno.ENOSPC,'space_recovered':True})
-            elif candidate=='inode':
-                expected.update({'candidate_create_inode_refused':True,'pending_retained':True,
+            elif candidate in ('inode','inode-pending'):
+                event='pending_creation_inode_refused' if candidate=='inode-pending' else 'candidate_create_inode_refused'
+                expected.update({event:True,'pending_retained':candidate=='inode',
                                  'inode_exhausted':True,'inodes_recovered':True})
             elif candidate=='write':
                 require(resource.getrlimit(resource.RLIMIT_FSIZE)==parent_limit,'publisher fault changed parent limits')
@@ -368,7 +393,7 @@ def readonly_deployment_commit(logs, env, *, rename=False, candidate=None):
 
 
 if __name__=='__main__':
-    if sys.argv[1:2] in (['--candidate-create'],['--candidate-write'],['--candidate-space'],['--candidate-inode']):
+    if sys.argv[1:2] in (['--candidate-create'],['--candidate-write'],['--candidate-space'],['--candidate-inode'],['--candidate-inode-pending']):
         raise SystemExit(run_commit(sys.argv[3:],sys.argv[2],isolated=True,
                                     candidate=sys.argv[1].removeprefix('--candidate-')))
     elif sys.argv[1:2]==['--rename']:

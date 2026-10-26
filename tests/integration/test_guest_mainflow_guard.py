@@ -52,8 +52,10 @@ fixture.subprocess.run=forbidden
 fixture.os.open=forbidden
 for entry in (lambda:fixture.run_commit([],None,candidate='space'),
               lambda:fixture.run_commit([],None,candidate='inode'),
+              lambda:fixture.run_commit([],None,candidate='inode-pending'),
               lambda:fixture.readonly_deployment_commit(None,None,candidate='space').__enter__(),
               lambda:fixture.readonly_deployment_commit(None,None,candidate='inode').__enter__(),
+              lambda:fixture.readonly_deployment_commit(None,None,candidate='inode-pending').__enter__(),
               lambda:SpaceFault(None,None)):
     try:
         entry()
@@ -158,6 +160,7 @@ assert Path(temporary).is_file()
 from pathlib import Path
 sys.path.insert(0,sys.argv[1])
 from guest_commit_fault import RENAME_TRACE_SOURCE
+phase=sys.argv[2]
 class Fault:
     def __init__(self,*args): self.released=False
     def fill(self): return {'private_namespace':True,'inode_exhausted':True}
@@ -175,15 +178,16 @@ sys.modules.update({'guest_commit_signal':signal,'guest_io_fault':mount,
 with tempfile.TemporaryDirectory(prefix='pnm-inode-observer.') as directory:
     root=Path(directory)
     (root/'config.json').write_text(json.dumps({'transaction':str(root),'identity':[1,2],
-        'parent_namespace':3,'phase':'inode'}))
-    (root/'commit-uncertain.env').write_text('pending')
+        'parent_namespace':3,'phase':phase}))
+    if phase=='inode':
+        (root/'commit-uncertain.env').write_text('pending')
     sys.argv=['-','publish',str(root),'test-id','test-deploy','9999999999']
     namespace={'__file__':str(root/'sitecustomize.py')}
     original_open=os.open
     original_statvfs=os.statvfs
     def no_inodes(path,flags,mode=0o777):
         name=os.fspath(path)
-        if name.startswith(str(root)+'/.commit-'):
+        if name.startswith(str(root)+'/.commit-') or name==str(root/'commit-uncertain.env'):
             raise OSError(errno.ENOSPC,'no inodes',name)
         return original_open(path,flags,mode)
     class Exhausted:
@@ -195,8 +199,10 @@ with tempfile.TemporaryDirectory(prefix='pnm-inode-observer.') as directory:
         os.statvfs=lambda path:Exhausted()
         try:
             # Match the publisher entry frame the VM observer watches.
-            exec(compile("tempfile.mkstemp(prefix='.commit-',dir=directory)",'<stdin>','exec'),
-                 {'tempfile':tempfile,'directory':str(root)})
+            program=("pending=directory+'/commit-uncertain.env'\\nos.open(pending,os.O_CREAT|os.O_EXCL|os.O_WRONLY,0o600)"
+                     if phase=='inode-pending' else "tempfile.mkstemp(prefix='.commit-',dir=directory)")
+            exec(compile(program,'<stdin>','exec'),
+                 {'tempfile':tempfile,'os':os,'directory':str(root)})
             raise AssertionError('candidate unexpectedly created')
         except OSError as error:
             assert error.errno==errno.ENOSPC
@@ -207,12 +213,15 @@ with tempfile.TemporaryDirectory(prefix='pnm-inode-observer.') as directory:
         namespace['finish']()
     assert (root/'observed-rename.json').exists()
     observed=json.loads((root/'observed-rename.json').read_text())
-    assert observed['candidate_create_inode_refused'] and observed['inode_exhausted']
-    assert observed['inodes_recovered'] and observed['pending_retained']
+    event='pending_creation_inode_refused' if phase=='inode-pending' else 'candidate_create_inode_refused'
+    assert observed[event] and observed['inode_exhausted']
+    assert observed['inodes_recovered'] and observed['pending_retained']==(phase=='inode')
 '''
-        result=subprocess.run([sys.executable,'-B','-c',script,str(DRIVER.parent)],
-                              capture_output=True,timeout=15)
-        self.assertEqual(result.returncode,0,result.stderr.decode(errors='replace'))
+        for phase in ('inode','inode-pending'):
+            with self.subTest(phase=phase):
+                result=subprocess.run([sys.executable,'-B','-c',script,str(DRIVER.parent),phase],
+                                      capture_output=True,timeout=15)
+                self.assertEqual(result.returncode,0,result.stderr.decode(errors='replace'))
 
     @unittest.skipUnless(sys.platform=='linux','Linux candidate refusal guards')
     def test_candidate_variants_refuse_host_before_controls(self):

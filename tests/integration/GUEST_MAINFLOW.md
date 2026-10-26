@@ -38,9 +38,11 @@ separate from this controlled virtual-disk space refusal.
 
 The VM-only `deployment-inode-full` scenario fills the approved root ext4's free
 inodes with empty files in a new protected evidence directory. It requires
-`f_favail == 0` while data blocks remain, observes the real commit-candidate
-creation failure as ENOSPC, then removes only its exact owned files before CLI
-compensation. The normal lifecycle and same-disk reboot must pass afterward.
+`f_favail == 0` while data blocks remain. It observes two real ENOSPC positions
+in sequence: initial uncertainty-file creation (no pending record remains), then
+commit-candidate creation (the existing pending record remains). Each refusal
+removes only its exact owned filler files before full CLI compensation. The
+normal lifecycle and same-disk reboot must pass afterward without state repair.
 The filesystem is bounded to2GiB; the filler requires at most262144 free inodes
 at admission and has a120-second deadline. This is virtual ext4 inode exhaustion,
 not physical media failure.

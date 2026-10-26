@@ -457,7 +457,7 @@ try:
     if scenario in ('deployment-marker-failures','deployment-space-full','deployment-inode-full'):
         from guest_deployment_cases import run_startup_failures
         failures=(('space',) if scenario=='deployment-space-full' else
-                  ('inode',) if scenario=='deployment-inode-full' else ('create','write','rename'))
+                  ('inode-pending','inode') if scenario=='deployment-inode-full' else ('create','write','rename'))
         for failure in failures:
             stage='actual marker '+failure+' refusal and compensation'
             run_startup_failures(logs,call,absent,passed,failure=failure,env=env)
