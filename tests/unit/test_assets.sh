@@ -103,10 +103,68 @@ test_checksum_refusal_removes_unverified_candidate() {
     asset_failure_preserves_publication_boundary 0 78
 }
 
+asset_publication_failure_is_private_and_nonclobbering() (
+    local behavior="$1" expected_rc="$2" temp_dir destination digest core
+    temp_dir="$(mktemp -d)"
+    trap 'rm -rf -- "$temp_dir"' EXIT
+    mkdir -m 0700 "$temp_dir/bin" || return 1
+    cat >"$temp_dir/bin/curl" <<'BASH'
+#!/usr/bin/env bash
+set -Eeuo pipefail
+target=''
+while (($# > 0)); do
+    if [[ "$1" == --output ]]; then target="$2"; shift 2; else shift; fi
+done
+printf 'called\n' >"$PNM_TEST_ASSET_RECEIPT"
+printf 'verified payload' >"$target"
+case "$PNM_TEST_ASSET_BEHAVIOR" in
+    raced-file) printf 'foreign payload' >"$PNM_TEST_ASSET_DESTINATION" ;;
+    raced-directory) mkdir "$PNM_TEST_ASSET_DESTINATION"; printf 'foreign payload' >"$PNM_TEST_ASSET_DESTINATION/sentinel" ;;
+    raced-link) ln -s "$PNM_TEST_ASSET_SENTINEL" "$PNM_TEST_ASSET_DESTINATION" ;;
+esac
+BASH
+    chmod 0700 "$temp_dir/bin/curl" || return 1
+    digest="$(printf 'verified payload' | sha256sum | awk '{print $1}')"
+    if [[ "$behavior" == chmod-failure ]]; then chmod() { return 1; }; fi
+    for core in xray hysteria2; do
+        mkdir -m 0700 "$temp_dir/$core" || return 1
+        destination="$temp_dir/$core/payload"
+        printf 'foreign payload' >"$temp_dir/$core/sentinel"
+        if [[ "$behavior" == existing-dangling-link ]]; then
+            ln -s "$temp_dir/$core/missing" "$destination" || return 1
+        fi
+        PNM_TEST_ASSET_BEHAVIOR="$behavior" PNM_TEST_ASSET_DESTINATION="$destination" \
+            PNM_TEST_ASSET_SENTINEL="$temp_dir/$core/sentinel" PNM_TEST_ASSET_RECEIPT="$temp_dir/$core/called" \
+            PATH="$temp_dir/bin:$PATH" run_capture pnm_asset_download_verified "$core" v1.2.3 "$digest" "$destination"
+        assert_eq "$expected_rc" "$RUN_RC" || return 1
+        assert_eq 'foreign payload' "$(<"$temp_dir/$core/sentinel")" || return 1
+        case "$behavior" in
+            existing-dangling-link)
+                [[ -L "$destination" && ! -e "$destination" && ! -e "$temp_dir/$core/called" ]] || return 1 ;;
+            raced-file) assert_eq 'foreign payload' "$(<"$destination")" || return 1 ;;
+            raced-directory) assert_eq 'foreign payload' "$(<"$destination/sentinel")" || return 1 ;;
+            raced-link) assert_eq "$temp_dir/$core/sentinel" "$(readlink "$destination")" || return 1 ;;
+            chmod-failure) [[ ! -e "$destination" && ! -L "$destination" ]] || return 1 ;;
+        esac
+        [[ -z "$(find "$temp_dir/$core" -name '.pnm-asset.*' -print -quit)" ]] || return 1
+    done
+)
+
+test_existing_dangling_asset_link_refuses_before_download() { asset_publication_failure_is_private_and_nonclobbering existing-dangling-link 73; }
+test_asset_publication_preserves_raced_file() { asset_publication_failure_is_private_and_nonclobbering raced-file 73; }
+test_asset_publication_does_not_move_into_raced_directory() { asset_publication_failure_is_private_and_nonclobbering raced-directory 73; }
+test_asset_publication_preserves_raced_link() { asset_publication_failure_is_private_and_nonclobbering raced-link 73; }
+test_asset_permission_failure_refuses_publication() { asset_publication_failure_is_private_and_nonclobbering chmod-failure 77; }
+
 run_test 'asset URLs are fixed by Core and version' test_asset_urls_are_pinned_by_core_and_version
 run_test 'asset SHA-256 verification fails closed' test_asset_hash_verification
 run_test 'assets output is JSON and excludes Secret values' test_assets_json_has_no_secrets
 run_test 'verified download atomically installs the payload' test_verified_download_atomically_installs_payload
 run_test 'failed download removes its partial candidate without publication' test_failed_download_removes_partial_candidate
 run_test 'checksum refusal removes its unverified candidate without publication' test_checksum_refusal_removes_unverified_candidate
+run_test 'dangling destination links refuse before downloading either Core asset' test_existing_dangling_asset_link_refuses_before_download
+run_test 'publication refuses raced files without replacing them or retaining candidates' test_asset_publication_preserves_raced_file
+run_test 'publication cannot move a Core candidate into a raced directory' test_asset_publication_does_not_move_into_raced_directory
+run_test 'publication preserves raced symlinks and their targets' test_asset_publication_preserves_raced_link
+run_test 'candidate chmod failure refuses publication and removes the private candidate' test_asset_permission_failure_refuses_publication
 finish_tests

@@ -41,7 +41,7 @@ pnm_asset_download_verified() {
     pnm_command_exists curl || return "$PNM_EXIT_UNAVAILABLE"
     destination_dir="$(dirname -- "$destination")"
     [[ -d "$destination_dir" && -w "$destination_dir" ]] || return "$PNM_EXIT_CANTCREAT"
-    [[ ! -e "$destination" ]] || return "$PNM_EXIT_CANTCREAT"
+    [[ ! -e "$destination" && ! -L "$destination" ]] || return "$PNM_EXIT_CANTCREAT"
     temp_file="$(mktemp "$destination_dir/.pnm-asset.XXXXXXXX")" || return "$PNM_EXIT_CANTCREAT"
 
     if ! curl --fail --location --proto '=https' --tlsv1.2 --connect-timeout 15 --retry 2 --output "$temp_file" "$source_url"; then
@@ -52,11 +52,15 @@ pnm_asset_download_verified() {
         rm -f -- "$temp_file"
         return "$PNM_EXIT_CONFIG"
     fi
-    chmod 0600 -- "$temp_file"
-    mv -n -- "$temp_file" "$destination" || {
+    chmod 0600 -- "$temp_file" || {
+        rm -f -- "$temp_file"
+        return "$PNM_EXIT_NOPERM"
+    }
+    # mv -n returns success when it skips an existing destination.
+    if ! mv -n -T -- "$temp_file" "$destination" || [[ -e "$temp_file" || -L "$temp_file" ]]; then
         rm -f -- "$temp_file"
         return "$PNM_EXIT_CANTCREAT"
-    }
+    fi
 }
 
 pnm_asset_stage_xray_zip() {

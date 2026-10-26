@@ -2,7 +2,7 @@
 
 **Updated:** 2026-10-26. **Phase 3 remains incomplete; Phase 4 and release work have not started.**
 
-**Current code baseline:** branch `dev`, published commit `39312aa`, VERSION
+**Published baseline:** branch `dev`, commit `39312aa`, VERSION
 `0.16.0-rc.1`, including TLS/test repairs, cloud-development cleanup and
 Ubuntu22.04/24.04 CI/regressions. Local preparation checks below used parent
 `65c8109` plus that increment; the remote CI checks used exactly `39312aa`.
@@ -172,12 +172,39 @@ now actual Ubuntu amd64 CI results, not os-release fixture inference, but do
 not close root/Core/systemd lifecycle, reboot, G-01 or L3. Only status evidence
 changed in this stage; no business tests were rerun for the documentation edit.
 
+## Stage 2: fail-closed asset candidate publication
+
+Validation parent166e828. Source/caller inspection found that the shared download
+adapter ignored chmod failure and accepted GNU `mv -n` exit0 when a destination
+appeared during transport. A directory could also receive the temporary candidate
+as a child. Host cache preparation would then set its selected path without a
+new hash check. Core update uses the same adapter before its binary transaction.
+
+The shared function now rejects pre-existing dangling links, checks candidate
+chmod, uses no-target-directory/no-clobber publication and requires the original
+candidate path to disappear before success. Occupied destinations return73;
+candidate mode failure returns77. Only the owned candidate is removed on refusal;
+foreign destinations and unrelated sentinels are retained. No CLI, manifest,
+URI, service policy or managed transaction schema changed.
+
+Five new regression wrappers exercise both Cores with a controlled curl script:
+dangling destination before transport, raced file/directory/link and chmod error.
+Before the fix the asset suite had6 passes/5 failures; afterward11/11 pass. Actual
+GNU move/file/link operations and hashes execute in private temporary paths;
+chmod error is injected and no network, account or service operation occurs.
+The14 host-apply and5 approved-version tests also pass (exit0 each). Full
+`make release-check` exits0:32 suites,400 passed,0 failed, including syntax and
+security scanning. Standard ShellCheck and supplemental asset-test ShellCheck
+both exit0. Root-only skips remain unchanged; no L2 or external result is added.
+Private logs:
+`/tmp/pnm-stage2-assets.OWQojhdj/`. Earlier39312aa CI results do not cover this patch.
+
 ## Next priorities
 
-1. Stage2: audit the shared asset acquisition/publication boundary and add focused
-   L1 refusal coverage using existing private fixtures; commit the validated slice.
-   Known source concern: `mv -n` can skip a newly occupied destination with exit0;
-   check callers before changing its success/cleanup handling.
+1. Stage3: fix ZIP-listing error propagation in `pnm_asset_stage_xray_zip` using
+   the existing staging suite. A private probe reproduced list exit23 followed by
+   staging success0 because process-substitution status is ignored. Check empty
+   listings and candidate chmod errors too; do not execute any real Core.
 2. Replay changed TLS and permission paths as root in an approved disposable
    Debian13 x86_64 fixture; prepare assets/identity/cleanup prerequisites first.
 3. Continue the remaining L2 commit/storage/interruption positions from the

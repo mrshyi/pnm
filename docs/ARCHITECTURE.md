@@ -185,6 +185,14 @@ The Core operations include per-Core restart/log/apply/update/rollback and backu
 
 Update/rollback retain the existing exclusive PNM lock from preparation through transaction completion and compensation. Argument validation/root checks precede this boundary; pending deployments are checked under the lock before preparation. Version pins, service state, current/previous binaries and configuration baselines are then read while cooperating PNM writers are excluded. The existing transaction lock is reentrant, and each wrapper releases only its own lock level, including early failures. Asset download remains inside this global boundary, so other writers and consistency-sensitive readers may report contention during preparation. This does not coordinate arbitrary privileged writers that ignore the PNM lock.
 
+The shared asset downloader refuses existing destination files and links before
+transport, checks candidate mode0600, and publishes without overwriting or moving
+into a destination directory. A skipped `mv -n` is a failure, not a successful
+download: a retained private candidate is removed and the caller receives73.
+Candidate permission failure returns77. Host installation and Core update share
+this boundary before managed binary/service changes. These cache safeguards do
+not implement a separate transaction engine or coordinate arbitrary root writers.
+
 Update/rollback explicitly enroll metadata for the current binary, previous binary and `previous.env`, and verify all published transaction resources before commit. Compensation preserves an intervening content or metadata edit and reports recovery required. Transaction-close errors propagate without a success message, even if the commit already completed; outer lock cleanup still runs.
 
 Restore parsing enumerates at most 64 visible members, rejects absolute/traversing names and payload-bearing directory entries, bounds the manifest to 64 KiB and declared resource totals to 512 MiB, and requires the complete 12-resource set before candidate validation. Before opening tar data, the parser lowers its own address-space budget to 128 MiB and CPU budget to 30 seconds, retaining stricter inherited soft/hard limits. This includes hidden PAX/GNU processing that occurs before a visible member is yielded. Memory/overflow/recursion exhaustion returns a parsing failure without candidate execution. CPU time is not a wall-clock deadline, and the budgets apply only to parsing. Candidate validation executes staged Core binaries as root; the operator must establish trusted PNM backup provenance using a separately retained trusted checksum. Root/mode/embedded approval data do not authenticate it. See D-009 in `docs/DECISIONS.md`.
