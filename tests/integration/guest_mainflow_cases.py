@@ -368,6 +368,7 @@ try:
           'deployment-startup-failure','deployment-listener-failure','deployment-term',
           'deployment-sigkill','deployment-commit-readonly','deployment-late-sigkill',
           'deployment-progress-readonly','deployment-rename-readonly','deployment-marker-failures','deployment-space-full',
+          'deployment-acquisition-failures',
           'account-creation-failure')+update_interruptions+restore_interruptions+publication_cases+account_deletions,'unknown guest scenario')
     if scenario=='account-reuse':
         from guest_account_cases import prepare_accounts, require_preserved
@@ -448,6 +449,10 @@ try:
             # Its protected result is still written by the shared finally block.
             result={'passed':True,'checks':passed,'expected_recovery_required':True,'mainflow_completed':False}
             raise SystemExit(0)
+    if scenario=='deployment-acquisition-failures':
+        stage='actual first-install acquisition failures and compensation'
+        from guest_acquisition_cases import run_acquisition
+        run_acquisition(logs,env,call,absent,passed)
     if scenario in ('deployment-marker-failures','deployment-space-full'):
         from guest_deployment_cases import run_startup_failures
         for failure in (('space',) if scenario=='deployment-space-full' else ('create','write','rename')):

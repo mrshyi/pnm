@@ -18,6 +18,27 @@ DRIVER=Path(__file__).with_name('test_guest_mainflow.py')
 
 
 class GuestGuardTests(unittest.TestCase):
+    @unittest.skipUnless(sys.platform=='linux','Linux VM acquisition guard')
+    def test_install_acquisition_refuses_host_before_io(self):
+        script='''import sys
+sys.path.insert(0,sys.argv[1])
+import guest_acquisition_cases as fixture
+from guest_vm_boot import GuestRefusal
+def forbidden(*args,**kwargs):
+    raise AssertionError('host reached acquisition fixture mutation')
+fixture.subprocess.run=forbidden
+fixture.Path.mkdir=forbidden
+try:
+    fixture.run_acquisition(None,None,None,None,[])
+except GuestRefusal:
+    pass
+else:
+    raise AssertionError('host accepted for acquisition fixture')
+'''
+        result=subprocess.run([sys.executable,'-B','-c',script,str(DRIVER.parent)],
+                              capture_output=True,timeout=10)
+        self.assertEqual(result.returncode,0,result.stderr.decode(errors='replace'))
+
     @unittest.skipUnless(sys.platform=='linux','Linux VM-only space refusal')
     def test_disk_space_fault_refuses_host_before_controls(self):
         script='''import sys

@@ -2,7 +2,7 @@
 
 **Last reconciled:** 2026-10-26 (bounded publisher tmpfs ENOSPC checks added; independent Debian lifecycle/update/reboot and selected abrupt-VM recovery remain recorded; broader storage/platform and external acceptance are unverified)
 
-**Current increment baseline:** branch `dev`, parent HEAD `d2712d1`, VERSION `0.16.0-rc.1`.
+**Current increment baseline:** branch `dev`, parent HEAD `b81600d`, VERSION `0.16.0-rc.1`.
 
 **Environment recheck:** the earlier host EIO/EROFS/CreateInstance failure is no
 longer reproduced: Debian root is writable, real `true`/`df` execute successfully
@@ -2004,7 +2004,7 @@ scenario; dated records above retain its actual results and limitations.
 |---|---|---|
 | T-01 | L1, native and VM positive dual-Core install/lifecycle; real identities, bindings, TLS and listeners | External traffic and the whole supported-platform matrix |
 | T-02 | L1 credential/TLS reuse and corruption refusal; native/VM repeat-install refusal preserves resources | A complete VM replay of every existing-credential corruption/reuse branch |
-| T-03 | Native19 prerequisite refusals; native/VM checksum refusal; VM real curl partial-file18 and certificate60 through update69 with unchanged dual-Core state; L1 candidate cleanup and real non-ZIP rejection | Upstream DNS/PKI outages and all acquisition/ZIP failures through real VM first install |
+| T-03 | Native19 prerequisite refusals; VM actual first-install partial/trust/checksum refusals for both Cores and verified non-ZIP Xray staging refusal with complete outer recovery; VM update transport/checksum refusal | Upstream DNS/PKI outages, timeout/other ZIP/version combinations and other distributions |
 | T-04 | L1 configured-port checks and native configured/default-port conflict lifecycle | Complete independent-VM conflict replay |
 | T-05 | L1 alias/symlink/managed-path and directory protection; host fixture refusal guards | Cross-process privileged ancestor replacement is outside the protected-parent assumption |
 | T-06 | L1 original/missing byte and numeric metadata compensation; selected native complete-resource checks | Every nondefault metadata combination on every L2 operation |
@@ -2339,6 +2339,40 @@ This closes the selected candidate-write virtual ext4 space refusal, not other
 commit positions, physical EIO, deployed identity or external-client acceptance.
 The recent31/394 full Bash result remains separate from this test-only increment;
 independent review is still unavailable, so review is self-review and execution.
+
+## Independent VM first-install acquisition refusals — 2026-10-26
+
+After ext4 recovery commit `b81600d`, continue the
+[first-install acquisition plan](superpowers/plans/2026-10-26-install-acquisition.md).
+C capacity remains3,935,350,784 bytes before launch. The VM-only fixture reuses
+the exact bounded HTTPS server and approved current asset bytes. Hold only the
+verified subject cache inode in protected evidence to force acquisition; retain
+the peer cache and refuse to overwrite any unexpected cache destination on
+fixture restoration. No curl, staging function or CLI result is substituted.
+
+Host-refusal RED `pnm-install-acquisition-red.9v1skdjc` precedes implementation.
+Preboot `pnm-install-acquisition-preboot.n64_bkyj` passes30 guards,28 integration/
+operator compilations and static gates; the subsequently added account-receipt
+assertion is compiled before VM preparation. Actual
+`/var/tmp/pnm-vm-boot-volume.wirimd90` passes all7 negative first installations:
+curl18 partial-body and curl60 untrusted private fixture CA each return69 for
+each Core; checksum refusal returns78 for each; a hash-approved non-ZIP Xray
+body reaches verified cache and real unzip/staging, returning78. The ZIP case
+also proves4 actual owned identity APPLIED/RESTORED pairs. All cases preserve
+authority and primary NSS bytes/mode/UID/GID, original directory identities and
+unit baseline, absent runtime/applied/commit/uncertainty, peer/held cache and no
+temporary candidates, with original outer terminal rollback and no recovery
+error. Safe receipts and the invalid ZIP cache remain for forensics.
+
+Only the declared test approval pins, transport and original cache fixture are
+restored before the normal14-case lifecycle; no runtime, service, NSS or
+transaction repair is performed. The same disk passes7 independent-kernel reboot
+checks, actual guest reboot/poweroff and QEMU0, full2GiB encrypted readback with
+matching digest, quiescent QEMU, detached loop and empty cleanup. Fresh host NSS/
+dpkg hashes equal the tooling baseline and22 document paths pass. This is controlled
+acquisition evidence, not upstream outage or arbitrary executable safety.
+The recent31/394 full Bash result remains separate; independent review is still
+usage-limited, so review is self-review and actual execution.
 
 ## Immediate next steps
 

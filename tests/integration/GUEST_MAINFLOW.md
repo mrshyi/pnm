@@ -36,6 +36,22 @@ before allocation. The mapped guest CLI driver intentionally does not expose
 this VM-only scenario. Physical media EIO and other failure positions remain
 separate from this controlled virtual-disk space refusal.
 
+The VM-only `deployment-acquisition-failures` scenario runs7 actual first-install
+refusals: partial HTTP body, untrusted fixture certificate and bad checksum for
+each Core, plus a checksum-approved non-ZIP Xray body. Reuse the existing bounded
+loopback HTTPS server and original curl/install/staging. Temporarily hold only
+the verified subject cache inode in protected evidence; never overwrite an
+unexpected cache destination when restoring it. Require curl18/60 with CLI69,
+checksum/staging78, exact transport counts, absent runtime/applied/markers,
+original authority/primary NSS/directories/units and peer cache, and terminal
+outer rollback. The ZIP case must retain verified bad-cache evidence and all
+four actual owned-account APPLIED/RESTORED pairs. Only declared test pins,
+transport and original cache fixtures are restored for the normal14 checks;
+no service/NSS/runtime/transaction repair is allowed. Then run7 same-disk reboot
+checks and the existing image/host cleanup verification. This is controlled
+first-install acquisition evidence, not upstream DNS/PKI outage or arbitrary
+executable safety. The native CLI driver does not expose this VM-only scenario.
+
 This explicit opt-in test clones a separately prepared trusted Debian 13 boot
 fixture. It never bootstraps packages, downloads assets, installs host packages,
 binds host directories or changes host accounts/network/firewall configuration.
