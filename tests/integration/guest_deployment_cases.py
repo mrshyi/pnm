@@ -33,9 +33,9 @@ def require_pending_deployment(call, unit_state, passed) -> None:
 
 def run_startup_failures(logs, call, absent, passed, *, failure='start', env=None) -> None:
     rename=failure=='rename'
-    candidate=failure if failure in ('create','write','space','inode','inode-pending') else None
+    candidate=failure if failure in ('create','write','space','space-pending','inode','inode-pending') else None
     late=rename or (candidate is not None and candidate!='inode-pending')
-    if candidate in ('space','inode','inode-pending'):
+    if candidate in ('space','space-pending','inode','inode-pending'):
         from guest_vm_boot import require_approved_vm
         require_approved_vm()
     elif late:
@@ -43,9 +43,9 @@ def run_startup_failures(logs, call, absent, passed, *, failure='start', env=Non
         require_publisher_guest()
     else:
         require_guest()
-    require(failure in ('start','listener','term','kill','commit','rename','create','write','space','inode','inode-pending'),
+    require(failure in ('start','listener','term','kill','commit','rename','create','write','space','space-pending','inode','inode-pending'),
             'unknown deployment startup failure')
-    committing=failure in ('commit','rename','create','write','space','inode','inode-pending')
+    committing=failure in ('commit','rename','create','write','space','space-pending','inode','inode-pending')
     require(not committing or env is not None,'deployment commit fault requires CLI environment')
     delayed=failure=='listener'
     signalled=failure in ('term','kill')
@@ -218,15 +218,16 @@ def run_startup_failures(logs, call, absent, passed, *, failure='start', env=Non
                         'incomplete deployment rollback after '+core+' startup failure')
                 absent()
         if committing:
-            event=('pending_creation_inode_refused' if candidate=='inode-pending'
+            event=('pending_write_space_refused' if candidate=='space-pending'
+                   else 'pending_creation_inode_refused' if candidate=='inode-pending'
                    else 'candidate_create_inode_refused' if candidate=='inode'
                    else 'candidate_'+candidate+'_refused' if candidate else 'rename_refused')
             cause=(fault.get(event) and fault.get('pending_retained') is False if candidate=='inode-pending'
                    else fault.get(event) and fault.get('pending_retained') if late else fault.get('pending_creation_refused'))
-            retired=(fault.get('space_recovered') if candidate=='space' else
+            retired=(fault.get('space_recovered') if candidate in ('space','space-pending') else
                      fault.get('inodes_recovered') if candidate in ('inode','inode-pending') else
                      fault.get('file_size_limit_restored') if candidate=='write' else fault.get('mount_removed'))
-            require(fault['actual_errno']==(28 if candidate in ('space','inode','inode-pending') else (27 if candidate=='write' else 30)) and cause and retired,
+            require(fault['actual_errno']==(28 if candidate in ('space','space-pending','inode','inode-pending') else (27 if candidate=='write' else 30)) and cause and retired,
                     'deployment commit has no actual retired publisher refusal')
             if late:
                 require(observation['uncertainty_retained'],'marker refusal lost its persisted uncertainty record')

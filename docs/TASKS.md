@@ -1,8 +1,8 @@
 # PNM Current Tasks
 
-**Last reconciled:** 2026-10-26 (VM uncertainty/candidate inode ENOSPC recovery; fresh32 guards/26 Python compilations/static checks and VM2 refusals+14 lifecycle+7 reboot pass; full32-suite/399-test baseline inherited from `5d15ab6`; broader storage/platform and external acceptance remain unverified)
+**Last reconciled:** 2026-10-26 (VM uncertainty/candidate block ENOSPC recovery; fresh33 guards/26 Python compilations/static checks and VM2 refusals+14 lifecycle+7 reboot pass; full32-suite/399-test baseline inherited from `5d15ab6`; broader storage/platform and external acceptance remain unverified)
 
-**Current increment baseline:** branch `dev`, parent HEAD `5d15ab6`, VERSION `0.16.0-rc.1`.
+**Current increment baseline:** branch `dev`, parent HEAD `5141e7a`, VERSION `0.16.0-rc.1`.
 
 **Environment recheck:** the earlier host EIO/EROFS/CreateInstance failure is no
 longer reproduced: Debian root is writable, real `true`/`df` execute successfully
@@ -2016,7 +2016,7 @@ scenario; dated records above retain its actual results and limitations.
 | T-12 | L1 TLS/SNI/pin/access checks; native real managed-account TLS faults; VM positive TLS loading | External handshake/network and every L2 TLS fault combination |
 | T-13 | L1 configured/applied failure paths; native selected applied/publication EROFS compensation | Every node/applied write-failure position through real VM deployment |
 | T-14 | Native actual outer deadline failure, full compensation and clean retry | All late health/deadline timing interleavings |
-| T-15 | L1 and bounded tmpfs uncertainty/candidate ENOSPC; native uncertainty-create EROFS; VM candidate-create/rename EROFS, candidate-write EFBIG, real ext4 candidate block ENOSPC plus uncertainty/candidate inode ENOSPC with full compensation/retry/reboot | Other whole-deployment storage/commit positions and physical media behavior |
+| T-15 | L1 and bounded tmpfs uncertainty/candidate ENOSPC; native uncertainty-create EROFS; VM candidate-create/rename EROFS, candidate-write EFBIG, real ext4 uncertainty/candidate block ENOSPC plus uncertainty/candidate inode ENOSPC with full compensation/retry/reboot | Other whole-deployment storage/commit positions and physical media behavior |
 | T-16 | L1 and actual VM post-durable-commit journal append EROFS preserve install0, valid marker and normal lifecycle/reboot | Other derived logging/cleanup failures and real-device media behavior |
 | T-17 | L1 marker corruption/uncertain publication; native post-rename CLI stop; VM retained marker+uncertainty after abrupt stop | All corruption/fsync/device-failure positions and physical media behavior |
 | T-18 | L1 foreign file/applied metadata drift retention without blind rollback | Every independent-VM external-edit race |
@@ -2487,6 +2487,34 @@ Physical C availability afterward is approximately8.59GiB; D is approximately
 reports E_ACCESSDENIED; the approved elevated route executes successfully, without
 a WSL restart or host repair. This does not close other storage positions or
 the deployed-source/platform/external-client gates.
+
+## T-15 real VM uncertainty write block refusal — 2026-10-26
+
+Continue from `5141e7a` with the existing approved VM-only anonymous block filler.
+Arming requires the original publisher module, exact empty root0600 pending FD
+and inode, unpublished protected transaction and existing private-namespace/
+root-ext4-2GiB limits. Keep the filler through the failing buffered stream close;
+otherwise close could retry its flush after early space release and hide the
+intended incomplete uncertainty write. Publisher atexit releases only the owned
+anonymous filler, verifies recovered space and requires empty pending bytes.
+No product Bash or original publisher/file API is replaced during VM execution.
+
+The new observer regression fails first for missing receipt, then passes while
+requiring cleanup after stream close. Fresh `/var/tmp/pnm-inode-check.mp5xks2t`
+passes26 Python compilations,33 guest guards, syntax/security-scan/ShellCheck
+(exit0). Independent read-only review finds no blocking timing, guard or receipt
+issue. Product/unit source remains unchanged; the32-suite/399-test result from
+`5d15ab6` is inherited evidence, not a new full-suite claim.
+
+Fresh `/var/tmp/pnm-vm-boot-volume.kbazwzch` passes the real pending-write and
+candidate-write block ENOSPC refusals, full original resources/NSS/directories/
+units/applied compensation and14 normal lifecycle checks without state repair.
+Both publisher/CLI73 results preserve their original cause and leave no marker;
+the respective pending records are empty and complete. All7 same-disk reboot
+checks pass, including stale-binding suppression and independent reconfirmation.
+Actual reboot/poweroff, QEMU0/quiescence, unchanged host databases, detached loop,
+empty cleanup errors and full encrypted2GiB readback with matching digest pass.
+This slice preserves the remaining storage/platform/deployed-identity/client gates.
 
 ## Immediate next steps
 

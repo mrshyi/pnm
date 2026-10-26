@@ -51,9 +51,11 @@ def forbidden(*args,**kwargs):
 fixture.subprocess.run=forbidden
 fixture.os.open=forbidden
 for entry in (lambda:fixture.run_commit([],None,candidate='space'),
+              lambda:fixture.run_commit([],None,candidate='space-pending'),
               lambda:fixture.run_commit([],None,candidate='inode'),
               lambda:fixture.run_commit([],None,candidate='inode-pending'),
               lambda:fixture.readonly_deployment_commit(None,None,candidate='space').__enter__(),
+              lambda:fixture.readonly_deployment_commit(None,None,candidate='space-pending').__enter__(),
               lambda:fixture.readonly_deployment_commit(None,None,candidate='inode').__enter__(),
               lambda:fixture.readonly_deployment_commit(None,None,candidate='inode-pending').__enter__(),
               lambda:SpaceFault(None,None)):
@@ -222,6 +224,57 @@ with tempfile.TemporaryDirectory(prefix='pnm-inode-observer.') as directory:
                 result=subprocess.run([sys.executable,'-B','-c',script,str(DRIVER.parent),phase],
                                       capture_output=True,timeout=15)
                 self.assertEqual(result.returncode,0,result.stderr.decode(errors='replace'))
+
+    @unittest.skipUnless(sys.platform=='linux' and os.geteuid()==0,'Linux pending space observer')
+    def test_pending_space_observer_releases_after_stream_close(self):
+        script='''import errno,json,os,sys,tempfile,types
+from pathlib import Path
+sys.path.insert(0,sys.argv[1])
+from guest_commit_fault import RENAME_TRACE_SOURCE
+state={'closed':False}
+class Fault:
+    def __init__(self,*args): pass
+    def fill(self): return {'private_namespace':True,'fill_errno':errno.ENOSPC}
+    def release(self): assert state['closed'], 'filler released before buffered close'
+signal=types.ModuleType('guest_commit_signal')
+signal.require_publisher_guest=lambda:None
+mount=types.ModuleType('guest_io_fault')
+mount.readonly_bind=lambda *args,**kwargs:None
+space=types.ModuleType('guest_commit_space')
+space.SpaceFault=Fault
+sys.modules.update({'guest_commit_signal':signal,'guest_io_fault':mount,'guest_commit_space':space})
+class Stream:
+    closed=False
+    def __init__(self,descriptor): self.descriptor=descriptor
+    def flush(self): raise OSError(errno.ENOSPC,'no blocks')
+    def close(self):
+        os.close(self.descriptor)
+        self.closed=True
+        state['closed']=True
+with tempfile.TemporaryDirectory(prefix='pnm-pending-space-observer.') as directory:
+    root=Path(directory)
+    (root/'config.json').write_text(json.dumps({'transaction':str(root),'identity':[1,2],
+        'parent_namespace':3,'phase':'space-pending'}))
+    sys.argv=['-','publish',str(root),'test-id','test-deploy','9999999999']
+    namespace={'__file__':str(root/'sitecustomize.py')}
+    program="pending=directory+'/commit-uncertain.env'\\ndescriptor=os.open(pending,os.O_CREAT|os.O_EXCL|os.O_WRONLY,0o600)\\nstream=Stream(descriptor)\\ntry:\\n stream.flush()\\nfinally:\\n stream.close()"
+    try:
+        exec(compile(RENAME_TRACE_SOURCE,'sitecustomize.py','exec'),namespace)
+        try:
+            exec(compile(program,'<stdin>','exec'),{'directory':str(root),'os':os,'Stream':Stream})
+            raise AssertionError('write unexpectedly succeeded')
+        except OSError as error:
+            assert error.errno==errno.ENOSPC
+    finally:
+        sys.settrace(None)
+        namespace['finish']()
+    observed=json.loads((root/'observed-rename.json').read_text())
+    assert observed['pending_write_space_refused'] and observed['pending_empty']
+    assert observed['space_recovered'] and observed['pending_retained']
+'''
+        result=subprocess.run([sys.executable,'-B','-c',script,str(DRIVER.parent)],
+                              capture_output=True,timeout=15)
+        self.assertEqual(result.returncode,0,result.stderr.decode(errors='replace'))
 
     @unittest.skipUnless(sys.platform=='linux','Linux candidate refusal guards')
     def test_candidate_variants_refuse_host_before_controls(self):

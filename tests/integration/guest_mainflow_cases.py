@@ -456,7 +456,7 @@ try:
         run_acquisition(logs,env,call,absent,passed,include_versions=scenario=='deployment-version-failures')
     if scenario in ('deployment-marker-failures','deployment-space-full','deployment-inode-full'):
         from guest_deployment_cases import run_startup_failures
-        failures=(('space',) if scenario=='deployment-space-full' else
+        failures=(('space-pending','space') if scenario=='deployment-space-full' else
                   ('inode-pending','inode') if scenario=='deployment-inode-full' else ('create','write','rename'))
         for failure in failures:
             stage='actual marker '+failure+' refusal and compensation'

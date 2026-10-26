@@ -94,7 +94,7 @@ def lifecycle() -> dict:
     inodes=scenario=='deployment-inode-full'
     acquisition=scenario in ('deployment-acquisition-failures','deployment-version-failures')
     acquisition_checks=9 if scenario=='deployment-version-failures' else 7
-    expected=26 if update else (14+acquisition_checks if acquisition else (17 if candidates else (16 if inodes else (15 if progress or rename or space else 14))))
+    expected=26 if update else (14+acquisition_checks if acquisition else (17 if candidates else (16 if inodes or space else (15 if progress or rename else 14))))
     need(result.returncode==0 and detail.get('passed') is True
          and detail.get('mainflow_completed') is True and len(detail.get('checks',[]))==expected,
          'independent VM mainflow/update checks did not pass')
@@ -114,7 +114,7 @@ def lifecycle() -> dict:
             'committed_progress_refusal_checks':1 if progress else 0,
             'marker_rename_refusal_checks':1 if rename else 0,
             'marker_candidate_refusal_checks':3 if candidates else 0,
-            'disk_space_refusal_checks':1 if space else 0,
+            'disk_space_refusal_checks':2 if space else 0,
             'disk_inode_refusal_checks':2 if inodes else 0,
             'acquisition_refusal_checks':acquisition_checks if acquisition else 0,
             'both_bindings_confirmed':True,'baseline_persisted':True}

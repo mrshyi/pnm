@@ -25,10 +25,15 @@ namespace number alone cannot authorize a mount in the caller's namespace.
 The independent VM lifecycle worker also accepts `deployment-space-full`.
 Its explicit publisher variant requires this boot's approved VM identity,
 root ext4 /dev/vda and a filesystem of at most2GiB before creating an anonymous
-root0600 filler on the transaction's filesystem. At the actual empty candidate
-FD, bounded fallocate operations exhaust available blocks; require original
+root0600 filler on the transaction's filesystem. At each actual empty pending
+and candidate FD in separate deployment attempts, bounded fallocate operations
+exhaust available blocks; require original
 publisher ENOSPC28/73. Closing only the owned anonymous filler must recover
 space before recording evidence and returning to the real CLI compensation.
+For the pending-write attempt, keep the filler through buffered stream close,
+then require the retained pending file to be empty. The candidate-write attempt
+still requires its complete pending record. The real publisher and file APIs
+are unchanged during both VM attempts.
 Require original CLI73, complete resources/NSS/directory/unit/applied rollback,
 retained pending/no marker and terminal ROLLED_BACK, then normal14 checks and7
 same-disk reboot checks without state repair. Host/container execution refuses
