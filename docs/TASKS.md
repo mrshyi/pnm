@@ -2,10 +2,10 @@
 
 **Updated:** 2026-10-26. **Phase 3 remains incomplete; Phase 4 and release work have not started.**
 
-**Validation baseline:** branch `dev`, parent commit `65c8109`, VERSION
+**Current code baseline:** branch `dev`, published commit `39312aa`, VERSION
 `0.16.0-rc.1`, including TLS/test repairs, cloud-development cleanup and
-Ubuntu22.04/24.04 CI/regressions. The checks below preceded publication of this
-increment; use Git for its final commit identity, not the old baseline reports.
+Ubuntu22.04/24.04 CI/regressions. Local preparation checks below used parent
+`65c8109` plus that increment; the remote CI checks used exactly `39312aa`.
 
 ## Current environment
 
@@ -24,10 +24,11 @@ increment; use Git for its final commit identity, not the old baseline reports.
 
 For development setup and gate commands, use [CONTRIBUTING](../CONTRIBUTING.md).
 For test IDs and closure rules, use [ACCEPTANCE_PLAN](ACCEPTANCE_PLAN.md).
-The latest user instruction authorizes committing this reviewed increment and
-pushing it to `origin/dev`. Package installation, provisioning, production access
-and deployment remain outside scope. This is not standing authorization for
-future commits or pushes.
+The latest user instruction authorizes continuing unfinished development,
+committing each validated local stage, recording a compact continuation summary
+and proceeding to the next stage. The earlier push of `39312aa` is complete;
+there is no standing authorization to push subsequent stages. Package installation,
+provisioning, production access and deployment remain outside scope.
 
 ## Current implementation and remaining acceptance
 
@@ -40,7 +41,7 @@ future commits or pushes.
 | G-05 dependency preflight | Declared prerequisite checks and historical Debian guest19-tool refusal records | Remaining acquisition/DNS/PKI/timeout/archive cases and other distributions |
 | G-06 HY2 TLS/account access | Ownership/mode/effective-read checks, historical managed-account and TLS fault records | Root/platform/NSS variations, changed TLS paths on supported amd64, external handshake/traffic |
 | T-04/T-20/T-26 | Historical configured-port conflict, real lock contention, stale-binding refusal and same-disk reboot slices | Other topology/scheduling combinations and external-client routing |
-| Platform/L3 | Debian13 amd64 is the first L2 baseline; earlier local client evidence has its own boundary | Debian12/Ubuntu22.04/24.04 amd64 acceptance and controlled external Xray/HY2 clients |
+| Platform/L3 | Debian13 amd64 is the first L2 baseline; Ubuntu22.04/24.04 amd64 L1 CI passed at39312aa | Root/service/reboot acceptance on the remaining supported platforms and controlled external Xray/HY2 clients |
 
 These are source observations and explicitly historical results, not fresh cloud
 L2 passes. The [dated T-01–T-27 reconciliation](history/PHASE3_EXECUTION_2026-10-22_26.md#matrix-reconciliation--2026-10-25)
@@ -115,7 +116,7 @@ no assets were downloaded or executed. No commit, push or deployment was perform
 
 The platform adapter already accepts Ubuntu22.04/24.04 amd64; no whitelist,
 architecture, Core asset, account or service-policy relaxation was needed.
-The shared TLS repairs above remain part of the uncommitted source.
+The shared TLS repairs above are included in published commit39312aa.
 
 - CI now selects `ubuntu-22.04` and `ubuntu-24.04` explicitly instead of a moving
   `ubuntu-latest`, keeps failures independent, records OS/tool versions and checks
@@ -131,8 +132,8 @@ The shared TLS repairs above remain part of the uncommitted source.
 
 This session has Ubuntu22.04 ARM64, Bash5.1.16, Python3.10.12, OpenSSL3.0.2 and
 systemd249.11. It has no approved Ubuntu24.04 or amd64/root guest. The CI matrix
-has been parsed and checked locally but has not been pushed, triggered or observed
-running. Do not infer Ubuntu24.04 or deployed Ubuntu amd64 acceptance from it.
+was initially checked only as configuration; the subsequent executed amd64 results
+are recorded below. Neither layer proves deployed Ubuntu lifecycle acceptance.
 Fresh local results (private logs under `/tmp/pnm-ubuntu-compat.oNt1gGQy/`):
 
 | Check | Actual result |
@@ -148,16 +149,41 @@ This is fresh Ubuntu22.04 ARM64/non-root L1 evidence, including static systemd
 parsing. Explicit root-only skips remain: real update CLI, root/runuser/nobody
 access, real TLS access, low-mode recovery and numeric ownership. No second
 standalone full check was counted. Ubuntu22.04/24.04 amd64 root/service lifecycle,
-reboot, external traffic and the newly configured GitHub runs remain unverified.
+reboot and external traffic remain unverified.
+
+## Stage 1: executed Ubuntu CI reconciliation
+
+On2026-10-26 the connected GitHub app supplied the completed job metadata and
+full job logs for [CI run40310959008](https://github.com/mrshyi/pnm/actions/runs/40310959008),
+attempt1, exact source39312aaf6de9e97cccfcaf09e257e923d6246cad, event `push`.
+Both jobs and each of `make check`, `make shellcheck`, `make release-check`
+concluded success. Each log contains64 suite summaries:32/395 passes for the
+first full check, then the same32/395 for the release target's repeated check,
+with0 failures. Repetition is not additional independent coverage.
+
+| Job | Observed native environment | Actual scope |
+|---|---|---|
+|121531726496, Ubuntu22.04 |22.04.5 LTS, x86_64, Bash5.1.16, Python3.10.12, OpenSSL3.0.2, systemd249.11 | Non-root L1 plus real certificate tools and isolated static unit verification; all three gates passed |
+|121531726942, Ubuntu24.04 |24.04.5 LTS, x86_64, Bash5.2.21, Python3.12.3, OpenSSL3.0.13, systemd255.4 | Same L1/static scope; all three gates passed |
+
+Both logs retain explicit skips for the real update CLI, root/runuser/nobody
+access, real TLS access, low-mode recovery and numeric ownership. These are
+now actual Ubuntu amd64 CI results, not os-release fixture inference, but do
+not close root/Core/systemd lifecycle, reboot, G-01 or L3. Only status evidence
+changed in this stage; no business tests were rerun for the documentation edit.
 
 ## Next priorities
 
-1. Replay changed TLS and permission paths as root in an approved disposable
+1. Stage2: audit the shared asset acquisition/publication boundary and add focused
+   L1 refusal coverage using existing private fixtures; commit the validated slice.
+   Known source concern: `mv -n` can skip a newly occupied destination with exit0;
+   check callers before changing its success/cleanup handling.
+2. Replay changed TLS and permission paths as root in an approved disposable
    Debian13 x86_64 fixture; prepare assets/identity/cleanup prerequisites first.
-2. Continue the remaining L2 commit/storage/interruption positions from the
+3. Continue the remaining L2 commit/storage/interruption positions from the
    reconciliation. Do not reuse old private paths or run fault injection on the
    development host.
-3. Obtain an authorized deployed target for G-01 and controlled external clients
+4. Obtain an authorized deployed target for G-01 and controlled external clients
    for T-27; record source identity and each protocol's handshake/traffic separately.
-4. Execute other supported amd64 platform acceptance, then reassess Phase3 closure.
+5. Execute other supported amd64 platform acceptance, then reassess Phase3 closure.
    Do not start Profiles, production changes or release work automatically.
