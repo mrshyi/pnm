@@ -66,7 +66,7 @@ pnm_asset_download_verified() {
 pnm_asset_stage_xray_zip() {
     local archive="${1:?xray archive required}"
     local staging_dir="${2:?staging directory required}"
-    local extract_dir member
+    local extract_dir member members
 
     [[ -f "$archive" && ! -L "$archive" ]] || return "$PNM_EXIT_CONFIG"
     pnm_command_exists unzip || return "$PNM_EXIT_UNAVAILABLE"
@@ -74,16 +74,18 @@ pnm_asset_stage_xray_zip() {
     extract_dir="$staging_dir/xray-extract"
     mkdir -m 0700 -- "$extract_dir" || return "$PNM_EXIT_CANTCREAT"
 
+    members="$(unzip -Z1 -- "$archive" 2>/dev/null)" || return "$PNM_EXIT_CONFIG"
+    [[ -n "$members" ]] || return "$PNM_EXIT_CONFIG"
     while IFS= read -r member; do
         case "$member" in
             '' | /* | ../* | */../* | */ | *$'\n'* | *$'\r'*)
                 return "$PNM_EXIT_CONFIG"
                 ;;
         esac
-    done < <(unzip -Z1 -- "$archive" 2>/dev/null) || return "$PNM_EXIT_CONFIG"
+    done <<<"$members" || return "$PNM_EXIT_CONFIG"
     unzip -qq -- "$archive" -d "$extract_dir" || return "$PNM_EXIT_CONFIG"
     [[ -f "$extract_dir/xray" && ! -L "$extract_dir/xray" ]] || return "$PNM_EXIT_CONFIG"
-    chmod 0755 -- "$extract_dir/xray"
+    chmod 0755 -- "$extract_dir/xray" || return "$PNM_EXIT_NOPERM"
     printf '%s\n' "$extract_dir/xray"
 }
 

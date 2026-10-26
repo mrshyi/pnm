@@ -75,6 +75,48 @@ test_xray_stage_rejects_nonzip_without_executable_publication() (
     assert_eq "$digest" "$(sha256sum "$archive" | awk '{print $1}')"
 )
 
+xray_staging_observation_failure_refuses_candidate() (
+    local behavior="$1" expected_rc="$2" temp_dir archive digest
+    temp_dir="$(mktemp -d)"
+    trap 'rm -rf -- "$temp_dir"' EXIT
+    archive="$temp_dir/asset.zip"
+    printf 'safe synthetic Xray asset\n' >"$temp_dir/xray" || return 1
+    (cd "$temp_dir" && zip -q -j asset.zip xray) || return 1
+    digest="$(sha256sum "$archive" | awk '{print $1}')"
+    unzip() {
+        if [[ "$1" == -Z1 ]]; then
+            case "$behavior" in
+                listing-failed-with-member) printf 'xray\n'; return 23 ;;
+                listing-failed-empty) return 23 ;;
+                listing-empty-success) return 0 ;;
+            esac
+        else
+            printf 'called\n' >"$temp_dir/extraction-called"
+        fi
+        command unzip "$@"
+    }
+    if [[ "$behavior" == chmod-failed ]]; then
+        chmod() {
+            if [[ "$1" == 0755 && "${!#}" == */xray-extract/xray ]]; then return 1; fi
+            command chmod "$@"
+        }
+    fi
+    run_capture pnm_asset_stage_xray_zip "$archive" "$temp_dir/staging"
+    assert_eq "$expected_rc" "$RUN_RC" || return 1
+    assert_eq '' "$RUN_OUTPUT" || return 1
+    assert_eq "$digest" "$(sha256sum "$archive" | awk '{print $1}')" || return 1
+    if [[ "$behavior" == chmod-failed ]]; then
+        [[ -f "$temp_dir/extraction-called" && ! -x "$temp_dir/staging/xray-extract/xray" ]]
+    else
+        [[ ! -e "$temp_dir/extraction-called" && ! -e "$temp_dir/staging/xray-extract/xray" ]]
+    fi
+)
+
+test_failed_xray_listing_with_output_refuses_before_extraction() { xray_staging_observation_failure_refuses_candidate listing-failed-with-member 78; }
+test_failed_empty_xray_listing_refuses_before_extraction() { xray_staging_observation_failure_refuses_candidate listing-failed-empty 78; }
+test_successful_empty_xray_listing_refuses_before_extraction() { xray_staging_observation_failure_refuses_candidate listing-empty-success 78; }
+test_xray_candidate_permission_failure_refuses_its_path() { xray_staging_observation_failure_refuses_candidate chmod-failed 77; }
+
 test_temp_directory_output_stays_in_the_calling_shell() {
     local stage='' count rc output
     count="${#PNM_CLEANUP_PATHS[@]}"
@@ -205,6 +247,10 @@ run_test 'Hysteria2 binary staging sets executable mode' test_hysteria_binary_st
 run_test 'Xray ZIP staging rejects traversal members' test_xray_zip_stage_rejects_traversal
 run_test 'Xray ZIP staging accepts a safe archive' test_xray_zip_stage_accepts_safe_archive
 run_test 'non-ZIP response refuses without executable publication or input changes' test_xray_stage_rejects_nonzip_without_executable_publication
+run_test 'failed ZIP listing with valid-looking output stops before extraction' test_failed_xray_listing_with_output_refuses_before_extraction
+run_test 'failed empty ZIP listing stops before extraction' test_failed_empty_xray_listing_refuses_before_extraction
+run_test 'successful empty ZIP listing cannot authorize extraction' test_successful_empty_xray_listing_refuses_before_extraction
+run_test 'failed Xray executable mode setup suppresses the candidate path' test_xray_candidate_permission_failure_refuses_its_path
 run_test 'temporary path output and cleanup registration stay in the caller' test_temp_directory_output_stays_in_the_calling_shell
 run_test 'restore candidate rejection cleans its real temporary directory on EXIT' test_restore_validation_failure_cleans_real_staging_on_exit
 run_test 'failed temporary cleanup registration propagates and removes the directory' test_failed_cleanup_registration_propagates_without_temp_leak

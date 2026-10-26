@@ -193,6 +193,13 @@ Candidate permission failure returns77. Host installation and Core update share
 this boundary before managed binary/service changes. These cache safeguards do
 not implement a separate transaction engine or coordinate arbitrary root writers.
 
+Xray staging requires a successful, nonempty ZIP member listing before validating
+names or starting extraction. A failed list query cannot be hidden by process
+substitution or a later successful extraction. Executable-mode setup must also
+succeed before returning a candidate path. Listing/format refusal returns78;
+candidate chmod failure returns77. Owned staging remains under the caller's
+existing temporary-directory cleanup, without executing the candidate here.
+
 Update/rollback explicitly enroll metadata for the current binary, previous binary and `previous.env`, and verify all published transaction resources before commit. Compensation preserves an intervening content or metadata edit and reports recovery required. Transaction-close errors propagate without a success message, even if the commit already completed; outer lock cleanup still runs.
 
 Restore parsing enumerates at most 64 visible members, rejects absolute/traversing names and payload-bearing directory entries, bounds the manifest to 64 KiB and declared resource totals to 512 MiB, and requires the complete 12-resource set before candidate validation. Before opening tar data, the parser lowers its own address-space budget to 128 MiB and CPU budget to 30 seconds, retaining stricter inherited soft/hard limits. This includes hidden PAX/GNU processing that occurs before a visible member is yielded. Memory/overflow/recursion exhaustion returns a parsing failure without candidate execution. CPU time is not a wall-clock deadline, and the budgets apply only to parsing. Candidate validation executes staged Core binaries as root; the operator must establish trusted PNM backup provenance using a separately retained trusted checksum. Root/mode/embedded approval data do not authenticate it. See D-009 in `docs/DECISIONS.md`.

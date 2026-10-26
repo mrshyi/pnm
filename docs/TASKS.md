@@ -199,12 +199,33 @@ both exit0. Root-only skips remain unchanged; no L2 or external result is added.
 Private logs:
 `/tmp/pnm-stage2-assets.OWQojhdj/`. Earlier39312aa CI results do not cover this patch.
 
+## Stage 3: ZIP observation and executable-mode refusal
+
+Validation parent6ec55cc. A private reproduction showed `unzip -Z1` returning23
+with a valid-looking name, followed by successful extraction and staging0. The
+process-substitution producer's status did not reach the existing while-loop guard.
+The helper now checks list-query success and nonempty output before the existing
+member-name checks and real extraction. It returns78 on list/format refusal,
+and77 when candidate chmod fails, with no successful candidate path on stdout.
+
+Four new wrappers first failed (11 existing passed/4 failed), then the staging
+suite passed15/15. They cover failed listing with and without output, empty
+success, and final chmod failure. Extractor invocation and actual candidate files
+are checked, source ZIP hashes remain unchanged, and the real safe/traversal ZIP
+cases remain. Safe ZIP construction/extraction and metadata use real tools;
+observer/permission errors are injected. No real Core, account or service runs.
+The12 sandbox install cases also pass. `make release-check` exits0:32 suites,
+404 passed,0 failed; standard ShellCheck and supplemental staging-test ShellCheck
+both exit0. Existing root-only skips remain; neither storage failure on a real
+device nor L2/Core runtime is newly validated. Private logs:
+`/tmp/pnm-stage3-zip.2QudjIGe/`.
+
 ## Next priorities
 
-1. Stage3: fix ZIP-listing error propagation in `pnm_asset_stage_xray_zip` using
-   the existing staging suite. A private probe reproduced list exit23 followed by
-   staging success0 because process-substitution status is ignored. Check empty
-   listings and candidate chmod errors too; do not execute any real Core.
+1. Stage4: complete first-install version-query refusal symmetry in the existing
+   approved-version suite: failed Xray query with matching-looking output,
+   unparseable HY2 output, and failed HY2 query despite a matching banner. This
+   remains L1 trusted-script evidence, not execution of official Core assets.
 2. Replay changed TLS and permission paths as root in an approved disposable
    Debian13 x86_64 fixture; prepare assets/identity/cleanup prerequisites first.
 3. Continue the remaining L2 commit/storage/interruption positions from the
