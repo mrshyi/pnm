@@ -51,7 +51,9 @@ def forbidden(*args,**kwargs):
 fixture.subprocess.run=forbidden
 fixture.os.open=forbidden
 for entry in (lambda:fixture.run_commit([],None,candidate='space'),
+              lambda:fixture.run_commit([],None,candidate='inode'),
               lambda:fixture.readonly_deployment_commit(None,None,candidate='space').__enter__(),
+              lambda:fixture.readonly_deployment_commit(None,None,candidate='inode').__enter__(),
               lambda:SpaceFault(None,None)):
     try:
         entry()
@@ -59,6 +61,23 @@ for entry in (lambda:fixture.run_commit([],None,candidate='space'),
         pass
     else:
         raise AssertionError('host accepted for disk-space fault')
+'''
+        result=subprocess.run([sys.executable,'-B','-c',script,str(DRIVER.parent)],
+                              capture_output=True,timeout=10)
+        self.assertEqual(result.returncode,0,result.stderr.decode(errors='replace'))
+
+    @unittest.skipUnless(sys.platform=='linux','Linux VM-only inode refusal')
+    def test_inode_space_fault_refuses_host_before_controls(self):
+        script='''import sys
+sys.path.insert(0,sys.argv[1])
+from guest_commit_space import InodeFault
+from guest_vm_boot import GuestRefusal
+try:
+    InodeFault(None,None)
+except GuestRefusal:
+    pass
+else:
+    raise AssertionError('host accepted for inode-space fault')
 '''
         result=subprocess.run([sys.executable,'-B','-c',script,str(DRIVER.parent)],
                               capture_output=True,timeout=10)
@@ -131,6 +150,68 @@ assert Path(temporary).is_file()
 '''
         result=subprocess.run([sys.executable,'-B','-c',script,str(DRIVER.parent)],
                               capture_output=True,timeout=10)
+        self.assertEqual(result.returncode,0,result.stderr.decode(errors='replace'))
+
+    @unittest.skipUnless(sys.platform=='linux','Linux inode exhaustion observer')
+    def test_inode_observer_records_enospc_from_real_mkstemp_frame(self):
+        script='''import errno,json,os,sys,tempfile,types
+from pathlib import Path
+sys.path.insert(0,sys.argv[1])
+from guest_commit_fault import RENAME_TRACE_SOURCE
+class Fault:
+    def __init__(self,*args): self.released=False
+    def fill(self): return {'private_namespace':True,'inode_exhausted':True}
+    def release(self): self.released=True
+signal=types.ModuleType('guest_commit_signal')
+signal.require_publisher_guest=lambda:None
+mount=types.ModuleType('guest_io_fault')
+mount.readonly_bind=lambda *args,**kwargs:None
+space=types.ModuleType('guest_commit_space')
+space.InodeFault=Fault
+boot=types.ModuleType('guest_vm_boot')
+boot.require_approved_vm=lambda:None
+sys.modules.update({'guest_commit_signal':signal,'guest_io_fault':mount,
+                    'guest_commit_space':space,'guest_vm_boot':boot})
+with tempfile.TemporaryDirectory(prefix='pnm-inode-observer.') as directory:
+    root=Path(directory)
+    (root/'config.json').write_text(json.dumps({'transaction':str(root),'identity':[1,2],
+        'parent_namespace':3,'phase':'inode'}))
+    (root/'commit-uncertain.env').write_text('pending')
+    sys.argv=['-','publish',str(root),'test-id','test-deploy','9999999999']
+    namespace={'__file__':str(root/'sitecustomize.py')}
+    original_open=os.open
+    original_statvfs=os.statvfs
+    def no_inodes(path,flags,mode=0o777):
+        name=os.fspath(path)
+        if name.startswith(str(root)+'/.commit-'):
+            raise OSError(errno.ENOSPC,'no inodes',name)
+        return original_open(path,flags,mode)
+    class Exhausted:
+        f_favail=0
+        f_bavail=1
+    try:
+        exec(compile(RENAME_TRACE_SOURCE,'sitecustomize.py','exec'),namespace)
+        os.open=no_inodes
+        os.statvfs=lambda path:Exhausted()
+        try:
+            # Match the publisher entry frame the VM observer watches.
+            exec(compile("tempfile.mkstemp(prefix='.commit-',dir=directory)",'<stdin>','exec'),
+                 {'tempfile':tempfile,'directory':str(root)})
+            raise AssertionError('candidate unexpectedly created')
+        except OSError as error:
+            assert error.errno==errno.ENOSPC
+    finally:
+        os.open=original_open
+        os.statvfs=original_statvfs
+        sys.settrace(None)
+        namespace['finish']()
+    assert (root/'observed-rename.json').exists()
+    observed=json.loads((root/'observed-rename.json').read_text())
+    assert observed['candidate_create_inode_refused'] and observed['inode_exhausted']
+    assert observed['inodes_recovered'] and observed['pending_retained']
+'''
+        result=subprocess.run([sys.executable,'-B','-c',script,str(DRIVER.parent)],
+                              capture_output=True,timeout=15)
         self.assertEqual(result.returncode,0,result.stderr.decode(errors='replace'))
 
     @unittest.skipUnless(sys.platform=='linux','Linux candidate refusal guards')
@@ -871,7 +952,8 @@ with tempfile.TemporaryDirectory(prefix='pnm-asset-guard.') as directory:
                 if not condition:
                     raise RuntimeError(label)
             namespace={'os':os,'json':json,'signal':signal,'subprocess':Commands,
-                       'logs':Path(directory),'env':dict(os.environ),'check':check}
+                       'logs':Path(directory),'env':dict(os.environ),'check':check,
+                       'scenario':'lifecycle'}
             exec(compile(ast.Module(body=[function],type_ignores=[]),str(DRIVER),'exec'),namespace)
             try:
                 with self.assertRaisesRegex(RuntimeError,'command timed out'):

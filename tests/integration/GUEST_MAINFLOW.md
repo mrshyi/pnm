@@ -32,9 +32,18 @@ space before recording evidence and returning to the real CLI compensation.
 Require original CLI73, complete resources/NSS/directory/unit/applied rollback,
 retained pending/no marker and terminal ROLLED_BACK, then normal14 checks and7
 same-disk reboot checks without state repair. Host/container execution refuses
-before allocation. The mapped guest CLI driver intentionally does not expose
-this VM-only scenario. Physical media EIO and other failure positions remain
+before allocation. The fault helper rejects mapped guests even when this
+VM-only scenario is selected by the CLI. Physical media EIO and other failure positions remain
 separate from this controlled virtual-disk space refusal.
+
+The VM-only `deployment-inode-full` scenario fills the approved root ext4's free
+inodes with empty files in a new protected evidence directory. It requires
+`f_favail == 0` while data blocks remain, observes the real commit-candidate
+creation failure as ENOSPC, then removes only its exact owned files before CLI
+compensation. The normal lifecycle and same-disk reboot must pass afterward.
+The filesystem is bounded to2GiB; the filler requires at most262144 free inodes
+at admission and has a120-second deadline. This is virtual ext4 inode exhaustion,
+not physical media failure.
 
 The VM-only `deployment-acquisition-failures` scenario runs7 actual first-install
 refusals: partial HTTP body, untrusted fixture certificate and bad checksum for

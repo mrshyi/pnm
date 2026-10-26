@@ -47,7 +47,7 @@ def call(label,args,accepted=(0,),*,process_slot=None):
             process_slot.append(process)
         timed_out=False
         try:
-            stdout,stderr=process.communicate(timeout=150)
+            stdout,stderr=process.communicate(timeout=300 if scenario=='deployment-inode-full' else 150)
         except subprocess.TimeoutExpired:
             timed_out=True
             for caught,limit in ((signal.SIGTERM,10),(signal.SIGKILL,5)):
@@ -368,6 +368,7 @@ try:
           'deployment-startup-failure','deployment-listener-failure','deployment-term',
           'deployment-sigkill','deployment-commit-readonly','deployment-late-sigkill',
           'deployment-progress-readonly','deployment-rename-readonly','deployment-marker-failures','deployment-space-full',
+          'deployment-inode-full',
           'deployment-acquisition-failures','deployment-version-failures',
           'account-creation-failure')+update_interruptions+restore_interruptions+publication_cases+account_deletions,'unknown guest scenario')
     if scenario=='account-reuse':
@@ -453,9 +454,11 @@ try:
         stage='actual first-install acquisition failures and compensation'
         from guest_acquisition_cases import run_acquisition
         run_acquisition(logs,env,call,absent,passed,include_versions=scenario=='deployment-version-failures')
-    if scenario in ('deployment-marker-failures','deployment-space-full'):
+    if scenario in ('deployment-marker-failures','deployment-space-full','deployment-inode-full'):
         from guest_deployment_cases import run_startup_failures
-        for failure in (('space',) if scenario=='deployment-space-full' else ('create','write','rename')):
+        failures=(('space',) if scenario=='deployment-space-full' else
+                  ('inode',) if scenario=='deployment-inode-full' else ('create','write','rename'))
+        for failure in failures:
             stage='actual marker '+failure+' refusal and compensation'
             run_startup_failures(logs,call,absent,passed,failure=failure,env=env)
     stage='installation apply'

@@ -25,7 +25,8 @@ parser.add_argument('--scenario',choices=('lifecycle','deployment-failure','core
     'account-reuse','account-creation-failure','core-interruption','core-interruption-hysteria2','restart-readiness',
     'dependency-refusal','deployment-startup-failure','deployment-listener-failure',
     'deployment-term','deployment-sigkill','deployment-commit-readonly','deployment-late-sigkill',
-    'deployment-progress-readonly','deployment-rename-readonly','deployment-marker-failures')+update_interruptions+restore_interruptions+publication_cases+account_deletions,default='lifecycle')
+    'deployment-progress-readonly','deployment-rename-readonly','deployment-marker-failures',
+    'deployment-space-full','deployment-inode-full')+update_interruptions+restore_interruptions+publication_cases+account_deletions,default='lifecycle')
 parser.add_argument('--previous-asset-cache',type=Path)
 parser.add_argument('--work-dir',type=Path,help='optional canonical private root-owned POSIX fixture directory')
 options=parser.parse_args()

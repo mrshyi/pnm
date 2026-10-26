@@ -1,8 +1,8 @@
 # PNM Current Tasks
 
-**Last reconciled:** 2026-10-26 (host first-install version-pair repair; fresh32 suites/399 tests and VM9 refusal+14 lifecycle+7 reboot pass; broader storage/platform and external acceptance remain unverified)
+**Last reconciled:** 2026-10-26 (real VM inode ENOSPC recovery; fresh32 suites/399 tests,32 guest guards,26 Python compilations and VM1 refusal+14 lifecycle+7 reboot pass; broader storage/platform and external acceptance remain unverified)
 
-**Current increment baseline:** branch `dev`, parent HEAD `39aaf78`, VERSION `0.16.0-rc.1`.
+**Current increment baseline:** branch `dev`, parent HEAD `1a1289e`, VERSION `0.16.0-rc.1`.
 
 **Environment recheck:** the earlier host EIO/EROFS/CreateInstance failure is no
 longer reproduced: Debian root is writable, real `true`/`df` execute successfully
@@ -2016,7 +2016,7 @@ scenario; dated records above retain its actual results and limitations.
 | T-12 | L1 TLS/SNI/pin/access checks; native real managed-account TLS faults; VM positive TLS loading | External handshake/network and every L2 TLS fault combination |
 | T-13 | L1 configured/applied failure paths; native selected applied/publication EROFS compensation | Every node/applied write-failure position through real VM deployment |
 | T-14 | Native actual outer deadline failure, full compensation and clean retry | All late health/deadline timing interleavings |
-| T-15 | L1 and bounded tmpfs uncertainty/candidate ENOSPC; native uncertainty-create EROFS; VM candidate-create/rename EROFS, candidate-write EFBIG and real ext4 candidate ENOSPC with full compensation/retry/reboot | Other whole-deployment storage/commit positions, full inode exhaustion on VM and physical media behavior |
+| T-15 | L1 and bounded tmpfs uncertainty/candidate ENOSPC; native uncertainty-create EROFS; VM candidate-create/rename EROFS, candidate-write EFBIG, real ext4 candidate block ENOSPC and inode exhaustion with full compensation/retry/reboot | Other whole-deployment storage/commit positions and physical media behavior |
 | T-16 | L1 and actual VM post-durable-commit journal append EROFS preserve install0, valid marker and normal lifecycle/reboot | Other derived logging/cleanup failures and real-device media behavior |
 | T-17 | L1 marker corruption/uncertain publication; native post-rename CLI stop; VM retained marker+uncertainty after abrupt stop | All corruption/fsync/device-failure positions and physical media behavior |
 | T-18 | L1 foreign file/applied metadata drift retention without blind rollback | Every independent-VM external-edit race |
@@ -2415,6 +2415,46 @@ all23 document paths pass. Independent review remains usage-limited;
 these are self-review and executed checks, not independent approval or production
 deployment. VERSION stays0.16.0-rc.1; nothing is pushed or released.
 
+## T-15 real VM inode exhaustion — 2026-10-26
+
+The approved independent Debian13 VM now covers actual commit-candidate creation
+with zero available ext4 inodes while data blocks remain. The fixture uses only
+new empty0600 files inside its private evidence directory on the bounded2GiB
+root `/dev/vda`. It removes its exact files and verifies recovered inodes/space
+before the parent CLI compensates; no product Bash or filesystem API is replaced
+during VM execution. Allocation has a120-second deadline and requires at most
+262144 free inodes at admission.
+
+The first VM attempt exposed an observer defect: the trace excluded the internal
+`tempfile._mkstemp_inner` frame where candidate ENOSPC originates. Its focused
+regression now follows the publisher's `<stdin>` entry. A second attempt exposed
+incomplete inode-variant event/errno/retirement validation, which is also fixed.
+`t97gd6w0` and `9ns5elu_` remain failed evidence; their encrypted archives and keys
+are retained. A CLI-timeout guard additionally needed its scenario context after
+the inode-specific timeout was added.
+
+Fresh `/var/tmp/pnm-vm-boot-volume.vwj_tucv` passes1 actual inode ENOSPC refusal
+and complete original-resource/NSS/directory/unit/applied compensation, followed
+by14 normal lifecycle and7 same-disk reboot checks, with no product-state repair.
+The real publisher and CLI return73, the pending uncertainty record is retained,
+and no commit marker is published. Both normal bindings and the reboot's stale
+binding refusal/reconfirmation/listener checks pass. QEMU exits0 and is quiescent,
+host databases are unchanged, the loop detaches, cleanup errors are empty, and
+the complete encrypted2GiB archive readback matches its original digest.
+
+The initial full-check operator used a0700 source parent and inherited umask077;
+its non-root diagnostics and fixed0644 transaction fixture therefore failed.
+Those are failed check evidence, not a passed baseline. Fresh readable Linux
+source copy `/var/tmp/pnm-inode-check.2iexfm3t` with standard umask022 and
+protected0600 logs passes26 integration Python compilations,32 guest guards,
+`make check` (32 suites/399 tests, exit0) and `make shellcheck` (exit0).
+Independent read-only review found no blocking issue; its minor CLI-entry wording
+observation is corrected in the guest guide. Physical C availability after the
+retained VM is approximately9GiB; recheck it before another heavy run.
+This virtual ext4 slice does not close remaining
+storage positions, physical-media behavior, other platforms, deployed identity or
+external-client traffic.
+
 ## Immediate next steps
 
 Selected abrupt-VM recovery is committed as `1f68c03`. The follow-on G-03 slice
@@ -2502,6 +2542,12 @@ capacity from sparse virtual ext4 free-space reporting. Current lightweight
 planned regressions are complete; remaining heavy storage/platform work needs
 adequate backing storage, while deployed-source identity and external-client
 gates still require authorized targets. None of these gates is marked passed.
+
+That capacity checkpoint is historical: the later inode-ENOSPC increment above
+measures approximately9GiB free on C and completes one fresh VM. Lightweight
+checks also pass on its final source copy. Continue remaining controlled local
+storage positions only after another physical-capacity check; deployed identity,
+other-platform and external-client gates still require their own evidence.
 
 ## Boundaries
 

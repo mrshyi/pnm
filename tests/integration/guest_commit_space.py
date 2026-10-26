@@ -62,3 +62,59 @@ class SpaceFault:
     def release(self) -> None:
         self.file.close()
         require(os.statvfs(self.transaction).f_bavail>0,'VM space was not recovered after filler close')
+
+
+class InodeFault:
+    """Exhaust only ext4 inodes on the approved disposable VM root disk."""
+    def __init__(self, transaction: Path, private: Path, parent_namespace=None):
+        require_approved_vm()
+        require(os.stat('/proc/self/ns/mnt').st_ino!=parent_namespace and parent_namespace is not None,
+                'inode fault requires its private namespace')
+        root=[row.split() for row in Path('/proc/self/mountinfo').read_text().splitlines()
+              if row.split()[4]=='/']
+        require(len(root)==1 and root[0][root[0].index('-')+1:root[0].index('-')+3]==['ext4','/dev/vda'],
+                'inode fault requires the disposable VM root disk')
+        info=private.lstat()
+        require(private.resolve()==private and stat.S_ISDIR(info.st_mode)
+                and info.st_uid==0 and stat.S_IMODE(info.st_mode)==0o700,
+                'inode evidence directory is unprotected')
+        space=os.statvfs(transaction)
+        require(private.stat().st_dev==transaction.stat().st_dev==Path('/').stat().st_dev
+                and space.f_frsize==4096 and 0<space.f_blocks*space.f_frsize<=2*1024**3
+                and space.f_favail>0 and space.f_bavail>0,
+                'inode fault filesystem bounds differ')
+        require(space.f_favail<=262144,'inode fault exceeds its allocation bound')
+        self.directory=private/'inode-filler'
+        self.directory.mkdir(mode=0o700)
+        self.files=[]
+        self.transaction=transaction
+
+    def fill(self) -> dict:
+        require_approved_vm()
+        deadline=time.monotonic()+120
+        try:
+            while time.monotonic()<deadline:
+                space=os.statvfs(self.transaction)
+                if space.f_favail==0:
+                    require(space.f_bavail>0,'inode exhaustion also exhausted data blocks')
+                    return {'private_namespace':True,'inode_exhausted':True}
+                path=self.directory/f'{len(self.files):08x}'
+                descriptor=os.open(path,os.O_CREAT|os.O_EXCL|os.O_WRONLY|os.O_NOFOLLOW|os.O_CLOEXEC,0o600)
+                info=os.fstat(descriptor)
+                os.close(descriptor)
+                require(stat.S_ISREG(info.st_mode) and info.st_uid==0 and info.st_nlink==1
+                        and stat.S_IMODE(info.st_mode)==0o600 and info.st_dev==self.transaction.stat().st_dev,
+                        'inode filler file identity differs')
+                self.files.append(path)
+            raise RuntimeError('inode exhaustion deadline expired')
+        except BaseException:
+            self.release()
+            raise
+
+    def release(self) -> None:
+        for path in reversed(self.files):
+            path.unlink()
+        self.files.clear()
+        self.directory.rmdir()
+        require(os.statvfs(self.transaction).f_favail>0 and os.statvfs(self.transaction).f_bavail>0,
+                'VM inodes were not recovered after filler removal')
