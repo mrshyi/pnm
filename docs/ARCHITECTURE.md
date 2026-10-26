@@ -1,6 +1,6 @@
 # PNM Architecture
 
-This document describes implemented behavior through the first-install approved-version check on 2026-10-26. It is not a production deployment attestation. Verify behavior against source and tests when changing it.
+This document describes implemented behavior, including the shared TLS compatibility repair on 2026-10-26. It is not a production deployment attestation. Current baseline and execution evidence are tracked in [TASKS.md](TASKS.md); verify behavior against source and tests when changing it.
 
 Host first-install staging checks both hash-verified Core programs' reported
 versions against the validated approved manifest before publishing either
@@ -22,7 +22,12 @@ diagnostics and preflight listener probes retain one immediate sample. Probe
 execution adds to the five-second sleep budget; this is not an external-client
 connectivity test or a configurable deployment deadline.
 
-**Port-health increment baseline:** branch `dev`, parent HEAD `dfd864d`, `VERSION` `0.16.0-rc.1` (checked 2026-10-24).
+Shared TLS name validation requires a DNS SAN and a successful OpenSSL command
+with an exact positive C-locale hostname result; exit0 alone cannot prove a match.
+Wildcard handling remains OpenSSL's responsibility. Certificate validity parsing
+uses default OpenSSL date output and C-locale date conversion for compatibility
+with Ubuntu22.04's OpenSSL3.0.2. Unknown tool output remains a refusal or diagnostic
+warning rather than readiness.
 
 Config apply shares the guarded Core file writer with archive restore. Runtime
 configuration metadata is required at publication, checked before ownership
@@ -170,7 +175,7 @@ Confirmed absence has a dedicated internal status distinct from Python's generic
 failure status. This assumes protected ancestors; it does not guarantee race-free
 resolution against concurrent privileged replacement.
 
-Loaded units and existing Core resources require established PNM ownership receipts before replacement. Valid existing credentials are reused. INT/TERM/EXIT attempt in-process compensation; SIGKILL/reboot detection blocks further changes but does not implement automatic cross-process replay. These behaviors have local filesystem/mock evidence only; real systemd/reboot recovery remains G-02 acceptance work in `docs/TASKS.md`.
+Loaded units and existing Core resources require established PNM ownership receipts before replacement. Valid existing credentials are reused. INT/TERM/EXIT attempt in-process compensation; SIGKILL/reboot detection blocks further changes but does not implement automatic cross-process replay. Current source/mock results and the limits of historical systemd/VM/reboot slices are tracked separately in `docs/TASKS.md`.
 
 ## Core lifecycle, health, and recovery
 
@@ -186,7 +191,7 @@ Restore parsing enumerates at most 64 visible members, rejects absolute/traversi
 
 Restore retains the same reentrant exclusive lock across archive staging, service/applied baselines and its transaction. Unknown load/active/enable states, including a missing unit with a live process, are refused before mutation. Both old processes must be observed stopped before runtime files are published. Protected `restore.env` stores the service baseline for manual recovery; it is never sourced or automatically replayed.
 
-Restore enrolls file metadata and directory preparation in the existing transaction, including the directory created by service enable. Private destination directories must already be root-owned with root group; foreign ownership is refused rather than silently changed. File ownership normalization records only its fixed expected numeric UID/GID/mode, so intervening metadata edits cannot become a new expected state. Applied records and their directories participate in the same compensation. Recovery observes candidate processes stopped, restores original file bytes/metadata and service load/active/enable policy, and refreshes InvocationID only for originally confirmed, active evidence whose original record/configuration still match. Active-but-disabled baselines remain disabled; inactive/unconfirmed records retain their original bytes. Directory compensation follows service recovery. Resource verification precedes commit, and transaction-close errors suppress the success message. Failures report whether compensation succeeded and retain evidence when it did not. These paths have local filesystem/mocked-service evidence; real systemd, reboot and client acceptance remain open in `docs/TASKS.md`.
+Restore enrolls file metadata and directory preparation in the existing transaction, including the directory created by service enable. Private destination directories must already be root-owned with root group; foreign ownership is refused rather than silently changed. File ownership normalization records only its fixed expected numeric UID/GID/mode, so intervening metadata edits cannot become a new expected state. Applied records and their directories participate in the same compensation. Recovery observes candidate processes stopped, restores original file bytes/metadata and service load/active/enable policy, and refreshes InvocationID only for originally confirmed, active evidence whose original record/configuration still match. Active-but-disabled baselines remain disabled; inactive/unconfirmed records retain their original bytes. Directory compensation follows service recovery. Resource verification precedes commit, and transaction-close errors suppress the success message. Failures report whether compensation succeeded and retain evidence when it did not. Historical restore/systemd/reboot slices and remaining storage/client acceptance are tracked in `docs/TASKS.md`; source behavior does not close that matrix.
 
 Restart/update/rollback carry forward only previously confirmed applied evidence. Under the transaction lock they capture the record, configuration digest and metadata; after health checks they publish the new invocation against that fixed digest through the existing transaction. Missing, changed or damaged evidence is retained without promotion. Compensation restores resource bytes and the service baseline before refreshing a previously confirmed active invocation; an inactive baseline keeps its original record. These applied writes explicitly enroll metadata before post-publication receipts, so external content/metadata drift retains recovery evidence rather than being silently overwritten. This does not implement automatic reboot reconciliation or race-free coordination with arbitrary privileged writers.
 
@@ -201,4 +206,4 @@ Backup holds the existing exclusive reentrant PNM lock before destination prepar
 
 ## Verification boundary
 
-Automated tests live in `tests/unit/` and are invoked through `tests/run.sh` / the Makefile. Mock-based tests validate command logic and rollback behavior only within their fixtures. Debian 13/systemd behavior, reboot persistence, public firewall reachability, and external client protocol handshakes require an isolated Linux VM or explicitly authorized production read-only validation. Current outstanding verification is tracked in `docs/TASKS.md`.
+Automated tests live in `tests/unit/` and are invoked through `tests/run.sh` / the Makefile. CI targets Ubuntu22.04/24.04 amd64 explicitly. The L1 service suite also runs the actual systemd unit verifier with temporary executable paths and an isolated unit search path; this checks parser compatibility without starting either Core. Mock-based tests validate command logic and rollback behavior only within their fixtures. Real service behavior, reboot persistence, public firewall reachability, and external client protocol handshakes require their own authorized environments. Current outstanding verification and actual CI execution status are tracked in `docs/TASKS.md`.

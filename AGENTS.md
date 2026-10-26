@@ -10,10 +10,19 @@ Proxy Node Manager (PNM) is a lightweight Linux VPS management tool. Its CLI is 
 - [docs/ROADMAP.md](docs/ROADMAP.md) contains proposed work and milestones. Read it when planning work. Roadmap items are not authorization to implement them.
 - [docs/TASKS.md](docs/TASKS.md) records the latest known phase, open issues, blockers, and next actions. Read it when taking over project work; refresh evidence before changing status.
 - [docs/DECISIONS.md](docs/DECISIONS.md) records durable technical decisions and their evidence. Read it when a change touches an existing decision.
-- [docs/PHASE2_GAP_ANALYSIS.md](docs/PHASE2_GAP_ANALYSIS.md) is a dated historical audit. Use its issue IDs and rationale as context, then verify current source and tests.
+- [CONTRIBUTING.md](CONTRIBUTING.md) describes Linux development prerequisites, repository gates, and cloud test boundaries.
+- [docs/history/README.md](docs/history/README.md) indexes historical audits, plans, and execution records. Read these only when the current task needs their issue IDs or rationale; old instructions and results are not current authorization or validation.
 - [docs/RELEASING.md](docs/RELEASING.md) applies to release work only.
 
 Read only documents relevant to the task. Keep enduring rules here; keep implementation detail in Architecture, future intent in Roadmap, current status in Tasks, and rationale in Decisions. When evidence changes, update the relevant status document rather than copying the same details into every file.
+
+## Linux and cloud development
+
+- Develop and run L1 tests on Linux. Ubuntu ARM64 is a development environment; the managed deployment platform remains the amd64 Debian/Ubuntu matrix in README. Do not bypass platform guards or select amd64 assets for native ARM64 execution.
+- Recheck the execution namespace's UID, architecture, PID 1, tools, privileges and virtualization before integration tests. A cloud host name or an installed `systemctl` does not establish systemd, root, mount or KVM access.
+- Run L1 as the normal workspace user with private temporary fixtures. Keep non-root WARN/UNKNOWN/refusal behavior and explicit root-only skips; never weaken production permission checks to make tests pass.
+- Real service/account, mount, disk-exhaustion and reboot tests require an explicitly authorized disposable environment and the existing harness guards. Do not run them on the development host merely because a test target exists.
+- Record HEAD and worktree changes, tool versions, exact exits and skips. Treat `/tmp` tools/logs as temporary; do not copy old private images, keys or test secrets into the workspace. Keep current host facts in `docs/TASKS.md`, not in permanent rules.
 
 ## Architecture and compatibility
 
@@ -42,6 +51,7 @@ For code changes, inspect relevant source and tests, implement the minimal fix, 
 ## Git and release boundaries
 
 - Do not automatically commit, push, tag, or publish releases.
+- Do not automatically install dependencies or deploy PNM to satisfy a development check; report missing prerequisites or use already approved isolated tools.
 - Do not change `VERSION` merely because code or documentation changed.
 - Do not automatically switch branches, reset the worktree, or overwrite uncommitted files.
 - Production deployment and destructive operations require explicit authorization.

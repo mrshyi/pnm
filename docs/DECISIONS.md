@@ -77,7 +77,7 @@ omit only HY2, consistent with this decision's independent-Core gates.
 
 ## D-009 — Restore requires independently verified trusted backup provenance
 
-**Decision:** Preserve the existing trusted-PNM-backup input contract described in `IMPLEMENTATION_ASSESSMENT.md`: the operator verifies origin and a separately retained trusted archive checksum before restore. Candidate validation runs the archive's Core executables as root. Root ownership, mode 0600, an embedded manifest or self-declared approved versions do not authenticate executable provenance. CLI commands and backup formats remain unchanged; signature/key-management infrastructure is outside this increment.
+**Decision:** Preserve the existing trusted-PNM-backup input contract described in the [historical implementation assessment](history/IMPLEMENTATION_ASSESSMENT.md): the operator verifies origin and a separately retained trusted archive checksum before restore. Candidate validation runs the archive's Core executables as root. Root ownership, mode 0600, an embedded manifest or self-declared approved versions do not authenticate executable provenance. CLI commands and backup formats remain unchanged; signature/key-management infrastructure is outside this increment.
 
 **Reason:** Tar member checks and parser budgets constrain parsing; they do not isolate or establish trust in programs executed after extraction. Automatically treating an archive's own approval/hash data as an independent trust anchor would give a false guarantee.
 

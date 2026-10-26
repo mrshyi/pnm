@@ -46,7 +46,28 @@ test_unit_install_is_atomic() {
     assert_eq 644 "$mode"
 }
 
+test_rendered_units_validate_with_real_systemd() (
+    local temp_dir target unit
+    temp_dir="$(mktemp -d)"
+    trap 'rm -rf -- "$temp_dir"' EXIT
+    printf '#!/bin/sh\nexit 99\n' >"$temp_dir/core" || return 1
+    chmod 0700 "$temp_dir/core" || return 1
+    # Isolate the verifier from unrelated host units; no service is started.
+    for target in basic.target sysinit.target shutdown.target network-online.target; do
+        printf '[Unit]\nDescription=PNM offline fixture\nDefaultDependencies=no\n' >"$temp_dir/$target" || return 1
+    done
+    pnm_render_xray_unit | sed "s#/usr/local/bin/xray#$temp_dir/core#" >"$temp_dir/xray.service" || return 1
+    pnm_render_hysteria_unit | sed "s#/usr/local/bin/hysteria#$temp_dir/core#" >"$temp_dir/hysteria-server.service" || return 1
+    for unit in xray.service hysteria-server.service; do
+        SYSTEMD_UNIT_PATH="$temp_dir" pnm_systemd_validate_unit_file "$temp_dir/$unit" || return 1
+        chmod 0600 "$temp_dir/core" || return 1
+        if SYSTEMD_UNIT_PATH="$temp_dir" pnm_systemd_validate_unit_file "$temp_dir/$unit"; then return 1; fi
+        chmod 0700 "$temp_dir/core" || return 1
+    done
+)
+
 run_test 'Xray unit has isolated service policy' test_xray_unit_policy
 run_test 'Hysteria2 unit has isolated service policy' test_hysteria_unit_policy
 run_test 'systemd unit installation is atomic and mode 644' test_unit_install_is_atomic
+run_test 'generated units pass the real systemd verifier and reject non-executable Core fixtures' test_rendered_units_validate_with_real_systemd
 finish_tests

@@ -1,13 +1,13 @@
 # PNM Roadmap
 
-This is a planning document, not an implementation claim or authorization. The source baseline is `dev` HEAD `7a8dfe134f0c07e7ba16d740eb0e3c54db53b9ec`, VERSION `0.16.0-rc.1`, checked 2026-10-21. Historical gap IDs and rationale are in [PHASE2_GAP_ANALYSIS.md](PHASE2_GAP_ANALYSIS.md); re-check the current code before starting an item.
+This is a planning document, not an implementation claim or authorization. Current source baseline, execution environment and acceptance blockers belong in [TASKS.md](TASKS.md). Historical gap IDs and rationale are in [the archived Phase 2 analysis](history/PHASE2_GAP_ANALYSIS.md); re-check the current code before starting an item.
 
 ## Phase status overview
 
 | Phase | Goal | Status |
 |---|---|---|
 | Phase 1 | Targeted HY2 configuration/link consistency and TLS/SNI fixes | Source changes exist in current history; production/client verification is environment-specific and must not be inferred from unit tests |
-| Phase 2 | Gap classification and minimal implementation plan | Completed as a read-only report in `PHASE2_GAP_ANALYSIS.md`; that report records its own historical HEAD and findings |
+| Phase 2 | Gap classification and minimal implementation plan | Completed as a read-only report in the historical archive; it records its own HEAD and findings |
 | Phase 3 | Repair and accept existing defects G-01–G-06 | In progress / acceptance incomplete; see `TASKS.md` |
 | Phase 4 | Desired-state deployment Profiles (`dual`, `reality`, `hy2`) | Planned; not implemented in this baseline |
 | Phase 5 | Profile-aware health reporting, lightweight resource diagnostics, optional external checks | Planned; dependency on Phase 4 state semantics |

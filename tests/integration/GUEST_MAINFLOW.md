@@ -123,7 +123,7 @@ replaced. EFBIG is a process-scoped file-size refusal, not physical ENOSPC/EIO.
 
 The separate `guest_vm_boot.py` worker is a boot-only probe for the privately
 prepared independent Debian VM described in the
-[VM plan](../../docs/superpowers/plans/2026-10-25-independent-debian-vm.md).
+[VM plan](../../docs/history/plans/2026-10-25-independent-debian-vm.md).
 It does not install PNM or extend the mapped-container acceptance route. Its
 read-only guard requires the expected protected worker hash/kernel/root UUID,
 QEMU firmware nonce, independent boot ID, systemd PID1, QEMU DMI identity and
@@ -171,7 +171,7 @@ loopback transport fixture, so this does not prove upstream acquisition or
 external client reachability.
 
 Prerequisites are the signed, private rootfs and successful native boot fixture
-described in [the preparation plan](../../docs/superpowers/plans/2026-10-23-container-mainflow.md):
+described in [the preparation plan](../../docs/history/plans/2026-10-23-container-mainflow.md):
 root-owned mode-0700 parent, canonical `rootfs`, successful `boot-result.json`,
 and the dedicated enabled `pnm-boot-probe.service` that executes
 `/usr/bin/python3 /opt/pnm-boot-worker.py`. The rootfs must be a trusted clean

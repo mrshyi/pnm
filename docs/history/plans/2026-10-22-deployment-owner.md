@@ -1,7 +1,7 @@
 # Deployment transaction owner
 
 Continue the approved production main flow using proposal A in
-`docs/DEPLOYMENT_TRANSACTION_DESIGN.md`. Preserve standalone Core/sandbox wrappers,
+`docs/history/DEPLOYMENT_TRANSACTION_DESIGN.md`. Preserve standalone Core/sandbox wrappers,
 CLI, credentials and all unrelated working-tree changes. No production operation.
 
 - [x] Reproduce resource retention after an outer gate failure with temporary

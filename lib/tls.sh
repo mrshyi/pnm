@@ -66,12 +66,14 @@ pnm_tls_certificate_dns_names() {
 pnm_tls_certificate_matches_dns_name() {
     local certificate="${1:?certificate path required}"
     local server_name="${2:?TLS server name required}"
-    local dns_names
+    local dns_names match_result
 
     pnm_validate_hy2_tls_server_name "$server_name" || return "$PNM_EXIT_CONFIG"
     dns_names="$(pnm_tls_certificate_dns_names "$certificate")" || return "$PNM_EXIT_CONFIG"
     [[ -n "$dns_names" ]] || return "$PNM_EXIT_CONFIG"
-    openssl x509 -in "$certificate" -noout -checkhost "$server_name" >/dev/null 2>&1
+    # OpenSSL 3.0 can return zero for a hostname mismatch.
+    match_result="$(LC_ALL=C openssl x509 -in "$certificate" -noout -checkhost "$server_name" 2>/dev/null)" || return "$PNM_EXIT_CONFIG"
+    [[ "$match_result" == "Hostname $server_name does match certificate" ]] || return "$PNM_EXIT_CONFIG"
 }
 
 # Legacy nodes may omit HY2_TLS_SERVER_NAME. Infer only an unambiguous name
@@ -129,15 +131,15 @@ pnm_tls_certificate_check() {
         printf 'WARN|TLS certificate cannot be read or validity cannot be determined\n'
         return 0
     fi
-    if ! dates="$(openssl x509 -in "$certificate" -noout -startdate -enddate -dateopt iso_8601 2>/dev/null)"; then
+    if ! dates="$(LC_ALL=C openssl x509 -in "$certificate" -noout -startdate -enddate 2>/dev/null)"; then
         printf 'WARN|TLS certificate is unreadable or invalid\n'
         return 0
     fi
     not_before="$(sed -n 's/^notBefore=//p' <<<"$dates")"
     not_after="$(sed -n 's/^notAfter=//p' <<<"$dates")"
     if [[ -z "$not_before" || -z "$not_after" ]] ||
-        ! not_before_epoch="$(date -u -d "$not_before" +%s 2>/dev/null)" ||
-        ! not_after_epoch="$(date -u -d "$not_after" +%s 2>/dev/null)" ||
+        ! not_before_epoch="$(LC_ALL=C date -u -d "$not_before" +%s 2>/dev/null)" ||
+        ! not_after_epoch="$(LC_ALL=C date -u -d "$not_after" +%s 2>/dev/null)" ||
         ! now="$(date -u +%s 2>/dev/null)"; then
         printf 'WARN|TLS certificate validity dates cannot be determined\n'
         return 0

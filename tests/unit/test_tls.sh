@@ -73,6 +73,39 @@ test_certificate_check_reports_valid_expired_unreadable_and_skipped_modes() (
     assert_contains "$status" 'SKIP|'
 )
 
+test_dns_match_checks_positive_result_and_preserves_san_policy() (
+    local temp_dir name
+    temp_dir="$(mktemp -d)"
+    trap 'rm -rf -- "$temp_dir"' EXIT
+    openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes -days 1 \
+        -subj '/CN=wrong.example' -addext 'subjectAltName=DNS:*.fixture.example' \
+        -keyout "$temp_dir/key" -out "$temp_dir/cert" >/dev/null 2>&1 || return 1
+    for name in one.fixture.example ONE.fixture.example; do
+        pnm_tls_certificate_matches_dns_name "$temp_dir/cert" "$name" || return 1
+    done
+    for name in wrong.example fixture.example two.one.fixture.example; do
+        run_capture pnm_tls_certificate_matches_dns_name "$temp_dir/cert" "$name"
+        assert_eq "$PNM_EXIT_CONFIG" "$RUN_RC" || return 1
+        assert_eq '' "$RUN_OUTPUT$RUN_ERROR" || return 1
+    done
+    openssl() {
+        if [[ "$*" == *-checkhost* ]]; then
+            printf '%s\n' "$fixture_result"
+            return "$fixture_rc"
+        fi
+        command openssl "$@"
+    }
+    local fixture_result fixture_rc=0
+    for fixture_result in '' 'unexpected output' 'Hostname one.fixture.example does NOT match certificate'; do
+        run_capture pnm_tls_certificate_matches_dns_name "$temp_dir/cert" one.fixture.example
+        assert_eq "$PNM_EXIT_CONFIG" "$RUN_RC" || return 1
+        assert_eq '' "$RUN_OUTPUT$RUN_ERROR" || return 1
+    done
+    fixture_result='Hostname one.fixture.example does match certificate' fixture_rc=1
+    run_capture pnm_tls_certificate_matches_dns_name "$temp_dir/cert" one.fixture.example
+    assert_eq "$PNM_EXIT_CONFIG" "$RUN_RC"
+)
+
 test_client_fingerprint_hashes_certificate_der_not_spki() (
     local temp_dir expected first second spki_first spki_second
     temp_dir="$(mktemp -d)"
@@ -112,6 +145,7 @@ test_client_fingerprint_rejects_invalid_inputs_and_tool_output() (
     assert_eq '' "$RUN_OUTPUT"
 )
 
+run_test 'DNS matching rejects mismatches and unknown tool results while preserving wildcard SAN rules' test_dns_match_checks_positive_result_and_preserves_san_policy
 run_test 'client fingerprint hashes full certificate DER and changes on same-key renewal' test_client_fingerprint_hashes_certificate_der_not_spki
 run_test 'client fingerprint rejects invalid input and tool failure or malformed output' test_client_fingerprint_rejects_invalid_inputs_and_tool_output
 run_test 'self-signed certificate pair is valid and produces Base64 pin' test_selfsigned_pair_is_valid_and_pinned

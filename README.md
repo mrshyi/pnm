@@ -11,6 +11,14 @@ PNM does not forward traffic. It installs pinned binaries, renders and validates
 
 Supported platforms: Debian 12/13 and Ubuntu 22.04/24.04, amd64, with systemd.
 
+Ubuntu 22.04 LTS and 24.04 LTS use the same pinned Core assets, service-account
+policy and independent systemd units. TLS checks handle OpenSSL 3.0 hostname
+results and default certificate-date output. CI targets both Ubuntu versions
+explicitly and records their tool versions; the default tests include real
+certificate checks and isolated static systemd unit validation. CI configuration
+does not establish completed installation, reboot or external-client acceptance;
+see [current evidence](docs/TASKS.md). ARM64 remains a development environment.
+
 ## Commands
 
 - `pnm status [--json]`: read-only Xray and Hysteria2 status
@@ -108,6 +116,9 @@ sudo pnm node links
 The default listeners are Xray TCP/443 and Hysteria2 UDP/8443. PNM does not change SSH or firewall rules, so ensure those listener ports are reachable through your host and provider firewall. Client links contain credentials; transfer and store them as secrets. If the saved public address is unavailable, supply one with `sudo pnm node links --address ADDRESS`.
 
 ## Tests
+
+See [Contributing](CONTRIBUTING.md) for Linux/cloud development prerequisites,
+non-root skips and the separate amd64 integration acceptance requirements.
 
 ```bash
 make check

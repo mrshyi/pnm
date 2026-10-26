@@ -9,15 +9,30 @@ permissions:
 
 jobs:
   checks:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
     steps:
       - name: Check out source
         uses: actions/checkout@v4
 
-      - name: Install ShellCheck
+      - name: Install test dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install --yes ripgrep shellcheck
+          sudo apt-get install --yes make ripgrep shellcheck python3 jq openssl curl zip unzip tar util-linux iproute2 systemd
+
+      - name: Record platform and tool versions
+        run: |
+          cat /etc/os-release
+          uname -m
+          source adapters/platform-linux.sh
+          PNM_OS_RELEASE_FILE=/etc/os-release pnm_platform_supported
+          bash --version | head -n 1
+          python3 --version
+          openssl version
+          systemd-analyze --version | head -n 1
 
       - name: Run test and security checks
         run: make check

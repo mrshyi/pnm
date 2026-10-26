@@ -66,6 +66,10 @@ test_show_hides_secrets_and_exposes_node() {
     pnm_systemd_active_state() { printf 'active\n'; }
     run_capture pnm_node_show
     rm -rf -- "$temp_dir"
+    if ((EUID != 0)); then
+        assert_eq 77 "$RUN_RC" && assert_eq '' "$RUN_OUTPUT"
+        return $?
+    fi
     assert_eq 0 "$RUN_RC" || return 1
     assert_contains "$RUN_OUTPUT" 'PNM node' || return 1
     assert_contains "$RUN_OUTPUT" 'xray: 443' || return 1
@@ -404,11 +408,11 @@ test_hy2_runtime_config_reports_permission_errors() {
     pnm_hysteria_config_parse_candidate() {
         local candidate="${1:?candidate config required}"
         local target_name="${2:?parsed field map required}"
-        local -n fields="$target_name"
+        local -n parsed_fields_ref="$target_name"
         if [[ "$candidate" == "$PNM_HY2_CONFIG" ]]; then
             return "$PNM_EXIT_NOPERM"
         fi
-        fields=(
+        parsed_fields_ref=(
             [listen]=":${HY2_TEST_NODE[HY2_PORT]}"
             [tls.cert]="${HY2_TEST_SECRET[HY2_TLS_CERT_PATH]}"
             [tls.key]="${HY2_TEST_SECRET[HY2_TLS_KEY_PATH]}"
@@ -455,6 +459,10 @@ test_node_show_reports_invalid_reality_sni() {
     sed -i 's/^XRAY_SERVER_NAME=.*/XRAY_SERVER_NAME=proxy-frankfurt/' "$temp_dir/node.conf"
     run_capture env PNM_CONFIG_DIR="$temp_dir" "$PROJECT_ROOT/bin/pnm" node show
     rm -rf -- "$temp_dir"
+    if ((EUID != 0)); then
+        assert_eq 77 "$RUN_RC" && assert_eq '' "$RUN_OUTPUT"
+        return $?
+    fi
     assert_eq 78 "$RUN_RC" || return 1
     assert_contains "$RUN_OUTPUT" 'xray: 443 -> proxy-frankfurt' || return 1
     assert_contains "$RUN_OUTPUT" 'do not use the VPS hostname'
@@ -470,6 +478,11 @@ test_node_show_reports_runtime_drift_without_secrets() {
     pnm_systemd_active_state() { printf 'active\n'; }
     run_capture pnm_node_show
     rc=$RUN_RC
+    if ((EUID != 0)); then
+        rm -rf -- "$temp_dir"
+        assert_eq 77 "$rc" && assert_eq '' "$RUN_OUTPUT"
+        return $?
+    fi
     assert_eq 78 "$rc" || return 1
     assert_contains "$RUN_OUTPUT" 'xray: 443 -> example.com (example.com:443)' || return 1
     assert_contains "$RUN_OUTPUT" 'service=active config=drift applied=unknown link=drift' || return 1

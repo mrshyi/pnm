@@ -2,7 +2,48 @@
 
 Keep changes within the Xray and Hysteria2 lifecycle scope. Do not add remote access-plane management or unrelated host-maintenance commands without an explicit project decision.
 
-Before opening a pull request, run from the project root:
+Start with `AGENTS.md` and the current phase/blockers in [docs/TASKS.md](docs/TASKS.md).
+Use [Architecture](docs/ARCHITECTURE.md) for implemented behavior and
+[Acceptance plan](docs/ACCEPTANCE_PLAN.md) for test IDs and closure criteria.
+[Historical records](docs/history/README.md) are read on demand; they do not
+authorize commits, provisioning, fault injection or production changes.
+
+## Linux workspace
+
+Development checks run on Linux, including an Ubuntu ARM64 cloud workspace.
+Deployment support remains Debian 12/13 and Ubuntu 22.04/24.04 **amd64** with
+systemd. ARM64 L1 results do not accept an amd64 deployment or add ARM64 support.
+Native Windows/Git Bash test shims are no longer maintained.
+
+Before selecting checks, inspect the current execution environment:
+
+```bash
+git status --short --branch
+git log -1 --oneline
+uname -sm
+id
+ps -p 1 -o comm=
+openssl version
+```
+
+The ordinary L1 suite needs Bash, make, ripgrep, Python 3, jq, OpenSSL, curl,
+zip/unzip, tar, flock, coreutils and the systemd command-line tools used by
+fixtures (including `systemd-analyze`). ShellCheck is a separate required gate.
+An installed `systemctl` does not imply a running systemd manager. Check available
+tools without installing anything:
+
+```bash
+command -v bash make rg python3 jq openssl curl zip unzip tar flock \
+  sha256sum stat date ss systemctl systemd-analyze runuser shellcheck
+```
+
+Report missing tools. If an approved tool was unpacked outside the checkout,
+prepend its actual `bin` directory to `PATH` for that check and record its version.
+Do not hardcode a previous session's `/tmp` path or change the host automatically.
+
+## Repository gates
+
+Run from the project root as the normal workspace user:
 
 ```bash
 make check
@@ -10,4 +51,49 @@ make shellcheck
 make release-check
 ```
 
-Do not commit node configuration, credentials, private keys, generated backups, or test logs. Add tests for behavior changes and include the observed command output when a gate cannot run.
+`make check` runs syntax, security scanning and the unit/mock suites.
+CI runs the same gates on explicit `ubuntu-22.04` and `ubuntu-24.04` amd64 runners,
+using [GitHub's runner labels](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)
+and recording OS, Bash, Python, OpenSSL and systemd versions. The service suite invokes
+the real `systemd-analyze verify` against generated units with temporary Core
+paths and isolated target fixtures; it starts no service. Platform tests accept
+only approved release/architecture pairs and reject derivatives and other versions.
+These are L1 checks, not root/service/reboot acceptance. Check actual CI run results
+before claiming either runner passed.
+`make release-check` adds release scanning and repeats `make check`; it does not
+publish anything, and its repeated tests are not additional independent coverage.
+Keep each gate's exit code, suite totals and explicit skips. A non-root run may
+pass while root-only bodies/suites are skipped; do not report those as executed.
+Use a private temporary directory and `umask 077` for retained logs. Tests must
+work under restrictive umasks rather than assuming newly created files are0644.
+
+Safe additional offline checks are:
+
+```bash
+python3 -B tests/integration/test_guest_mainflow_guard.py
+python3 -B tests/integration/test_real_core_refusal_guard.py
+```
+
+These test harness refusal behavior; they do not boot a guest or validate actual
+Core traffic. Record their root-only skips too.
+
+## Integration and acceptance boundaries
+
+| Layer | Environment | Boundary |
+|---|---|---|
+| L1 | Linux workspace, including ARM64/non-root | Real temporary files/crypto with mocked service, account and network observations; skips remain visible |
+| L2 | Approved disposable Debian 13 x86_64/systemd environment | Real accounts, pinned Core programs, units, listeners, fault recovery and same-disk reboot |
+| Other supported platforms | Separate amd64 Debian 12/Ubuntu 22.04/24.04 execution | Their own acceptance; os-release fixtures are L1 only |
+| L3 | Authorized targets and controlled external clients | Separate Xray REALITY and HY2 handshakes and traffic |
+
+The `test-systemd`, `test-real-cores`, `test-guest-mainflow` and
+`test-commit-storage` targets are opt-in. Do not run them on a shared cloud
+development host. Prepare and authorize the appropriate disposable environment,
+check existing identity/cleanup guards and use approved fixed assets first.
+See [the guest guide](tests/integration/GUEST_MAINFLOW.md). Missing root, namespaces,
+systemd, KVM or assets is a blocked prerequisite, not a passing integration result.
+
+Do not commit node configuration, credentials, private keys, generated backups,
+bytecode caches or test logs. Add focused regression coverage for behavior changes.
+Report sanitized errors when a gate cannot run. Update current results in
+`docs/TASKS.md`; retain only useful historical evidence in `docs/history/`.

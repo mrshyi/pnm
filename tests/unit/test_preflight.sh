@@ -72,27 +72,33 @@ test_repeat_install_refuses_a_committed_node() {
     assert_eq 0 "$DEPLOY_STARTED"
 }
 
-test_recovery_requires_a_secure_uncommitted_post_health_journal() {
+test_recovery_requires_a_secure_uncommitted_post_health_journal() (
     local temp_dir journal timestamp
     temp_dir="$(mktemp -d)"
+    trap 'rm -rf -- "$temp_dir"' EXIT
     PNM_STATE_DIR="$temp_dir/state"
     mkdir -p "$PNM_STATE_DIR/deployments/deploy-incomplete"
     journal="$PNM_STATE_DIR/deployments/deploy-incomplete/journal.tsv"
     timestamp='2026-10-19T00:00:00Z'
     printf '%s\tBEGIN\tdeployment orchestration\n%s\tPHASE_DONE\tcore-resources\n%s\tPHASE_DONE\txray-lifecycle\n%s\tPHASE_DONE\thysteria-lifecycle\n%s\tSTOPPED\tafter=post-health rc=78\n%s\tABANDONED\tdeployment closed without commit\n' \
         "$timestamp" "$timestamp" "$timestamp" "$timestamp" "$timestamp" "$timestamp" >"$journal"
-    # Git for Windows cannot model Unix ownership modes; emulate the protected
-    # metadata contract while exercising the journal parser and state checks.
-    stat() { [[ "$*" == *journal.tsv* ]] && printf '600|%s\n' "$EUID" || printf '700|%s\n' "$EUID"; }
+    chmod 0700 "$PNM_STATE_DIR" "$PNM_STATE_DIR/deployments" "$PNM_STATE_DIR/deployments/deploy-incomplete" || return 1
+    chmod 0600 "$journal" || return 1
     PNM_PREFLIGHT_NODE_CONFIG=([PNM_CONFIGURED]=no)
-    pnm_recovery_has_failed_deployment_record || { rm -rf -- "$temp_dir"; return 1; }
+    pnm_recovery_has_failed_deployment_record || return 1
+
+    chmod 0644 "$journal" || return 1
+    if pnm_recovery_has_failed_deployment_record; then return 1; fi
+    chmod 0600 "$journal" || return 1
+    chmod 0755 "$PNM_STATE_DIR/deployments/deploy-incomplete" || return 1
+    if pnm_recovery_has_failed_deployment_record; then return 1; fi
+    chmod 0700 "$PNM_STATE_DIR/deployments/deploy-incomplete" || return 1
 
     printf '%s\tCOMMIT\t\n' "$timestamp" >>"$journal"
-    if pnm_recovery_has_failed_deployment_record; then rm -rf -- "$temp_dir"; return 1; fi
+    if pnm_recovery_has_failed_deployment_record; then return 1; fi
     PNM_PREFLIGHT_NODE_CONFIG[PNM_CONFIGURED]=yes
-    if pnm_recovery_has_failed_deployment_record; then rm -rf -- "$temp_dir"; return 1; fi
-    rm -rf -- "$temp_dir"
-}
+    if pnm_recovery_has_failed_deployment_record; then return 1; fi
+)
 
 test_listener_attribution_uses_pid_not_process_name() {
     ss() { printf 'LISTEN 0 128 0.0.0.0:8443 0.0.0.0:* users:(("hysteria",pid=321,fd=4))\n'; }

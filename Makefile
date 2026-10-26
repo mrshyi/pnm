@@ -17,7 +17,7 @@ test-systemd:
 # Explicit opt-in; requires separately acquired exact assets from the test manifest.
 test-real-cores:
 	python3 -B tests/integration/test_real_core_refusal_guard.py
-	PNM_RUN_REAL_CORE_TESTS=1 python3 tests/integration/test_real_cores.py
+	PNM_RUN_REAL_CORE_TESTS=1 python3 -B tests/integration/test_real_cores.py
 
 # Explicit opt-in; clones a separately prepared and verified private boot fixture.
 test-guest-mainflow:

@@ -22,17 +22,9 @@ make_test_certificate() {
     local san="${2:?SAN required}"
     local common_name="${san#DNS:}" key_path="$directory/server.key" cert_path="$directory/server.crt"
     common_name="${common_name%%,*}"
-    if command -v cygpath >/dev/null 2>&1; then
-        key_path="$(cygpath -w "$key_path")"
-        cert_path="$(cygpath -w "$cert_path")"
-        MSYS_NO_PATHCONV=1 openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes \
-            -days 2 -subj "/CN=$common_name" -addext "subjectAltName=$san" \
-            -keyout "$key_path" -out "$cert_path" >/dev/null 2>&1
-    else
-        openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes \
-            -days 2 -subj "/CN=$common_name" -addext "subjectAltName=$san" \
-            -keyout "$key_path" -out "$cert_path" >/dev/null 2>&1
-    fi
+    openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes \
+        -days 2 -subj "/CN=$common_name" -addext "subjectAltName=$san" \
+        -keyout "$key_path" -out "$cert_path" >/dev/null 2>&1
 }
 
 test_hy2_tls_sni_is_independent_and_matches_certificate_san() {

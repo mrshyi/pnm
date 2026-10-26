@@ -88,8 +88,12 @@ EOF
             exit 0
         fi
         if [[ "$*" == *'-checkhost'* ]]; then
-            [[ "$profile" != hy2-sni-mismatch ]]
-            exit $?
+            if [[ "$profile" == hy2-sni-mismatch ]]; then
+                printf 'Hostname %s does NOT match certificate\n' "${!#}"
+            else
+                printf 'Hostname %s does match certificate\n' "${!#}"
+            fi
+            exit 0
         fi
         [[ "${PNM_FAKE_PROFILE:-pass}" == expired-cert ]] && {
             printf 'notBefore=2000-01-01T00:00:00Z\nnotAfter=2001-01-01T00:00:00Z\n'

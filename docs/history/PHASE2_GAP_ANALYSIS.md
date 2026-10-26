@@ -1,3 +1,5 @@
+> Historical baseline; later repairs may supersede findings below. Use [current tasks](../TASKS.md) and verify source before acting. This record is not execution or commit authorization.
+
 # PNM Phase 2 — Gap Analysis & Minimal Implementation Plan
 
 审计日期：2026-10-20\

@@ -1,8 +1,10 @@
+> Historical baseline; later repairs may supersede findings below. Use [current tasks](../TASKS.md) and verify source before acting. This record is not execution or commit authorization.
+
 # PNM 部署事务与恢复设计
 
 日期：2026-10-22。基线：`7a8dfe134f0c07e7ba16d740eb0e3c54db53b9ec` / `0.16.0-rc.1`。
 
-**状态：A 方案已用于用户要求继续的 G-02 工作，当前工作树已有实现及本地验证；Linux/systemd 验收未完成。** 本文保留原设计目标，以下第 0 节记录实际范围和差异。[实现评估 A-01/A-02/A-05](IMPLEMENTATION_ASSESSMENT.md) 是实施前证据；当前状态见 [TASKS.md](TASKS.md)，决策见 [D-008](DECISIONS.md)。本文不授权生产执行或发布。
+**状态：A 方案已用于用户要求继续的 G-02 工作，当前工作树已有实现及本地验证；Linux/systemd 验收未完成。** 本文保留原设计目标，以下第 0 节记录实际范围和差异。[实现评估 A-01/A-02/A-05](IMPLEMENTATION_ASSESSMENT.md) 是实施前证据；当前状态见 [TASKS.md](../TASKS.md)，决策见 [D-008](../DECISIONS.md)。本文不授权生产执行或发布。
 
 ## 0. 2026-10-23 工作树实现范围
 
@@ -166,10 +168,10 @@ stateDiagram-v2
 
 共享读锁应失败快返或复用既有错误码，不能让普通 status 无期限等待；保留既有 JSON schema 字段语义，新增字段须显式兼容评审。普通运行态重启产生新身份后不能用旧 applied 记录“看上去一致”。
 
-关键源文件清单：[apply-gate.sh](../lib/apply-gate.sh)、[deploy.sh](../lib/deploy.sh)、[transaction.sh](../lib/transaction.sh)、[lock.sh](../lib/lock.sh)、[sandbox-install.sh](../lib/sandbox-install.sh)、[lifecycle.sh](../lib/lifecycle.sh)、[accounts.sh](../lib/accounts.sh)、[core-ops.sh](../lib/core-ops.sh)、[render.sh](../lib/render.sh)、[preflight.sh](../lib/preflight.sh)、[check.sh](../lib/check.sh)。
+关键源文件清单：[apply-gate.sh](../../lib/apply-gate.sh)、[deploy.sh](../../lib/deploy.sh)、[transaction.sh](../../lib/transaction.sh)、[lock.sh](../../lib/lock.sh)、[sandbox-install.sh](../../lib/sandbox-install.sh)、[lifecycle.sh](../../lib/lifecycle.sh)、[accounts.sh](../../lib/accounts.sh)、[core-ops.sh](../../lib/core-ops.sh)、[render.sh](../../lib/render.sh)、[preflight.sh](../../lib/preflight.sh)、[check.sh](../../lib/check.sh)。
 
 ## 9. 决策逻辑与退出条件
 
 已采用 A 方案及 S1～S4 的主流程实现，S5 和真实 Linux 验收仍开放。schema/marker 兼容范围、已提交后的警告语义、旧记录只读和外部重启不自动提升证据的实际策略见第 0 节；不能将原设计目标全部视为完成。
 
-完成条件见 [ACCEPTANCE_PLAN.md](ACCEPTANCE_PLAN.md)：先通过 mock 和安全基础测试，再做隔离 Linux/systemd 故障注入及 reboot 验收，外部双协议连接单独记录。任何层次未执行，保留未验证状态。
+完成条件见 [ACCEPTANCE_PLAN.md](../ACCEPTANCE_PLAN.md)：先通过 mock 和安全基础测试，再做隔离 Linux/systemd 故障注入及 reboot 验收，外部双协议连接单独记录。任何层次未执行，保留未验证状态。

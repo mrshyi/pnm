@@ -1,19 +1,23 @@
 # PNM Phase 3 验收设计
 
-日期：2026-10-22。对应源码基线：`7a8dfe134f0c07e7ba16d740eb0e3c54db53b9ec`。
+初稿：2026-10-22；云端开发边界更新：2026-10-26。当前源码基线和已执行结果见 [TASKS.md](TASKS.md)，原始设计基线保留在历史评估中。
 
-**状态：验收计划；L1 和选定 Debian 13 L2 场景已有执行记录，完整 L2 矩阵及 L3 尚未通过。** 对应 [实施前评估](IMPLEMENTATION_ASSESSMENT.md) 和 [部署事务设计](DEPLOYMENT_TRANSACTION_DESIGN.md)。2026-10-25 已执行独立内核启动、真实生命周期／不同版本更新、同盘重启及一个提交窗口的突然 VM 中断；最新逐项范围见 [TASKS](TASKS.md#matrix-reconciliation--2026-10-25)。历史执行记录不代表整份矩阵已通过。
+**状态：验收计划；L1 和选定 Debian 13 L2 场景有执行记录，完整 L2 矩阵及 L3 尚未通过。** 对应 [历史评估](history/IMPLEMENTATION_ASSESSMENT.md) 和 [原部署事务设计](history/DEPLOYMENT_TRANSACTION_DESIGN.md)。旧环境的真实生命周期、更新、重启及故障切片范围见 [历史矩阵](history/PHASE3_EXECUTION_2026-10-22_26.md#matrix-reconciliation--2026-10-25)，不能视为当前云端重跑或整份矩阵通过。
 
 ## 1. 分层证据与环境
 
 | 层级 | 环境 / 方法 | 可以证明 | 不可替代 |
 |---|---|---|---|
-| L0 | 当前 Windows 工作区、源码与测试检查、文档检查 | 分支存在、静态缺口、设计可追踪 | Bash 执行、真实权限及服务行为 |
-| L1 | Linux Bash + 既有 mock/临时目录测试 | 返回码、步骤、状态记录、文件变更和注入分支 | systemd、真实 Core、reboot、公网握手 |
+| L0 | 当前工作区的源码、Git 和文档静态检查 | 分支与差异、静态缺口、设计可追踪 | 动态测试、真实权限及服务行为 |
+| L1 | Linux 开发环境，含 Ubuntu ARM64／非 root；既有 mock/私有临时目录测试 | 返回码、步骤、状态记录、实际文件/权限和注入分支；root 专项明确跳过 | 目标 amd64 平台、真实 systemd/Core、reboot、公网握手 |
 | L2 | 可丢弃的 Debian 13 amd64/systemd VM | root/账户/权限、真实 unit、监听、恢复、reboot | 其他发行版矩阵及公网客户端连通 |
 | L3 | 受控外部 Xray/HY2 客户端 | 相应网络条件下真实协议握手和传输 | 服务故障补偿和其他网络条件 |
 
 README 声明支持 Debian 12/13、Ubuntu 22.04/24.04 amd64。Debian 13 是首轮集成基线；其他发行版未执行就保留未验证，不能仅靠 os-release fixture 宣称整个平台验收完成。
+
+云端开发准备和只运行 L1 的边界见 [CONTRIBUTING.md](../CONTRIBUTING.md)。旧 WSL
+宿主、磁盘容量、私有夹具路径和已完成的准备计划不作为当前环境前提；每次重新检查
+执行命名空间的权限、systemd、挂载与虚拟化能力，不自动在开发主机运行故障注入。
 
 前置工具根据 Makefile、tests 和实际调用链确认：Bash、make、ShellCheck、Python 3、zip/unzip、tar、flock、OpenSSL、curl、sha256sum、ss、systemctl/systemd-analyze、账户工具、runuser 及标准 coreutils。测试资产必须是可公开的固定 fixture 或批准的 Core 版本，不使用生产 Secret。
 
@@ -27,9 +31,9 @@ make shellcheck
 make release-check
 ```
 
-`make check` 包含 syntax/security-scan/test；`make release-check` 再次调用 check，不能把两次执行统计为更多独立用例。当前 CI 在 ubuntu-latest 配置了这三个命令，但本轮没有读取任何 CI 运行结果。
+`make check` 包含 syntax/security-scan/test；`make release-check` 再次调用 check，不能把两次执行统计为更多独立用例。CI 已显式配置 Ubuntu22.04／24.04 amd64 的三个门禁，并记录工具版本；配置存在不代表任务已运行或通过，实际结果见 TASKS。
 
-无需为纯文档增加业务测试；实施 S1～S5 时扩展现有测试文件，用可验证的前后状态断言覆盖缺口，不只检查函数调用次数。
+无需为纯文档增加业务测试；修改实现时优先扩展现有测试，用可验证的前后状态断言覆盖缺口，不只检查函数调用次数。
 
 ## 3. 故障注入矩阵
 
@@ -67,16 +71,17 @@ make release-check
 
 ## 4. 既有测试复用与缺口
 
-| 测试文件 | 已有断言方向 | 需要扩展 |
+| 测试文件 | 用例定位 | 需独立核对的验收边界 |
 |---|---|---|
-| [test_deploy.sh](../tests/unit/test_deploy.sh) | 顺序、失败停止、post-health、服务恢复及 journal 错误 | T-09～T-17 使用实际临时文件和状态，覆盖真实 mark-configured 与外层 gate |
-| [test_transaction.sh](../tests/unit/test_transaction.sh) | 摘要守卫、写入意图、inspect、错误传播、部署关联 | 元数据/目录/schema/marker/中断恢复和幂等性 |
-| [test_sandbox_install.sh](../tests/unit/test_sandbox_install.sh)、[test_host_apply.sh](../tests/unit/test_host_apply.sh) | 资源安装、校验补偿、Secret 生成复用、host gate | host 祖先 symlink、root 别名、真实 UID/GID、目录与账户依赖 |
-| [test_core_ops.sh](../tests/unit/test_core_ops.sh) | apply 故障、applied 摘要、更新错误报告、restore 候选验证 | 更新 binary/metadata 配对、恢复全矩阵及 T-25 |
-| [test_preflight.sh](../tests/unit/test_preflight.sh) | 缺工具、恢复监听者归属、重复安装拒绝、receipt/drop-in | 自定义端口、完整依赖、未决新 schema 事务 |
-| [test_node.sh](../tests/unit/test_node.sh)、[test_check.sh](../tests/unit/test_check.sh) | 脱敏、双 Core 独立门控、证据缺失、TLS/账户访问 | 重启/reboot 证据、并发读取、真实 runuser 和父目录访问 |
+| [test_deploy.sh](../tests/unit/test_deploy.sh)、[test_deployment_transaction.sh](../tests/unit/test_deployment_transaction.sh) | 顺序、整体提交/补偿、marker 与不确定状态 | T-09～T-20 剩余 L2 故障位置和调度，不能只凭 mock 关闭 |
+| [test_transaction.sh](../tests/unit/test_transaction.sh) | 摘要、元数据、目录、schema、inspect 与中断记录 | 记录拒绝和 L1 恢复不等于跨进程自动恢复或物理断电持久性 |
+| [test_sandbox_install.sh](../tests/unit/test_sandbox_install.sh)、[test_host_apply.sh](../tests/unit/test_host_apply.sh) | 安装、凭据复用、路径与权限门禁 | 实际 root 身份、服务账户与 Core 加载；非 root 不伪装为已验收 |
+| [test_core_ops.sh](../tests/unit/test_core_ops.sh)、[test_core_evidence.sh](../tests/unit/test_core_evidence.sh) | per-Core 生命周期、binary/metadata 配对、applied 恢复 | T-22/T-25 剩余 L2 存储、中断与恢复失败组合 |
+| [test_preflight.sh](../tests/unit/test_preflight.sh) | 依赖、配置端口、监听归属、重复安装和恢复收据 | 其他平台/获取失败与未执行的实际工具条件 |
+| [test_node.sh](../tests/unit/test_node.sh)、[test_check.sh](../tests/unit/test_check.sh) | 脱敏、双 Core 门控、证据缺失、非 root 拒绝 | T-20/T-26 剩余调度与真实 root/runuser 边界；L3 另验 |
+| [test_tls.sh](../tests/unit/test_tls.sh)、[test_hy2_sni.sh](../tests/unit/test_hy2_sni.sh)、[test_tls_access.sh](../tests/unit/test_tls_access.sh) | 真实证书、SAN、有效期与可读性 | root 专项、目标 amd64 工具版本及真实客户端 TLS 加载 |
 
-既有测试与新增 G-02 测试的本地执行结果见第 6 节；通过既有套件不等于本表“需要扩展”及 L2/L3 已完成。隔离 VM 应使用真实二进制和 systemd，避免测试 fakebin 提前占用 PATH 造成假通过。
+当前通过和跳过项见 TASKS，历史结果见第 6 节链接。上表是用例与验收边界索引，不将旧缺口重新标为未实现。隔离 VM 应使用真实二进制和 systemd，避免测试 fakebin 提前占用 PATH 造成假通过。
 
 ## 5. 验收记录格式与关闭规则
 
@@ -94,68 +99,10 @@ make release-check
 
 生产节点不用于故障注入。源码身份核验、生产执行、版本更新、提交、打 tag 和发布均需各自已有授权；本计划本身不构成这些操作的授权。
 
-## 6. 2026-10-23 本地执行及恢复检查边界
+## 6. 历史记录与受控检查
 
-最新运行配置元数据保护增量：默认 `make check` **退出 0，31 套件/351 项通过**；
-真实 nobody 证据回归 **38/38**、restore 聚焦回归 **9/9**、systemd 替身 **8/8**
-及全部静态检查通过。新增权限漂移拒绝、原 ownership 错误保留和安全凭据补偿
-测试，固定服务身份映射到测试运行者，文件元数据与事务真实执行；不据此关闭
-真实服务账户/Core/TLS/reboot/L3 验收。最终环境和日志见 [TASKS.md](TASKS.md)。
-
-Core/legacy 状态目录补偿增量：默认 `make check` **退出 0，31 套件/348
-项通过**；真实 nobody 证据回归 **35/35**，systemd 替身测试 **8/8**，语法、
-安全扫描和 ShellCheck 均通过。新增目录权限恢复、空目录移除、外部内容/元数据
-保留及部分准备失败的真实文件事务测试；服务边界仍为 mock。一次服务器重启
-中断的旧日志不计通过证据，最终副本、日志及真实 Core/reboot/L3 边界见
-[TASKS.md](TASKS.md)。
-
-共享生命周期补偿增量：默认 `make check` **退出 0，31 套件/341 项通过**，
-root/nobody 生命周期回归各 **8/8**，真实 systemd 替身套件 **8/8**；语法、安全
-扫描及 ShellCheck 均通过。无效果控制和最终观察失败的注入采用 mock，替身
-服务测试验证正常恢复的真实管理器兼容性。日志及剩余真实 Core/reboot/L3
-前提见 [TASKS.md](TASKS.md)。
-
-配置应用证据恢复增量：默认 `make check` **退出 0，31 套件/336 项通过**，
-真实 nobody 生命周期证据 **28/28**，显式 systemd 替身测试 **8/8**，全部静态
-检查通过。新增完整 apply 故障调度的旧文件及 confirmed InvocationID 恢复，
-并验证外部 applied 内容/权限漂移保留、未知旧证据不认证。环境与分副本日志见
-[TASKS.md](TASKS.md)。实际 Core 校验、TLS 加载、账户创建、reboot 和 L3 仍未
-验收；以下较早增量的计数保留为历史记录。
-
-新增显式入口 `sudo make test-systemd`，使用随机命名、自有的 nobody/sleep
-测试单元验证生命周期，默认 `make check` 不执行。脚本语法、安全扫描及
-ShellCheck 已通过，并经独立静态复审。此次执行在进入 Bash 前因 WSL
-`HCS/0x800705aa` 返回 1；只读重试同样失败，未创建测试服务，五个动态场景
-均未执行。详情及日志见 [TASKS.md](TASKS.md)。该入口即使通过，也不关闭真实
-Core、TLS 加载、账户创建、重启或外部客户端验收。
-
-后续 WSL 恢复后，在 `ee88135` 的 Linux 冻结副本执行该入口，**退出 0，5/5
-通过**；两项精确命名测试服务清理后均为 `not-found/inactive`，无 unit 文件或
-启用链接残留。环境、命令和日志见 [TASKS.md](TASKS.md)。该结果补充真实
-systemd 下的替身服务生命周期证据；上述真实 Core/TLS/reboot/L3 边界不变。
-
-后续补偿策略修复的最终副本 `/var/tmp/pnm-recovery-policy-final`：默认
-`make check` **退出 0，31 套件/331 项通过**；ShellCheck（含显式集成脚本检查）
-退出 0；真实 systemd 替身测试 **7/7**，新增配置/更新补偿对 active/disabled
-基线的恢复检查。真实 nobody 的准备/补偿 **11/11**、生命周期证据 **23/23**
-均退出 0。最终测试单元清理后为 not-found/inactive，无 unit/enable-link 残留。
-这仍不是完整 Core 配置应用、TLS 加载、账户创建、reboot 或 L3 验收。
-
-环境、命令退出码、31 套件/331 项结果及日志路径统一记录在 [TASKS.md](TASKS.md)。默认 L1 的系统服务、账户操作和监听使用 mock，文件系统、权限、摘要和密码学工具真实执行；非 root 诊断、TLS 可读性探测、归档身份/解析、备份/暂存清理、准备锁、未决事务门禁及恢复调度兼容性另用真实 nobody UID 验证。独立事务新增真实子进程 INT/TERM/SIGKILL/异常退出及终结凭据窗口回归；restore 调度的 TERM 用例仍使用模拟服务，不算真实 systemd 验收。上述显式 systemd 入口单独记录。
-
-| 本地覆盖 | 实际断言 | 仍需补充 |
-|---|---|---|
-| [部署事务测试](../tests/unit/test_deployment_transaction.sh)，15 项 | 资源/Xray/HY2/内外健康/node/期限/提交失败恢复字节、mode、目录及双服务基线；active/disabled；基线写入失败后重试 | 真实账户、systemd 与服务启动时序 |
-| 同套件提交与异常分支 | 唯一 marker、进度日志丢失仍提交、发布后同步异常/子进程退出保留预先持久化的 uncertainty、漂移不覆盖并拒绝后续写入/链接、TERM 补偿 | 真实存储故障、父进程 SIGKILL、VM reboot；不是完整 T-15～T-20 验收 |
-| 同套件归属及 applied | 真实 CLI IFS 下拒绝无归属标准 unit/二进制；仅刷新原 confirmed applied；外部 applied 编辑保留 | 真实 systemd FragmentPath/drop-in/PID/监听归属和运行旧配置验证 |
-| [沙箱接入测试](../tests/unit/test_sandbox_install.sh)，12 项 | 真实 sandbox、lifecycle、node/applied 参与函数共用事务，外层失败后恢复；既有 Secret/TLS 和补偿用例；宿主 TLS 复用分支在隔离路径中验证原字节及 UID/GID/mode 恢复 | 实际 Core 而非测试资产的 L2 激活与访问权限 |
-| [读取权限测试](../tests/unit/test_read_access.sh)，1 项 | root0600 锁和0700状态目录下，非 root check 输出 UNKNOWN、退出1，show/links退出77且无stdout，links help可用 | 发行版用户权限及并发集成 |
-| [端口及预检测试](../tests/unit/test_preflight.sh)，14 项 | 自定义端口探测、占用拒绝、无效节点不探测默认端口、恢复分支匹配配置端口，以及既有依赖和归属检查 | 真实 systemd/PID/监听归属及配置端口启动 |
-| [生命周期证据测试](../tests/unit/test_core_evidence.sh)，22 项 | 既有证据门控和故障恢复；双 Core update/rollback 三资源发布前后失败矩阵、字节与 mode/UID/GID 恢复、外部元数据修改保留、错误候选版本、restart 与补偿 restart 失败可见；真实 flock 验证准备期互斥、冲突及未决部署提前拒绝、重入和关闭错误传播；另一 Core 不重启 | 服务、下载和 Core 配置验证为模拟；需真实并发 CLI/systemd、L2 启动时序、真实固定资产验证、reboot 及外部连接 |
-| [恢复包解析测试](../tests/unit/test_backup_archive.sh)，5 项 | 完整包进入隔离 stub；12 类坏包拒绝；实际解析进程施加 128 MiB 地址空间/30 秒 CPU 预算及更严格继承限制；大型 PAX/GNU 和递归 global-PAX 受控失败且不到达候选验证 | 不执行候选；预算只覆盖解析，CPU 时间不等于墙钟期限；按 D-009 由操作者核实可信备份来源；不代表任意不可信包或候选可执行文件安全 |
-| [恢复文件系统补偿测试](../tests/unit/test_restore_recovery.sh)，9 项 | 真实文件字节及 UID/GID/mode 恢复、既有及新目录补偿、最终属主登记、发布/属主修改/登记入口元数据漂移拒绝、部分 chown 失败、symlink/外来目录属主拒绝、applied 文件及目录补偿 | 调用真实发布/补偿辅助函数；服务及账户名称映射为模拟，仍需 L2/L3 验收 |
-| [恢复调度测试](../tests/unit/test_restore_flow.sh)，15 项 | 实际解析和调度；晚期写入/健康/applied/commit 失败恢复；active/disabled、inactive、not-found、未知及无效服务状态；原 confirmed InvocationID 更新；未知及外部改动证据保留；真实 flock、清理错误、enable 目录及受保护服务基线文件 | 目的路径映射到私有 host 夹具；Core 执行及 systemd 为模拟；root 使用真实 UID/GID，非 root 兼容运行模拟 root/服务账户策略；仍需真实并发 CLI、systemd、重启和客户端验收 |
-| [TLS 访问测试](../tests/unit/test_tls_access.sh)，8 项；[账户测试](../tests/unit/test_accounts.sh)，7 项 | 真实 root/nobody 的 `test -r` 及父目录权限、owner/mode/group、symlink/缺文件、异常元数据/缺工具/skip；TLS 文件字节和元数据不变、无凭据输出；服务账户拒绝 UID/GID 0、非法 ID 和组名不符且不执行 useradd/groupadd | NSS/账户名称映射为模拟，不创建真实 hysteria 账户；`test -r` 不代表证书/密钥加载成功；非 root 的 TLS 专项明确跳过；仍需真实 systemd、LSM/sandbox、Core 加载及握手验收 |
+历史执行次数、旧 WSL 环境和增量结果已移至 [阶段执行记录](history/PHASE3_EXECUTION_2026-10-22_26.md)。
+最新云端结果与未验收边界见 [TASKS.md](TASKS.md)，不将历史通过重记为本次通过。
 
 未决部署的受控人工检查应先保留受保护的完整证据，不删除 uncertainty、改 journal 或设置 configured=yes 来绕过保护。`sudo pnm --json check`、`sudo pnm node show` 在未决状态返回70是预期拒绝。记录/快照可能包含凭据，不直接打印或附到普通报告。
 

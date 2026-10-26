@@ -268,7 +268,7 @@ test_transaction_inspect_survives_process_state_and_detects_interrupted_write() 
     pnm_tx_snapshot_file "$target" orphan || { rm -rf -- "$temp_dir"; return 1; }
     pnm_tx_snapshot_state orphan >/dev/null || { rm -rf -- "$temp_dir"; return 1; }
     printf 'new\n' >"$target"
-    pnm_tx_manifest_append INTENT orphan "$target" PRESENT 644 "$(pnm_tx_file_sha256 "$target")" || { rm -rf -- "$temp_dir"; return 1; }
+    pnm_tx_manifest_append INTENT orphan "$target" PRESENT "$(stat -c '%a' -- "$target")" "$(pnm_tx_file_sha256 "$target")" || { rm -rf -- "$temp_dir"; return 1; }
     transaction_path="$PNM_TX_PATH"
     PNM_TX_ACTIVE=0
     pnm_lock_release || { rm -rf -- "$temp_dir"; return 1; }

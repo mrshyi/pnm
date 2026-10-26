@@ -38,6 +38,8 @@ source "$PROJECT_ROOT/lib/tls.sh"
 source "$PROJECT_ROOT/lib/check.sh"
 # shellcheck source=../../adapters/network.sh
 source "$PROJECT_ROOT/adapters/network.sh"
+EXPECTED_CHECK_RC=0 EXPECTED_CHECK_OVERALL=OK
+if ((EUID != 0)); then EXPECTED_CHECK_RC=1 EXPECTED_CHECK_OVERALL=WARN; fi
 # Keep the sourced library defaults from shadowing this script's fixture paths.
 unset PNM_CONFIG_DIR PNM_OS_RELEASE_FILE PNM_XRAY_CONFIG PNM_HY2_CONFIG PNM_XRAY_BIN PNM_HY2_BIN
 
@@ -113,6 +115,8 @@ EOF
     PNM_CHECK_CONFIGURED=1
     PNM_NODE_CONFIG[XRAY_PORT]=443
     original_path="$PATH"
+    # Deliberately exclude installed binaries to test managed-path resolution.
+    # shellcheck disable=SC2123
     PATH="$temp_dir/path"
     pnm_check_xray
     PATH="$original_path"
@@ -175,8 +179,8 @@ test_unknown_core_ports_do_not_probe_defaults() { check_core_listener_ports yes;
 
 test_passing_check_json() {
     PNM_FAKE_PROFILE=pass run_capture run_fake_pnm --json check
-    assert_eq 0 "$RUN_RC" || return 1
-    assert_contains "$RUN_OUTPUT" '"overall":"OK"' && assert_contains "$RUN_OUTPUT" '"fail":0'
+    assert_eq "$EXPECTED_CHECK_RC" "$RUN_RC" || return 1
+    assert_contains "$RUN_OUTPUT" "\"overall\":\"$EXPECTED_CHECK_OVERALL\"" && assert_contains "$RUN_OUTPUT" '"fail":0'
 }
 
 test_failure_exit_precedence() {
@@ -187,7 +191,7 @@ test_failure_exit_precedence() {
 
 test_quiet_has_no_stdout() {
     PNM_FAKE_PROFILE=pass run_capture run_fake_pnm --quiet check
-    assert_eq 0 "$RUN_RC" && assert_eq '' "$RUN_OUTPUT"
+    assert_eq "$EXPECTED_CHECK_RC" "$RUN_RC" && assert_eq '' "$RUN_OUTPUT"
 }
 
 test_json_contains_no_fixture_password() {
@@ -218,10 +222,11 @@ test_hysteria_tls_private_key_permissions_are_checked_without_mutation() {
 
 test_hysteria_tls_runtime_user_readability_is_checked() {
     PNM_FAKE_PROFILE=bad-tls-read run_capture run_fake_pnm --json check
-    assert_eq 2 "$RUN_RC" || return 1
     if ((EUID == 0)); then
+        assert_eq 2 "$RUN_RC" || return 1
         assert_contains "$RUN_OUTPUT" 'Hysteria2 service account cannot read its TLS files' || return 1
     else
+        assert_eq 1 "$RUN_RC" || return 1
         # Non-root checks cannot impersonate the service account. They can
         # only report the verified ownership/mode policy; Debian root checks
         # exercise the effective runuser probe above.
@@ -231,6 +236,7 @@ test_hysteria_tls_runtime_user_readability_is_checked() {
 }
 
 test_hysteria_v213_binary_is_detected_and_version_reported() {
+    local profile
     run_capture pnm_binary_version "$FAKE_DIR/hysteria" hysteria
     assert_eq 0 "$RUN_RC" || return 1
     assert_eq 'v2.13.0' "$RUN_OUTPUT" || return 1
@@ -238,12 +244,18 @@ test_hysteria_v213_binary_is_detected_and_version_reported() {
     assert_eq 0 "$RUN_RC" || return 1
     assert_eq '2.13.0' "$RUN_OUTPUT" || return 1
 
-    PNM_FAKE_PROFILE=pass run_capture run_fake_pnm --json check
-    assert_eq 0 "$RUN_RC" || return 1
-    assert_contains "$RUN_OUTPUT" 'Hysteria2 local checks passed' || return 1
-    assert_contains "$RUN_OUTPUT" 'v2.13.0' || return 1
+    for profile in pass hysteria-stderr; do
+        PNM_FAKE_PROFILE="$profile" run_capture run_fake_pnm --json check
+        assert_eq "$EXPECTED_CHECK_RC" "$RUN_RC" || return 1
+        if ((EUID == 0)); then
+            assert_contains "$RUN_OUTPUT" 'Hysteria2 local checks passed' || return 1
+            assert_contains "$RUN_OUTPUT" 'v2.13.0' || return 1
+        else
+            assert_contains "$RUN_OUTPUT" '"id":"hysteria2","status":"UNKNOWN"' || return 1
+        fi
+    done
 
-    PNM_FAKE_PROFILE=hysteria-stderr run_capture run_fake_pnm --json check
+    PNM_FAKE_PROFILE=hysteria-stderr run_capture pnm_binary_version "$FAKE_DIR/hysteria" hysteria
     assert_eq 0 "$RUN_RC" || return 1
     assert_contains "$RUN_OUTPUT" 'v2.13.0'
 }
@@ -293,9 +305,39 @@ test_supported_platform_matrix() {
 
     for fixture in os-release-debian-12 os-release-debian-13 os-release-ubuntu-22.04 os-release-ubuntu-24.04; do
         PNM_OS_RELEASE_FILE="$TEST_ROOT/fixtures/$fixture" PNM_FAKE_PROFILE=pass run_capture run_fake_pnm --quiet check
-        assert_eq 0 "$RUN_RC" "supported platform fixture should pass: $fixture" || return 1
+        assert_eq "$EXPECTED_CHECK_RC" "$RUN_RC" "supported platform fixture should respect diagnostic permissions: $fixture" || return 1
     done
 }
+
+test_platform_policy_checks_architecture_for_each_supported_release() {
+    local fixture architecture
+    source "$PROJECT_ROOT/adapters/platform-linux.sh"
+    pnm_platform_arch() { printf '%s\n' "$architecture"; }
+    for fixture in os-release-debian-12 os-release-debian-13 os-release-ubuntu-22.04 os-release-ubuntu-24.04; do
+        PNM_OS_RELEASE_FILE="$TEST_ROOT/fixtures/$fixture"
+        architecture=x86_64
+        pnm_platform_supported || return 1
+        for architecture in aarch64 armv7l i686; do
+            if pnm_platform_supported; then return 1; fi
+        done
+    done
+}
+
+test_platform_policy_rejects_other_ubuntu_versions_and_derivatives() (
+    local temp_dir entry distribution version
+    temp_dir="$(mktemp -d)"
+    trap 'rm -rf -- "$temp_dir"' EXIT
+    source "$PROJECT_ROOT/adapters/platform-linux.sh"
+    pnm_platform_arch() { printf 'x86_64\n'; }
+    PNM_OS_RELEASE_FILE="$temp_dir/os-release"
+    for entry in ubuntu:20.04 ubuntu:22.10 ubuntu:24.10 ubuntu:26.04 linuxmint:22.04; do
+        IFS=: read -r distribution version <<<"$entry"
+        printf 'ID=%s\nID_LIKE=ubuntu\nVERSION_ID="%s"\n' "$distribution" "$version" >"$PNM_OS_RELEASE_FILE" || return 1
+        if pnm_platform_supported; then return 1; fi
+    done
+    printf 'ID=ubuntu\n' >"$PNM_OS_RELEASE_FILE" || return 1
+    if pnm_platform_supported; then return 1; fi
+)
 
 check_listener_startup_budget() (
     local policy="$1" counter delays=0 rc attempts=26 expected_rc=1 expected_probes=26 expected_delays=25
@@ -366,4 +408,6 @@ run_test 'missing Hysteria binary differs from version-command failure' test_hys
 run_test 'Hysteria binary, invocation, and parse failures are distinguished' test_hysteria_version_failures_are_distinguished
 run_test 'status reports the detected Hysteria2 version' test_status_reports_hysteria_version
 run_test 'supported Debian and Ubuntu platform matrix passes' test_supported_platform_matrix
+run_test 'each supported release requires the deployment architecture' test_platform_policy_checks_architecture_for_each_supported_release
+run_test 'Ubuntu platform policy rejects unapproved releases derivatives and missing version' test_platform_policy_rejects_other_ubuntu_versions_and_derivatives
 finish_tests
