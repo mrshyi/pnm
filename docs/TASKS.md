@@ -1,8 +1,8 @@
 # PNM Current Tasks
 
-**Last reconciled:** 2026-10-26 (bounded publisher tmpfs ENOSPC checks added; independent Debian lifecycle/update/reboot and selected abrupt-VM recovery remain recorded; broader storage/platform and external acceptance are unverified)
+**Last reconciled:** 2026-10-26 (host first-install version-pair repair; fresh32 suites/399 tests and VM9 refusal+14 lifecycle+7 reboot pass; broader storage/platform and external acceptance remain unverified)
 
-**Current increment baseline:** branch `dev`, parent HEAD `b81600d`, VERSION `0.16.0-rc.1`.
+**Current increment baseline:** branch `dev`, parent HEAD `39aaf78`, VERSION `0.16.0-rc.1`.
 
 **Environment recheck:** the earlier host EIO/EROFS/CreateInstance failure is no
 longer reproduced: Debian root is writable, real `true`/`df` execute successfully
@@ -2004,7 +2004,7 @@ scenario; dated records above retain its actual results and limitations.
 |---|---|---|
 | T-01 | L1, native and VM positive dual-Core install/lifecycle; real identities, bindings, TLS and listeners | External traffic and the whole supported-platform matrix |
 | T-02 | L1 credential/TLS reuse and corruption refusal; native/VM repeat-install refusal preserves resources | A complete VM replay of every existing-credential corruption/reuse branch |
-| T-03 | Native19 prerequisite refusals; VM actual first-install partial/trust/checksum refusals for both Cores and verified non-ZIP Xray staging refusal with complete outer recovery; VM update transport/checksum refusal | Upstream DNS/PKI outages, timeout/other ZIP/version combinations and other distributions |
+| T-03 | Native19 prerequisite refusals; VM first-install partial/trust/checksum and official prior-version pair refusal for both Cores plus verified non-ZIP Xray refusal, complete outer recovery; VM update transport/checksum refusal | Upstream DNS/PKI outages, timeouts/other ZIP combinations, unparseable/failed version queries beyond L1 and other distributions |
 | T-04 | L1 configured-port checks and native configured/default-port conflict lifecycle | Complete independent-VM conflict replay |
 | T-05 | L1 alias/symlink/managed-path and directory protection; host fixture refusal guards | Cross-process privileged ancestor replacement is outside the protected-parent assumption |
 | T-06 | L1 original/missing byte and numeric metadata compensation; selected native complete-resource checks | Every nondefault metadata combination on every L2 operation |
@@ -2374,6 +2374,47 @@ acquisition evidence, not upstream outage or arbitrary executable safety.
 The recent31/394 full Bash result remains separate; independent review is still
 usage-limited, so review is self-review and actual execution.
 
+## First-install approved-version pair repair — 2026-10-26
+
+After acquisition acceptance commit `39aaf78`, continue the
+[version-pair plan](superpowers/plans/2026-10-26-install-version-pair.md).
+Root cause: host install staged hash-verified bytes but never compared the
+programs' actual versions to the approved version labels, whereas update already
+does. A correct checksum for an older authentic asset could therefore publish
+the wrong requested version. Targeted safe staging RED
+`pnm-install-version-red.9lj1i3u6` reproduces four erroneous0/publication paths:
+wrong Xray, wrong HY2, unparseable Xray and failed HY2 version command; matched
+pair remains positive. All publication is substituted with a private receipt,
+so the RED never writes host runtime files.
+
+Minimal product repair in `pnm_sandbox_step_assets` reuses the existing approved
+manifest parser and version-number adapter for real-host root only, before
+publishing either managed binary. Either mismatch/unparseable/failed query returns
+configuration78 through the existing outer recovery. Isolated synthetic sandbox,
+standalone Core operations, commands and formats remain compatible. The already
+hash-verified programs are explicitly approved trusted executable inputs; this
+does not authenticate arbitrary self-declared hashes or sandbox executable code.
+Architecture records implemented behavior and D-010 records the rationale.
+
+GREEN `pnm-install-version-green.1up2p8u0` passes all5 focused cases and static
+gates. `pnm-install-version-preboot.43v0k2lp` passes30 guards,28 Python compilations,
+syntax/security/ShellCheck and dedicated ShellCheck for the new Bash test. Fresh
+`pnm-install-version-full.gpn5pjlr` passes `make check`:32 suites/399 tests,0 failures.
+
+Actual VM `/var/tmp/pnm-vm-boot-volume.q_ry4hhc` serves separately verified
+official prior assets under current approved version labels with their correct
+old checksums. Each Core must diagnose its specific staged-version mismatch,
+return78 before either managed binary publication and fully restore authority,
+primary NSS, directories, units and all4 owned identity receipts. Together with
+the prior7 cases, all9 refusal checks pass. Only declared test pins/cache/
+transport are restored before normal14 lifecycle checks; no runtime/NSS/service/
+transaction repair is performed. Same-disk reboot7, actual reboot/poweroff,
+QEMU0/quiescence, detached loop, empty cleanup and full2GiB encrypted readback
+with matching digest pass. Fresh host NSS/dpkg hashes equal the tooling baseline;
+all23 document paths pass. Independent review remains usage-limited;
+these are self-review and executed checks, not independent approval or production
+deployment. VERSION stays0.16.0-rc.1; nothing is pushed or released.
+
 ## Immediate next steps
 
 Selected abrupt-VM recovery is committed as `1f68c03`. The follow-on G-03 slice
@@ -2453,6 +2494,14 @@ Recheck physical backing-volume availability before every additional heavy run;
 Linux virtual capacity alone is insufficient. Use only the exact owned Linux
 output directory, one VM at a time, with space for the disk, ciphertext and host
 margin. Retained evidence and the earlier incomplete D export remain untouched.
+
+After the version-pair VM's verified archive is retained, physical C availability
+is3,018,592,256 bytes and D is2,145,832,960. That no longer meets the next run's
+2GiB disk plus ciphertext and operating-margin budget. Do not infer fresh
+capacity from sparse virtual ext4 free-space reporting. Current lightweight
+planned regressions are complete; remaining heavy storage/platform work needs
+adequate backing storage, while deployed-source identity and external-client
+gates still require authorized targets. None of these gates is marked passed.
 
 ## Boundaries
 

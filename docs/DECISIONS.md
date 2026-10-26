@@ -82,3 +82,22 @@ omit only HY2, consistent with this decision's independent-Core gates.
 **Reason:** Tar member checks and parser budgets constrain parsing; they do not isolate or establish trust in programs executed after extraction. Automatically treating an archive's own approval/hash data as an independent trust anchor would give a false guarantee.
 
 **Evidence/status:** `lib/core-ops.sh` applies 128 MiB address-space and 30-second CPU limits before tar parsing, preserves stricter inherited limits and handles resource-exhaustion exceptions. `lib/output.sh` and README state the trusted-input boundary. Local archive tests exercise resource limits and hidden PAX/GNU processing without executing candidates. Real Core/systemd/reboot/client acceptance remains separately recorded in `TASKS.md`.
+
+## D-010 — Host install must preserve the approved binary/version pair
+
+**Decision:** After checksum verification and staging, real-host installation
+compares both Core programs' reported versions to the validated approved manifest
+before publishing either managed binary, using the existing update parser.
+Mismatch or an unparseable/failed version query returns78 through the existing
+deployment rollback. No command, manifest format or standalone Core behavior changes.
+
+**Reason:** An older authentic binary can match its explicitly approved checksum
+while the manifest mistakenly labels it as a newer version. Hash verification
+and version consistency prove separate properties; install and update must not
+quietly enforce different desired-version boundaries.
+
+**Evidence/status:** `pnm_sandbox_step_assets` in `lib/sandbox-install.sh`, the
+version adapter in `adapters/network.sh`, and the targeted
+`test_install_asset_versions.sh` regression. Programs remain trusted executable
+inputs after explicit hash approval; reported version is not authenticity or
+arbitrary-code sandboxing. Current automated/VM results are in `TASKS.md`.

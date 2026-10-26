@@ -52,6 +52,15 @@ checks and the existing image/host cleanup verification. This is controlled
 first-install acquisition evidence, not upstream DNS/PKI outage or arbitrary
 executable safety. The native CLI driver does not expose this VM-only scenario.
 
+`deployment-version-failures` extends that same VM fixture to9 refusals using
+the separately verified official prior assets. The declared current version and
+prior asset's correct checksum deliberately disagree for each Core. Actual
+staging must diagnose the specific version mismatch and refuse78 before either
+managed binary publication, with all4 actual account creation/recovery pairs,
+retained verified rejected cache, complete outer compensation and absent runtime.
+Then the original approved fixtures permit normal14 checks and7 reboot checks.
+The existing7-case acquisition scenario remains available unchanged.
+
 This explicit opt-in test clones a separately prepared trusted Debian 13 boot
 fixture. It never bootstraps packages, downloads assets, installs host packages,
 binds host directories or changes host accounts/network/firewall configuration.

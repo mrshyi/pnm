@@ -1,6 +1,16 @@
 # PNM Architecture
 
-This document describes implemented behavior through the bounded startup-listener health repair on 2026-10-24. It is not a production deployment attestation. Verify behavior against source and tests when changing it.
+This document describes implemented behavior through the first-install approved-version check on 2026-10-26. It is not a production deployment attestation. Verify behavior against source and tests when changing it.
+
+Host first-install staging checks both hash-verified Core programs' reported
+versions against the validated approved manifest before publishing either
+managed binary. It reuses the same version-number adapter as update. Mismatched,
+unparseable or failed version queries return configuration error78 through the
+existing outer deployment compensation, including owned account/directory work
+already performed. This boundary applies to the normalized real-host root;
+isolated synthetic sandbox behavior and standalone Core operations retain their
+existing interfaces. Version queries execute the explicitly approved programs;
+they do not sandbox arbitrary bytes or authenticate a self-declared checksum.
 
 Startup and recovered-generation listener checks may request up to26 probes,
 with25 waits of0.2 seconds. This covers the `Type=simple` interval between a

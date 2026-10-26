@@ -113,11 +113,27 @@ pnm_sandbox_generate_missing_secrets() {
 
 pnm_sandbox_step_assets() {
     local xray_staged hy2_staged
-    local xray_target hy2_target
+    local xray_target hy2_target actual_version
+    local -A approved=()
 
     [[ -r "${PNM_SANDBOX_XRAY_ARCHIVE:-}" && -r "${PNM_SANDBOX_HY2_BINARY:-}" ]] || return "$PNM_EXIT_CONFIG"
     xray_staged="$(pnm_asset_stage_xray_zip "$PNM_SANDBOX_XRAY_ARCHIVE" "$PNM_SANDBOX_STAGING/xray")" || return $?
     hy2_staged="$(pnm_asset_stage_hysteria_binary "$PNM_SANDBOX_HY2_BINARY" "$PNM_SANDBOX_STAGING/hysteria")" || return $?
+    if [[ "$PNM_SANDBOX_ROOT" == / ]]; then
+        # A real host install has the same approved-version boundary as update.
+        # Check both staged programs before publishing either managed binary.
+        pnm_load_versions_config approved && pnm_validate_versions_config approved || return "$PNM_EXIT_CONFIG"
+        actual_version="$(pnm_binary_version_number "$xray_staged" xray)" || return "$PNM_EXIT_CONFIG"
+        [[ "$actual_version" == "${approved[XRAY_VERSION]#v}" ]] || {
+            pnm_error 'Staged Xray version does not match the approved manifest.'
+            return "$PNM_EXIT_CONFIG"
+        }
+        actual_version="$(pnm_binary_version_number "$hy2_staged" hysteria)" || return "$PNM_EXIT_CONFIG"
+        [[ "$actual_version" == "${approved[HY2_VERSION]#v}" ]] || {
+            pnm_error 'Staged Hysteria2 version does not match the approved manifest.'
+            return "$PNM_EXIT_CONFIG"
+        }
+    fi
     xray_target="$(pnm_sandbox_path /usr/local/bin/xray)" || return $?
     hy2_target="$(pnm_sandbox_path /usr/local/bin/hysteria)" || return $?
     pnm_tx_write_file "$xray_staged" "$xray_target" xray_binary 0755 || return $?

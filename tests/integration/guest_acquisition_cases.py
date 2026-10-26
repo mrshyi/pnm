@@ -14,10 +14,19 @@ from guest_update_cases import AssetServer
 from guest_vm_boot import require_approved_vm
 
 
-def run_acquisition(logs, env, call, absent, passed) -> None:
+def run_acquisition(logs, env, call, absent, passed, *, include_versions=False) -> None:
     require_approved_vm()  # Before path mutation, sockets or fixture preparation.
     require({p.name for p in Path('/sys/class/net').iterdir()}=={'lo'},'acquisition requires private lo')
     pins=json.loads(Path('/opt/pnm-test-versions.json').read_text())
+    prior={}
+    prior_payloads={}
+    if include_versions:
+        prior=json.loads(Path('/opt/pnm-acquisition-prior.json').read_text())
+        for core in ('xray','hysteria2'):
+            body=(Path('/opt/pnm-acquisition-prior')/prior[core]['filename']).read_bytes()
+            require(hashlib.sha256(body).hexdigest()==prior[core]['sha256'] and len(body)==prior[core]['size']
+                    and prior[core]['version']!=pins[core]['version'],'prior acquisition fixture differs from distinct pin')
+            prior_payloads[core]=body
     cache=Path('/var/lib/pnm/assets')
     assets={core:cache/(core+'-'+pins[core]['version']+'-'+pins[core]['sha256']+extension)
             for core,extension in (('xray','.zip'),('hysteria2','.bin'))}
@@ -90,12 +99,16 @@ def run_acquisition(logs, env, call, absent, passed) -> None:
             assets[core].rename(held)
             held_before=fingerprint(held)
             try:
-                for failure in (('partial','tls','checksum','zip') if core=='xray' else ('partial','tls','checksum')):
+                failures=('partial','tls','checksum')+(('version',) if include_versions else ())+(('zip',) if core=='xray' else ())
+                for failure in failures:
                     body=payloads[paths[core]]
                     checksum='0'*64 if failure=='checksum' else pins[core]['sha256']
                     if failure=='zip':
                         server.payloads[paths[core]]=b'PNM deliberately invalid ZIP fixture\n'
                         checksum=hashlib.sha256(server.payloads[paths[core]]).hexdigest()
+                    elif failure=='version':
+                        server.payloads[paths[core]]=prior_payloads[core]
+                        checksum=prior[core]['sha256']
                     field='XRAY_SHA256' if core=='xray' else 'HY2_SHA256'
                     text,count=re.subn(r'(?m)^'+field+r'=.*$',lambda _:field+'='+checksum,original_versions)
                     require(count==1,'acquisition approval field missing')
@@ -121,6 +134,10 @@ def run_acquisition(logs, env, call, absent, passed) -> None:
                     if failure in ('partial','tls'):
                         require(('curl: ('+('18' if failure=='partial' else '60')+')').encode() in result.stderr,
                                 'install acquisition lacks the expected actual curl refusal')
+                    elif failure=='version':
+                        label='Xray' if core=='xray' else 'Hysteria2'
+                        require(('Staged '+label+' version does not match the approved manifest.').encode() in result.stderr,
+                                'version-pair refusal has a different cause')
                     deadline=time.monotonic()+2
                     while (server.requests.count(paths[core])<before_requests+(failure!='tls')
                            or server.tls_refusals<before_tls+(failure=='tls')) and time.monotonic()<deadline:
@@ -147,14 +164,14 @@ def run_acquisition(logs, env, call, absent, passed) -> None:
                     require(all(not (transaction/name).exists() and not (transaction/name).is_symlink()
                                 for name in ('commit.env','commit-uncertain.env')),
                             'install acquisition promoted a marker or uncertainty')
-                    if failure=='zip':
-                        bad=cache/('xray-'+pins[core]['version']+'-'+checksum+'.zip')
+                    if failure in ('zip','version'):
+                        bad=cache/(core+'-'+pins[core]['version']+'-'+checksum+('.zip' if core=='xray' else '.bin'))
                         require(hashlib.sha256(bad.read_bytes()).hexdigest()==checksum,
-                                'bad ZIP did not reach verified cache/staging')
+                                'rejected asset did not reach verified cache/staging')
                         accounts=[line.split('\t') for line in (transaction/'accounts.tsv').read_text().splitlines()]
                         created_accounts=[row for row in accounts if row[0]=='APPLIED']
                         require(len(created_accounts)==4 and all(['RESTORED',*row[1:]] in accounts
-                                for row in created_accounts),'bad ZIP did not compensate all four actual owned identities')
+                                for row in created_accounts),'rejected staged asset did not compensate all four actual owned identities')
                     observations.append({'core':core,'failure':failure,'original_rc':expected,
                                          'complete_rollback':True,'managed_resources_absent':True})
                     (private/'results.json').write_text(json.dumps(observations))
@@ -166,7 +183,8 @@ def run_acquisition(logs, env, call, absent, passed) -> None:
                         'held fixture destination unexpectedly exists')
                 held.rename(assets[core])
         versions.write_text(original_versions)
-        require(len(observations)==7 and server.tls_refusals==2 and len(server.requests)==5,
+        require(len(observations)==(9 if include_versions else 7) and server.tls_refusals==2
+                and len(server.requests)==(7 if include_versions else 5),
                 'install acquisition coverage counts differ')
     finally:
         env.clear()
