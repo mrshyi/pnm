@@ -2,9 +2,9 @@
 
 **Updated:** 2026-10-26. **Phase 3 remains incomplete; Phase 4 and release work have not started.**
 
-**Published baseline:** branch `dev`, commit `bd9319a`, VERSION
+**Published baseline:** branch `dev`, commit `ed2b3b1`, VERSION
 `0.16.0-rc.1`, including TLS/test repairs, cloud-development cleanup and
-Ubuntu22.04/24.04 CI/regressions plus stage11 integration below. Earlier preparation checks
+Ubuntu22.04/24.04 CI/regressions plus stages11–12 integration below. Earlier preparation checks
 used their recorded parents; do not attribute earlier39312aa CI to this baseline.
 
 ## Continuation checkpoint
@@ -25,7 +25,12 @@ used their recorded parents; do not attribute earlier39312aa CI to this baseline
 - Stage12 candidate bd9319a is published:
   [run40448066295](https://github.com/mrshyi/pnm/actions/runs/40448066295)
   targets bd9319a65c9f4af6abdbe172fe3b7ae2e96377eb; both jobs exposed a read-access
-  fixture bootstrap failure (126). The fixture correction is awaiting a fresh run.
+  fixture bootstrap failure (126), corrected and verified by the following retry.
+- Read-access correction ed2b3b1 is published; retry
+  [run40449338994](https://github.com/mrshyi/pnm/actions/runs/40449338994)
+  targets ed2b3b137af2eee9103b54c6288955a605759127. Both Ubuntu jobs pass:
+  ordinary gates419 per run, privileged suites48, real systemd8 and official
+  Cores10. The privileged log sections contain no skips; see stage12 below.
 - Root service/Core integration now uses disposable Ubuntu22.04/24.04 amd64
   GitHub-hosted runners. The ARM64/non-root development host remains L1 only;
   do not provision it, run service/storage faults on it or start Phase4 automatically.
@@ -61,9 +66,9 @@ production access, deployment or package installation on the development host.
 | G-03 Core update/rollback | Paired current/previous binaries and version metadata; selected distinct-version, fault and reboot records | Remaining commit/storage and abrupt-VM update/rollback positions |
 | G-04 backup/restore | Trusted archive validation, bounded parsing, metadata compensation; selected real restore/fault/reboot records | Remaining storage and abrupt-VM restore positions; arbitrary untrusted executables remain outside the trusted-input contract |
 | G-05 dependency preflight | Declared prerequisite checks and historical Debian guest19-tool refusal records | Remaining acquisition/DNS/PKI/timeout/archive cases and other distributions |
-| G-06 HY2 TLS/account access | Ownership/mode/effective-read checks, historical managed-account and TLS fault records | Root/platform/NSS variations, changed TLS paths on supported amd64, external handshake/traffic |
+| G-06 HY2 TLS/account access | Ownership/mode/effective-read checks; fresh Ubuntu root access8/8 and isolated real-Core TLS/traffic; historical managed-account records | Real managed-account provisioning/NSS variants and public-client/deployment acceptance |
 | T-04/T-20/T-26 | Historical configured-port conflict, real lock contention, stale-binding refusal and same-disk reboot slices | Other topology/scheduling combinations and external-client routing |
-| Platform/L3 | Ubuntu22.04/24.04 amd64 L1, selected real systemd and isolated official-Core tests passed atd2b1844 | Full CLI install/account/reboot and external client acceptance remain open; Debian12/13 acceptance is deferred |
+| Platform/L3 | Ubuntu22.04/24.04 amd64 ordinary/root gates, selected real systemd and isolated official-Core tests passed ated2b3b1 | Full CLI install/account/reboot and external client acceptance remain open; Debian12/13 acceptance is deferred |
 
 These are source observations and explicitly historical results, not fresh cloud
 L2 passes. The [dated T-01–T-27 reconciliation](history/PHASE3_EXECUTION_2026-10-22_26.md#matrix-reconciliation--2026-10-25)
@@ -453,7 +458,7 @@ transfers. Both harnesses report success only after owned-unit/resource cleanup.
 These are actual Ubuntu service and private-network protocol results, not full
 managed-account CLI installation, persisted reboot or public L3 connectivity.
 
-## Stage 12: privileged access and recovery CI candidate
+## Stage 12: privileged access and recovery CI
 
 Validation parentf46775a. Add the existing CLI, read-access, TLS-access and
 transaction suites as explicit sudo invocations on the same disposable Ubuntu
@@ -467,8 +472,8 @@ to remove source-aware ShellCheck array-name collisions, without changing
 permission checks or expectations. Ordinary non-root L1 behavior remains a skip.
 
 Local Bash syntax, supplemental ShellCheck and the workflow matrix/entry-point
-assertions pass. Actual privileged execution remains pending the new CI source;
-the previous stage11 Core/service results do not count as this suite's run.
+assertions pass. Privileged execution was still pending during preparation;
+the previous stage11 Core/service results did not count as this suite's run.
 
 Candidate run40448066295 failed on both Ubuntu versions: CLI11/11 passes, then
 read-access0/1 returns126 instead of1 before the remaining privileged suites can
@@ -482,17 +487,41 @@ Local copied-CLI version/help bootstrap, Bash syntax, supplemental ShellCheck an
 workflow assertions pass. Move the privileged step after initial check/ShellCheck
 and before the repeated release-check to surface these failures sooner.
 
+Correctioned2b3b137af2eee9103b54c6288955a605759127 was pushed and validated by
+[run40449338994](https://github.com/mrshyi/pnm/actions/runs/40449338994),
+push/attempt1, completed success. Both jobs122008127260 (Ubuntu22.04) and
+122008127445 (Ubuntu24.04) pass every step:
+
+| Execution layer, per Ubuntu job | Actual result |
+|---|---|
+| Normal-user check and release-check |32 suites/419 passed/0 failed each; repeated gates, not838 independent cases |
+| ShellCheck | success |
+| Privileged CLI suite |11/11, including actual CLI approval refusal before preparation |
+| Privileged read-access suite |1/1 with actual nobody UID, UNKNOWN diagnostics, protected-command77 and public help0 |
+| Privileged TLS-access suite |8/8, actual ownership/modes/traversal/runuser with mapped NSS names |
+| Privileged transaction suite |28/28, including low-mode and numeric UID/GID restoration |
+| Real systemd integration |8/8 |
+| Official Core private-network integration |10/10 |
+
+Each job has70 summary lines:32 normal,4 privileged,32 repeated normal,2 real
+integration. The privileged section's48 wrappers have no SKIP lines. The normal
+user section intentionally retains all five root-only labels. This closes their
+Ubuntu execution gap, not the remaining real account-install/NSS variants or
+physical storage/reboot/external-client matrix. The protected-checkout failure
+was a test-fixture bootstrap defect; no production permission expectation changed.
+
 ## Next priorities
 
 1. Continue Ubuntu development/main-flow validation and fix reproducible local
    failures without waiting for Debian. Preserve the L1/mock versus real Core
    boundary and the supported amd64 deployment guard.
-2. Run the existing isolated systemd and pinned real-Core checks on disposable
-   Ubuntu22.04/24.04 amd64 GitHub-hosted runners, after fixing the stale sleep-only
-   systemd fixture to satisfy current runtime-listener gates. Keep development
-   host services untouched and record those jobs separately from L1 checks.
-3. Continue applicable L2 commit/storage/interruption positions on the approved
-   Ubuntu fixture. Do not reuse old private paths or fault the development host.
+2. Keep the passing Ubuntu normal/root/systemd/Core CI gates for future changes.
+   Next integration scope is full managed-account CLI install/update/restore on
+   an explicitly authorized disposable Ubuntu fixture; existing selected service
+   and protocol checks do not establish that full deployment acceptance.
+3. Continue applicable L2 commit/storage/interruption and persisted-reboot
+   positions on that approved Ubuntu fixture. Do not reuse old private paths or
+   fault the development host or reboot the hosted CI controller.
 4. Obtain an authorized deployed target for G-01 and controlled external clients
    for T-27; record source identity and each protocol's handshake/traffic separately.
 5. Perform deferred Debian12/13 and remaining supported-platform acceptance,
