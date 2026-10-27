@@ -232,6 +232,13 @@ succeed before returning a candidate path. Listing/format refusal returns78;
 candidate chmod failure returns77. Owned staging remains under the caller's
 existing temporary-directory cleanup, without executing the candidate here.
 
+Hysteria2 binary staging refuses occupied destinations, including directories
+and dangling links. It copies to a private candidate, verifies executable access,
+and uses no-replace hard-link publication in the protected staging directory.
+Copy/publication failures return73 without a success path; a failed copy removes
+its private candidate. The caller still checks approved version/configuration
+before applying the managed binary through the existing transaction.
+
 Update/rollback explicitly enroll metadata for the current binary, previous binary and `previous.env`, and verify all published transaction resources before commit. Compensation preserves an intervening content or metadata edit and reports recovery required. Transaction-close errors propagate without a success message, even if the commit already completed; outer lock cleanup still runs.
 
 Restore parsing enumerates at most 64 visible members, rejects absolute/traversing names and payload-bearing directory entries, bounds the manifest to 64 KiB and declared resource totals to 512 MiB, and requires the complete 12-resource set before candidate validation. Before opening tar data, the parser lowers its own address-space budget to 128 MiB and CPU budget to 30 seconds, retaining stricter inherited soft/hard limits. This includes hidden PAX/GNU processing that occurs before a visible member is yielded. Memory/overflow/recursion exhaustion returns a parsing failure without candidate execution. CPU time is not a wall-clock deadline, and the budgets apply only to parsing. Candidate validation executes staged Core binaries as root; the operator must establish trusted PNM backup provenance using a separately retained trusted checksum. Root/mode/embedded approval data do not authenticate it. See D-009 in `docs/DECISIONS.md`.

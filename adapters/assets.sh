@@ -93,10 +93,18 @@ pnm_asset_stage_hysteria_binary() {
     local binary="${1:?hysteria binary required}"
     local staging_dir="${2:?staging directory required}"
     local destination="$staging_dir/hysteria"
+    local candidate
 
     [[ -f "$binary" && ! -L "$binary" ]] || return "$PNM_EXIT_CONFIG"
     pnm_mkdir_mode 0700 "$staging_dir" || return "$PNM_EXIT_CANTCREAT"
-    install -m 0755 -- "$binary" "$destination" || return "$PNM_EXIT_CANTCREAT"
-    [[ -x "$destination" ]] || return "$PNM_EXIT_CONFIG"
+    [[ ! -e "$destination" && ! -L "$destination" ]] || return "$PNM_EXIT_CANTCREAT"
+    candidate="$(mktemp "$staging_dir/.pnm-hysteria.XXXXXXXX")" || return "$PNM_EXIT_CANTCREAT"
+    if ! install -m 0755 -- "$binary" "$candidate"; then
+        rm -f -- "$candidate"
+        return "$PNM_EXIT_CANTCREAT"
+    fi
+    [[ -x "$candidate" ]] || { rm -f -- "$candidate"; return "$PNM_EXIT_CONFIG"; }
+    ln -T -- "$candidate" "$destination" || { rm -f -- "$candidate"; return "$PNM_EXIT_CANTCREAT"; }
+    rm -f -- "$candidate" || return "$PNM_EXIT_CANTCREAT"
     printf '%s\n' "$destination"
 }

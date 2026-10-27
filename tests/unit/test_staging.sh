@@ -33,6 +33,59 @@ test_hysteria_binary_stage_is_private_and_executable() {
     assert_eq 755 "$mode"
 }
 
+hysteria_staging_preserves_occupied_destination() (
+    local kind="$1" timing temp_dir destination
+    temp_dir="$(mktemp -d)"
+    trap 'rm -rf -- "$temp_dir"' EXIT
+    printf 'synthetic Core candidate' >"$temp_dir/source"
+    printf 'foreign target' >"$temp_dir/sentinel"
+    for timing in existing late; do
+        mkdir -m 0700 "$temp_dir/$timing"
+        destination="$temp_dir/$timing/hysteria"
+        occupy_destination() {
+            case "$kind" in
+                file) printf 'foreign file' >"$destination" ;;
+                directory) mkdir "$destination"; printf 'foreign contents' >"$destination/marker" ;;
+                link) command ln -s -- "$temp_dir/sentinel" "$destination" ;;
+            esac
+        }
+        if [[ "$timing" == existing ]]; then occupy_destination || return 1; fi
+        install() {
+            if [[ "$timing" == late ]]; then occupy_destination || return 1; fi
+            command install "$@"
+        }
+        run_capture pnm_asset_stage_hysteria_binary "$temp_dir/source" "$temp_dir/$timing"
+        unset -f install
+        assert_eq "$PNM_EXIT_CANTCREAT" "$RUN_RC" || return 1
+        assert_eq '' "$RUN_OUTPUT" || return 1
+        case "$kind" in
+            file) assert_eq 'foreign file' "$(<"$destination")" || return 1 ;;
+            directory)
+                assert_eq 'foreign contents' "$(<"$destination/marker")" || return 1
+                assert_eq 1 "$(find "$destination" -mindepth 1 -maxdepth 1 | wc -l)" || return 1 ;;
+            link) [[ -L "$destination" && "$(readlink -- "$destination")" == "$temp_dir/sentinel" ]] || return 1 ;;
+        esac
+        assert_eq 'foreign target' "$(<"$temp_dir/sentinel")" || return 1
+        [[ -z "$(find "$temp_dir/$timing" -maxdepth 1 -name '.pnm-*' -print -quit)" ]] || return 1
+    done
+)
+
+test_hysteria_staging_preserves_files() { hysteria_staging_preserves_occupied_destination file; }
+test_hysteria_staging_preserves_directories() { hysteria_staging_preserves_occupied_destination directory; }
+test_hysteria_staging_preserves_links() { hysteria_staging_preserves_occupied_destination link; }
+
+test_hysteria_staging_copy_failure_leaves_no_binary() (
+    local temp_dir
+    temp_dir="$(mktemp -d)"
+    trap 'rm -rf -- "$temp_dir"' EXIT
+    printf 'synthetic Core candidate' >"$temp_dir/source"
+    install() { command install "$@" || return $?; return 23; }
+    run_capture pnm_asset_stage_hysteria_binary "$temp_dir/source" "$temp_dir/staging"
+    assert_eq "$PNM_EXIT_CANTCREAT" "$RUN_RC" || return 1
+    assert_eq '' "$RUN_OUTPUT" || return 1
+    [[ -z "$(find "$temp_dir/staging" -mindepth 1 -print -quit)" ]]
+)
+
 test_xray_zip_stage_rejects_traversal() {
     local temp_dir archive rc
     temp_dir="$(mktemp -d)"
@@ -244,6 +297,10 @@ test_stdout_failure_removes_the_new_directory() {
 
 run_test 'stdout publication failure removes its temporary directory' test_stdout_failure_removes_the_new_directory
 run_test 'Hysteria2 binary staging sets executable mode' test_hysteria_binary_stage_is_private_and_executable
+run_test 'Hysteria2 staging preserves existing and late files' test_hysteria_staging_preserves_files
+run_test 'Hysteria2 staging refuses existing and late directories' test_hysteria_staging_preserves_directories
+run_test 'Hysteria2 staging preserves existing and late links and targets' test_hysteria_staging_preserves_links
+run_test 'Hysteria2 staging removes an incompletely copied private candidate' test_hysteria_staging_copy_failure_leaves_no_binary
 run_test 'Xray ZIP staging rejects traversal members' test_xray_zip_stage_rejects_traversal
 run_test 'Xray ZIP staging accepts a safe archive' test_xray_zip_stage_accepts_safe_archive
 run_test 'non-ZIP response refuses without executable publication or input changes' test_xray_stage_rejects_nonzip_without_executable_publication

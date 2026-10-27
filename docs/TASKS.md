@@ -632,6 +632,24 @@ arbitrary privileged concurrent writes or physical storage failure recovery.
 Local `make release-check` exits0:32 suites/434 passed/0 failed. The five
 ordinary root-only skips remain explicit. Ubuntu amd64 integration is pending.
 
+## Stage 17: Hysteria2 binary staging publication
+
+Validation basedfb561f4eae75574536c5c59b4ff694f4c3ab471. The shared staging
+helper used by host installation and Core update still
+copied directly to `hysteria`. Four added regressions reproduce replacement of
+existing files/links, accepting a destination directory, and retained executable
+bytes after a failed copy (15 passed/4 failed). Stage privately, verify executable
+access, then reuse the existing `ln -T` no-replace pattern. Occupied destinations
+return73 with no success path; owned failed-copy candidates are removed.
+
+Focused staging passes19/19, covering both preexisting and late destinations,
+preserved target/marker bytes, no nested executable or candidate leak, and copy
+failure after writing bytes. Standard and targeted ShellCheck pass. Caller
+version/configuration checks and managed transaction boundaries remain intact;
+no Core binary is executed by these synthetic staging tests. Local
+`make release-check` exits0:32 suites/438 passed/0 failed, retaining the five
+ordinary root-only skips. Ubuntu amd64 integration is pending.
+
 ## Next priorities
 
 1. Continue Ubuntu development/main-flow validation and fix reproducible local
