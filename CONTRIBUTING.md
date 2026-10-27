@@ -89,10 +89,14 @@ Core traffic. Record their root-only skips too.
 checks against synthetic assets, reusing the existing HTTPS fixture. It covers
 successful private publication, checksum refusal, truncated HTTP bodies,
 untrusted certificates and a controlled TLS-handshake timeout for both Cores.
+Two additional503 cases retain the production retry flags: two transient replies
+then success, or three failures exhausting the initial attempt plus two retries.
 It needs permission to bind a local socket; it does not install or execute Cores.
-The test curl wrapper disables curlrc, retries and uses short test-only deadlines;
-it does not establish the production downloader's retry/deadline policy or test
-upstream DNS outages. Ubuntu CI runs this target separately from the L1 suites.
+The test curl wrapper disables curlrc; fault-injection cases also disable retries.
+All cases use test-only transfer limits. The503 cases establish the declared
+retry count, without testing default overall deadlines, Retry-After behavior,
+other retryable statuses or upstream DNS outages. Ubuntu CI runs this target
+separately from the L1 suites.
 
 ## Integration and acceptance boundaries
 

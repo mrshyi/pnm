@@ -535,6 +535,29 @@ The acquisition unittest result is separate from the70 existing suite summaries;
 do not add repeated gates or execution layers as unique independent cases.
 No runtime module, CLI/config/URI format or VERSION changed in this stage.
 
+## Stage 14: actual HTTP503 retry-count candidate
+
+Validation parent9f90060. Extend the existing HTTPS fixture with per-path503
+budgets and request receipts, defaulting to no injected503 for all existing
+callers. Keep its10-connection bound, strict CONNECT/GET/path checks and owned
+socket/thread cleanup. The asset tests retain production curl retry flags in
+two additional cases; other fault cases still disable retries for bounded tests.
+No production module, CLI option, timeout or retry policy changes.
+
+Local actual curl/TLS suite passes7/7, covering both Cores. Two503 replies then a
+valid body require exactly three HTTP attempts, valid private publication and
+consumed failure budgets. Three503 replies exhaust initial+two retries, yielding
+curl22/adapter69 with no published destination or retained candidate. A private
+source-copy mutation removing `--retry 2` makes both new tests fail as expected,
+without changing repository runtime source. Transfer ceilings are test-only;
+Retry-After, other statuses, upstream DNS and default overall deadlines remain
+outside this evidence.
+
+Python parsing, embedded Bash syntax/ShellCheck, repository syntax/security,
+standard ShellCheck and the existing guest guard suite pass. Guest guards report
+33 total,25 executed and8 root-only skipped. Ubuntu amd64 CI execution remains
+pending publication of this candidate.
+
 ## Next priorities
 
 1. Continue Ubuntu development/main-flow validation and fix reproducible local

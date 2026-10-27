@@ -34,6 +34,8 @@ class AssetServer(socketserver.ThreadingTCPServer):
         self.requests: list[str]=[]
         self.partial_paths: set[str]=set()
         self.partial_requests: list[str]=[]
+        self.retry_budget: dict[str,int]={}
+        self.retry_requests: list[str]=[]
         self.tls_refusal_budget=0
         self.tls_refusals=0
         self.errors: list[str]=[]
@@ -141,6 +143,13 @@ class AssetRequest(socketserver.StreamRequestHandler):
             body=self.server.payloads[path]
             with self.server.lock:
                 partial=path in self.server.partial_paths
+                retry=self.server.retry_budget.get(path,0)
+                if retry:
+                    self.server.retry_budget[path]=retry-1
+                    self.server.retry_requests.append(path)
+            if retry:
+                connection.sendall(b'HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\nConnection: close\r\n\r\n')
+                return
             require(not partial or len(body)>1,'partial fixture requires a nontrivial asset')
             connection.sendall(('HTTP/1.1 200 OK\r\nContent-Length: '+str(len(body))+
                                 '\r\nConnection: close\r\nContent-Type: application/octet-stream\r\n\r\n').encode('ascii'))

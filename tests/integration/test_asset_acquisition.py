@@ -24,14 +24,16 @@ PINS = {
 DOWNLOAD = r'''
 set -Eeuo pipefail
 umask 077
-project=$1 core=$2 version=$3 digest=$4 destination=$5 receipt=$6 deadline=$7
+project=$1 core=$2 version=$3 digest=$4 destination=$5 receipt=$6 deadline=$7 retry_mode=$8
 source "$project/lib/common.sh"
 source "$project/lib/config.sh"
 source "$project/adapters/assets.sh"
-# Test-only timing/retry bounds; production timeout policy is not asserted.
+# Fault cases disable retries; retry cases preserve the production retry flags.
 curl() {
     local rc=0
-    command curl --disable "$@" --max-time "$deadline" --retry 0 || rc=$?
+    local -a bounds=(--max-time "$deadline")
+    [[ "$retry_mode" == default ]] || bounds+=(--retry 0)
+    command curl --disable "$@" "${bounds[@]}" || rc=$?
     printf '%s\n' "$rc" >"$receipt"
     return "$rc"
 }
@@ -79,7 +81,8 @@ class AcquisitionTest(unittest.TestCase):
             self.assertFalse(worker.is_alive(), "fixture request did not retire")
 
     def download(self, core: str, *, checksum: bool = True, trusted: bool = True,
-                 deadline: str = "5") -> tuple[subprocess.CompletedProcess, Path, int]:
+                 deadline: str = "5", default_retries: bool = False
+                 ) -> tuple[subprocess.CompletedProcess, Path, int]:
         version, _ = PINS[core]
         destination = self.root / core
         receipt = self.root / f"{core}.curl-status"
@@ -94,7 +97,8 @@ class AcquisitionTest(unittest.TestCase):
         result = subprocess.run([
             "bash", "-c", DOWNLOAD, "pnm-acquisition", str(PROJECT), core, version,
             digest, str(destination), str(receipt), deadline,
-        ], env=environment, capture_output=True, timeout=10)
+            "default" if default_retries else "single",
+        ], env=environment, capture_output=True, timeout=25)
         self.assertEqual(b"", result.stdout, "downloader must not publish an output path")
         self.assertTrue(receipt.is_file(), "real curl did not return a status")
         self.assertEqual([], list(self.root.glob(".pnm-asset.*")), "private candidate leaked")
@@ -125,6 +129,28 @@ class AcquisitionTest(unittest.TestCase):
             self.assert_refused(*self.download(core, checksum=False), 78, 0)
         self.finish_requests()
         self.assertEqual([], self.server.errors)
+
+    def test_transient_http_recovers_with_production_retries(self) -> None:
+        self.server.retry_budget.update({path: 2 for _, path in PINS.values()})
+        for core, (_, path) in PINS.items():
+            result, destination, curl_status = self.download(core, default_retries=True)
+            self.assertEqual(0, curl_status)
+            self.assertEqual(0, result.returncode)
+            self.assertEqual(BODY, destination.read_bytes())
+            self.assertEqual(0o600, destination.stat().st_mode & 0o777)
+            self.finish_requests()
+            self.assertEqual(2, self.server.retry_requests.count(path))
+            self.assertEqual(0, self.server.retry_budget[path])
+        self.assertCountEqual([path for _, path in PINS.values()], self.server.requests)
+
+    def test_transient_http_exhausts_production_retries(self) -> None:
+        self.server.retry_budget.update({path: 3 for _, path in PINS.values()})
+        for core, (_, path) in PINS.items():
+            self.assert_refused(*self.download(core, default_retries=True), 69, 22)
+            self.finish_requests()
+            self.assertEqual(3, self.server.retry_requests.count(path))
+            self.assertEqual(0, self.server.retry_budget[path])
+        self.assertEqual([], self.server.requests)
 
     def test_partial_http_body_never_publishes(self) -> None:
         self.server.partial_paths.update(path for _, path in PINS.values())
