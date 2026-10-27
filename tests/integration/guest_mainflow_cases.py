@@ -425,9 +425,8 @@ try:
     stage='node init and validate'
     external_tls=prepare_external_tls(logs/'external-tls') if scenario in ('external-ca','external-ca-mismatch') else None
     external_baseline={str(p):fingerprint(p) for p in external_tls.values()} if external_tls else {}
-    if external_tls:
-        env['PNM_SANDBOX_EXTERNAL_CERT']=str(external_tls['certificate'])
-        env['PNM_SANDBOX_EXTERNAL_KEY']=str(external_tls['key'])
+    install_options=(['--tls-cert',str(external_tls['certificate']),'--tls-key',str(external_tls['key'])]
+                     if external_tls else [])
     pins=json.loads(Path('/opt/pnm-test-versions.json').read_text())
     call('node-init',['node','init','--region','test','--address','203.0.113.10','--timezone','UTC',
         '--server-name','www.cloudflare.com','--target','www.cloudflare.com:443','--hy2-server-name','guest.invalid',
@@ -439,31 +438,22 @@ try:
     check(fields('/etc/pnm/node.conf')['PNM_CONFIGURED']=='no','node configured before apply')
     passed.append('actual CLI initializes and validates an uncommitted node')
     stage='installation preview'
-    call('install-preview',['install','--dry-run'])
+    call('install-preview',['install','--dry-run',*install_options])
     absent()
     check(fields('/etc/pnm/node.conf')['PNM_CONFIGURED']=='no','preview committed node state')
     passed.append('installation preview preserves original accounts and leaves runtime resources absent')
     if scenario=='external-ca-mismatch':
-        stage='external certificate/key mismatch compensation'
+        stage='external certificate/key mismatch preflight refusal'
         baseline_paths=('/etc/pnm/node.conf','/etc/pnm/versions.conf','/etc/passwd','/etc/group','/etc/shadow','/etc/gshadow')
         baseline={p:fingerprint(p) for p in baseline_paths}
         transactions=Path('/var/lib/pnm/transactions')
         before_transactions=set(transactions.iterdir())
-        env['PNM_SANDBOX_EXTERNAL_KEY']=str(external_tls['mismatched_key'])
-        try:
-            call('external-ca-mismatch',['install','--apply','--yes'],accepted=(78,))
-        finally:
-            env['PNM_SANDBOX_EXTERNAL_KEY']=str(external_tls['key'])
+        call('external-ca-mismatch',['install','--apply','--yes',
+            '--tls-cert',str(external_tls['certificate']),'--tls-key',str(external_tls['mismatched_key'])],accepted=(2,))
         absent()
         check(baseline=={p:fingerprint(p) for p in baseline_paths},'TLS refusal changed node configuration or account baseline')
         check(external_baseline=={p:fingerprint(p) for p in external_baseline},'TLS refusal changed external source files')
-        created=set(transactions.iterdir())-before_transactions
-        check(len(created)==1,'TLS mismatch did not exercise one installation transaction')
-        transaction=created.pop()
-        events=[line.split('\t')[1] for line in (transaction/'journal.tsv').read_text().splitlines()]
-        check(not (transaction/'commit.env').exists() and events[-1]=='ROLLED_BACK'
-              and 'ROLLBACK_COMPLETE' in events and 'RECOVERY_REQUIRED' not in events
-              and 'COMMIT' not in events,'TLS mismatch did not fully compensate')
+        check(before_transactions==set(transactions.iterdir()),'TLS mismatch began a write transaction')
     if scenario=='configured-ports':
         stage='configured-port conflict refusal'
         baseline_paths=('/etc/pnm/node.conf','/etc/pnm/versions.conf','/etc/passwd','/etc/group','/etc/shadow','/etc/gshadow')
@@ -534,7 +524,7 @@ try:
             installed=call('install-apply',['install','--apply','--yes'])
         verify_committed_progress(observed,installed,passed)
     else:
-        call('install-apply',['install','--apply','--yes'])
+        call('install-apply',['install','--apply','--yes',*install_options])
     check(fields('/etc/pnm/node.conf')['PNM_CONFIGURED']=='yes','successful install lacks committed node state')
     for protocol,port in (('tcp',ports['xray']),('udp',ports['hysteria2'])):
         observed=subprocess.check_output(['ss','-H','-lnt' if protocol=='tcp' else '-lnu'],text=True,timeout=10)
@@ -612,7 +602,7 @@ try:
     stage='repeat installation refusal'
     baseline={c:core_state(c) for c in units}
     fixed={p:fingerprint(p) for p in ('/etc/pnm/node.conf','/etc/pnm/versions.conf','/etc/passwd','/etc/group','/etc/shadow','/etc/gshadow')}
-    call('repeat-install',['install','--apply','--yes'],accepted=(2,))
+    call('repeat-install',['install','--apply','--yes',*install_options],accepted=(2,))
     check(baseline=={c:core_state(c) for c in units},'repeat install changed Core state')
     check(fixed=={p:fingerprint(p) for p in fixed},'repeat install changed configuration or identities')
     passed.append('repeat installation refuses without changing either Core or identities')

@@ -98,7 +98,9 @@ pnm_print_help() {
             return 0
             ;;
         install)
-            printf '%s\n' 'Usage: pnm install [--dry-run]' '       pnm install --apply --yes' '' 'Install the approved Xray and Hysteria2 cores using the configured node state.'
+            printf '%s\n' 'Usage: pnm install [--dry-run]' '       pnm install --apply --yes' \
+                '       Add --tls-cert FILE --tls-key FILE for external-ca nodes.' '' \
+                'Install the approved Xray and Hysteria2 cores using the configured node state.'
             return 0
             ;;
         restart | log | apply | update | rollback | backup | restore | uninstall)

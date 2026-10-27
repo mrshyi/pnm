@@ -6,6 +6,21 @@ PROJECT_ROOT="$(cd -- "$TEST_ROOT/.." && pwd -P)"
 # shellcheck source=../testlib.sh
 source "$TEST_ROOT/testlib.sh"
 
+test_external_tls_cli_usage() {
+    local args
+    for args in cert key; do
+        run_capture "$PROJECT_ROOT/bin/pnm" install "--tls-$args"
+        assert_eq 64 "$RUN_RC" || return 1
+        assert_contains "$RUN_ERROR" 'requires a file' || return 1
+    done
+    run_capture "$PROJECT_ROOT/bin/pnm" install --tls-cert /unused/cert
+    assert_eq 64 "$RUN_RC" || return 1
+    assert_contains "$RUN_ERROR" 'must be supplied together' || return 1
+    run_capture "$PROJECT_ROOT/bin/pnm" help install
+    assert_eq 0 "$RUN_RC" || return 1
+    assert_contains "$RUN_OUTPUT" '--tls-cert FILE --tls-key FILE'
+}
+
 test_help() {
     run_capture "$PROJECT_ROOT/bin/pnm" help
     assert_eq 0 "$RUN_RC" && assert_contains "$RUN_OUTPUT" 'Proxy Node Manager (PNM)'
@@ -87,6 +102,7 @@ test_update_cli_loads_approved_assets_before_preparation() (
 )
 
 run_test 'help command' test_help
+run_test 'install TLS arguments require paired values and appear in help' test_external_tls_cli_usage
 run_test 'version command' test_version
 run_test 'unknown command returns usage' test_unknown_command
 run_test 'broad commands are removed from the CLI' test_removed_broad_commands_return_usage

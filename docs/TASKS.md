@@ -768,8 +768,28 @@ the CA fixture validation and existing selected integration; the newly scripted
 external-ca CLI installation/compensation and damaged-restore guest paths were
 not executed by CI and remain unaccepted. No U-02–U-08 PASS is inferred.
 
-1. Freeze runtime baseline c4e906c and the finite U-01–U-08 checklist. This
-   documentation closeout adds no runtime changes or new dynamic-test claims.
+U-03 user-facing installation repair (2026-10-27): node initialization exposed
+external-ca but installation accepted no public source-file arguments. Added
+paired `--tls-cert FILE --tls-key FILE` inputs, scoped to the invocation and
+forwarded through existing deployment/TLS staging. Pair and configured or legacy
+inferred SAN checks run after ordinary preflight and before deployment. Bad or
+missing inputs return preflight2; malformed argument pairs return64. Self-signed
+defaults, internal environment compatibility and managed transaction behavior are
+preserved. No credential/configuration/URI format or VERSION change.
+
+Five new L1 regressions reproduce the entry gap (14 existing passed/5 failed),
+then pass19/19 after repair, including paths with spaces, JSON preview, legacy
+name inference/input variables, missing/wrong inputs and default self-signed
+behavior. Actual CLI parser/help tests pass12/12 (one normal root-only skip).
+Preparation passes36 total/28 executed/8 root-only skipped. Standard and targeted
+ShellCheck pass. Guest scenarios now use the public arguments and require wrong
+keys to refuse before any write transaction rather than exercising rollback.
+Local `make release-check` exits0:32 suites/444 passed/0 failed, retaining the
+five ordinary non-root skips. Full Ubuntu guest installation/reboot remains
+BLOCKED; Ubuntu CI execution of this runtime repair is pending.
+
+1. Pin the latest validated runtime baseline above and the finite U-01–U-08
+   checklist. Change it only for reproduced in-scope main-flow defects.
 2. Obtain explicitly authorized disposable Ubuntu22.04/24.04 amd64/systemd boot
    fixtures and independently verified approved Core/backup assets; record what
    installation, account changes, scoped faults and guest reboot are authorized.

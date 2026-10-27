@@ -79,6 +79,21 @@ For automation, pass the same values as flags. `pnm node add` is an alias for `i
 
 Before changing an installed node, keep a copy of `node.conf`. If validation or service restart fails, `pnm apply xray` restores the previous runtime Xray file and restarts the prior service; the proposed `node.conf` remains the desired state for retry. `pnm node show` reports this drift and `pnm node links` refuses to emit links until the files match. To revert the entire change, restore the saved `node.conf` and run `sudo pnm apply xray` again. Do not rerun installation to change REALITY settings.
 
+For an `external-ca` node, choose that TLS mode during initialization and set
+`--hy2-server-name` to a DNS SAN in your certificate. Supply the certificate chain
+and matching private key when previewing or applying installation:
+
+```bash
+sudo pnm install --dry-run --tls-cert /root/tls/fullchain.pem --tls-key /root/tls/privkey.pem
+sudo pnm install --apply --yes --tls-cert /root/tls/fullchain.pem --tls-key /root/tls/privkey.pem
+```
+
+Both inputs must be readable regular files; symbolic links are rejected. PNM
+checks the pair and TLS server name before deployment, imports them into its
+managed TLS paths, and preserves the source files. The two options must be
+supplied together and apply to `external-ca` nodes. Self-signed nodes retain
+the existing installation command without these options.
+
 ## Install and use PNM on a VPS
 
 Use a supported Debian 12/13 or Ubuntu 22.04/24.04 amd64 host with systemd, root access, and an internet connection. The installer needs `curl` and `tar`; core installation checks for its required tools, including `unzip` for the Xray archive.

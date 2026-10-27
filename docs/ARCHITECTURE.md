@@ -41,6 +41,14 @@ still names the candidate inode; a foreign replacement is preserved and returns7
 This assumes protected staging parents, as does backup publication.
 Managed-file publication and compensation still belong to the outer transaction.
 
+`pnm install` accepts paired `--tls-cert FILE --tls-key FILE` inputs for
+external-ca nodes. After ordinary preflight succeeds, it uses the shared pair
+validator and existing configured/legacy-inferred SAN policy before deployment.
+Missing or mismatched inputs fail preflight; source paths remain scoped to this
+invocation and reach the existing TLS staging/transaction facilities. Existing
+internal environment inputs remain compatible. Staging still revalidates the
+pair, certificate dates and rendered configuration before commit.
+
 Config apply shares the guarded Core file writer with archive restore. Runtime
 configuration metadata is required at publication, checked before ownership
 normalization and re-enrolled only against the fixed intended tuple. External

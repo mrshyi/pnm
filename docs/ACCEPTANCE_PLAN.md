@@ -52,7 +52,7 @@ U-08 使用能真实重新启动的隔离 VM，不能用 systemd reexec、重启
 |---|---|---|
 | U-01 | 两版本仓库门禁与现有隔离 CI | `make check`、`make shellcheck`、`make release-check` 成功；现有特权、回环传输、systemd、固定真实 Core 检查通过；区分重复门禁和非 root 跳过。仅代表这些执行层；G-05/G-06 |
 | U-02 | 全新节点源码身份核对与 selfsigned-pin 双 Core 完整 CLI 安装 | 安装前后核对实际入口、库文件来源/摘要与测试提交；记录架构/systemd/Core 版本；两 Core 配置、真实进程/监听、独立 applied/InvocationID、configured 标记及唯一提交一致；账户数字 UID/GID、TLS 模式和实际可读性正确；G-01/G-02/G-06，T-01/T-04/T-12 |
-| U-03 | 凭据保护及 external-ca 分支 | 重复安装明确拒绝且原凭据/TLS 字节不变；另一全新克隆使用匹配 DNS SAN 的有效外部证书完成安装；独立克隆的错配证书/私钥被拒绝并补偿，无隐式轮换或外部文件覆盖；G-02/G-06，T-02/T-12 |
+| U-03 | 凭据保护及 external-ca 分支 | 重复安装明确拒绝且原凭据/TLS 字节不变；另一全新克隆用 `--tls-cert`/`--tls-key` 提供匹配 DNS SAN 的有效外部证书完成安装；独立克隆的错配证书/私钥在事务前拒绝，原状态不变；后续变更失败仍按既有事务补偿，无隐式轮换或外部文件覆盖；G-02/G-06，T-02/T-12 |
 | U-04 | 两 Core 各一次 apply/restart 与外部 restart | 分别执行现有 `pnm` 命令并核对实际配置、InvocationID 和链接状态；操作一个 Core 不重启或改写另一 Core；外部 restart 后不能凭旧 applied 证据判 ready，经验证 apply 后重新确认；G-01，T-25/T-26 |
 | U-05 | 两 Core 各一次不同批准版本 update→rollback | 当前 binary、previous 和版本元数据始终成对；实际运行版本、健康及 applied 一致；两条操作链均保留另一 Core 的进程/文件证据；G-03，T-22/T-25 |
 | U-06 | 可信 backup→状态变更→restore，加一个损坏包拒绝 | 先独立记录可信 archive 摘要，确认有效内容/配置/权限恢复且两 Core 健康；损坏包在执行候选及修改管理资源前拒绝；遵守 D-009，不执行未知来源包；G-04，T-23/T-24 |

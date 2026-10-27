@@ -19,6 +19,7 @@ source "$PNM_ADAPTER_DIR/systemd.sh"
 source "$PNM_ADAPTER_DIR/network.sh"
 # shellcheck source=../../lib/install.sh
 source "$PNM_LIB_DIR/install.sh"
+source "$PNM_LIB_DIR/tls.sh"
 # shellcheck source=../testlib.sh
 source "$TEST_ROOT/testlib.sh"
 
@@ -34,6 +35,83 @@ pnm_deploy_apply() { DEPLOY_STARTED=1; return 0; }
 
 RECOVERY_VERIFIED=0
 pnm_recovery_listener_owned() { ((RECOVERY_VERIFIED == 1)); }
+
+prepare_install_tls_fixture() {
+    install_fixture="$(mktemp -d)"
+    trap 'rm -rf -- "$install_fixture"' EXIT
+    install_mode=external-ca
+    install_server=example.invalid
+    PNM_MISSING_TOOL=''
+    PNM_DRY_RUN=0 PNM_ASSUME_YES=0
+    unset PNM_SANDBOX_EXTERNAL_CERT PNM_SANDBOX_EXTERNAL_KEY
+    openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes -days 1 \
+        -subj '/CN=example.invalid' -addext 'subjectAltName=DNS:example.invalid' \
+        -keyout "$install_fixture/private key" -out "$install_fixture/certificate" >/dev/null 2>&1 || return 1
+    pnm_preflight_collect() {
+        pnm_preflight_reset
+        PNM_PREFLIGHT_NODE_CONFIG=([HY2_TLS_MODE]="$install_mode" [HY2_TLS_SERVER_NAME]="$install_server")
+    }
+    pnm_deploy_apply() {
+        printf '%s\n%s\n' "${PNM_SANDBOX_EXTERNAL_CERT:-}" "${PNM_SANDBOX_EXTERNAL_KEY:-}" >"$install_fixture/applied"
+    }
+}
+
+test_install_external_tls_arguments_reach_existing_deployment() (
+    prepare_install_tls_fixture || return 1
+    run_capture pnm_install --apply --yes --tls-cert "$install_fixture/certificate" --tls-key "$install_fixture/private key"
+    assert_eq 0 "$RUN_RC" || return 1
+    assert_eq "$install_fixture/certificate"$'\n'"$install_fixture/private key" "$(<"$install_fixture/applied")" || return 1
+    [[ ! -v PNM_SANDBOX_EXTERNAL_CERT && ! -v PNM_SANDBOX_EXTERNAL_KEY ]] || return 1
+    PNM_SANDBOX_EXTERNAL_CERT="$install_fixture/certificate"
+    PNM_SANDBOX_EXTERNAL_KEY="$install_fixture/private key"
+    install_server=''
+    run_capture pnm_install --apply --yes
+    assert_eq 0 "$RUN_RC" || return 1
+    assert_eq "$install_fixture/certificate" "$PNM_SANDBOX_EXTERNAL_CERT" || return 1
+    assert_eq "$install_fixture/private key" "$PNM_SANDBOX_EXTERNAL_KEY"
+)
+
+test_install_external_tls_preview_does_not_apply() (
+    prepare_install_tls_fixture || return 1
+    PNM_OUTPUT_MODE=json
+    run_capture pnm_install --dry-run --tls-cert "$install_fixture/certificate" --tls-key "$install_fixture/private key"
+    assert_eq 0 "$RUN_RC" || return 1
+    [[ ! -e "$install_fixture/applied" ]] || return 1
+    python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["schema"]=="pnm.install-plan.v1"; assert any(c["id"]=="external_tls" and c["status"]=="OK" for c in d["preflight"]["checks"])' <<<"$RUN_OUTPUT" || return 1
+    assert_not_contains "$RUN_OUTPUT$RUN_ERROR" 'PRIVATE KEY'
+)
+
+test_install_external_tls_missing_inputs_refuse_before_apply() (
+    prepare_install_tls_fixture || return 1
+    run_capture pnm_install --apply --yes
+    assert_eq 2 "$RUN_RC" || return 1
+    [[ ! -e "$install_fixture/applied" ]] || return 1
+    assert_contains "$RUN_OUTPUT" '--tls-cert'
+)
+
+test_install_external_tls_invalid_pair_or_name_refuses_before_apply() (
+    prepare_install_tls_fixture || return 1
+    openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:prime256v1 -out "$install_fixture/wrong key" >/dev/null 2>&1 || return 1
+    run_capture pnm_install --apply --yes --tls-cert "$install_fixture/certificate" --tls-key "$install_fixture/wrong key"
+    assert_eq 2 "$RUN_RC" || return 1
+    [[ ! -e "$install_fixture/applied" ]] || return 1
+    install_server=wrong.invalid
+    run_capture pnm_install --apply --yes --tls-cert "$install_fixture/certificate" --tls-key "$install_fixture/private key"
+    assert_eq 2 "$RUN_RC" || return 1
+    [[ ! -e "$install_fixture/applied" ]]
+)
+
+test_install_selfsigned_refuses_external_arguments_and_preserves_default() (
+    prepare_install_tls_fixture || return 1
+    install_mode=selfsigned-pin
+    run_capture pnm_install --apply --yes --tls-cert "$install_fixture/certificate" --tls-key "$install_fixture/private key"
+    assert_eq 2 "$RUN_RC" || return 1
+    [[ ! -e "$install_fixture/applied" ]] || return 1
+    PNM_ASSUME_YES=0
+    run_capture pnm_install --apply --yes
+    assert_eq 0 "$RUN_RC" || return 1
+    [[ -f "$install_fixture/applied" ]]
+)
 
 test_port_preflight_allows_only_verified_recovery_listener() {
     LISTENER_PRESENT=1
@@ -275,4 +353,9 @@ run_test 'recovery requires a secure abandoned deployment that reached post-heal
 run_test 'listener ownership is attributed by exact PID' test_listener_attribution_uses_pid_not_process_name
 run_test 'recovery accepts recorded legacy Unit only while its file hash matches' test_recorded_legacy_unit_is_recoverable_only_while_hash_matches
 run_test 'recovery accepts an empty DropInPaths property and rejects overrides' test_dropin_check_accepts_empty_and_rejects_overrides
+run_test 'external TLS arguments reach deployment without leaking into caller scope' test_install_external_tls_arguments_reach_existing_deployment
+run_test 'external TLS preview validates inputs without applying' test_install_external_tls_preview_does_not_apply
+run_test 'external TLS installation requires source inputs before apply' test_install_external_tls_missing_inputs_refuse_before_apply
+run_test 'external TLS installation refuses mismatched keys and DNS SAN before apply' test_install_external_tls_invalid_pair_or_name_refuses_before_apply
+run_test 'self-signed installation rejects external arguments and retains default behavior' test_install_selfsigned_refuses_external_arguments_and_preserves_default
 finish_tests

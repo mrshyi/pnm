@@ -4,9 +4,9 @@ Current Ubuntu work is limited to [U-01–U-08](../../docs/ACCEPTANCE_PLAN.md#ub
 For U-03, `PNM_GUEST_SCENARIO=external-ca` selects the normal lifecycle using a
 private test-CA-signed DNS-SAN certificate. `external-ca-mismatch` starts in a
 separate fresh clone, first imports that certificate with an independent wrong
-key and requires CLI78, full authority/NSS rollback and no commit, then retries
-with the matching key through the normal lifecycle. Both use the existing
-external-input environment variables; no product CLI arguments are added.
+key and requires preflight CLI2, unchanged authority/NSS and no write transaction,
+then retries with the matching key through the normal lifecycle. Both now pass
+the public `--tls-cert FILE --tls-key FILE` installation arguments.
 The source certificate/key must remain unchanged, and the external-ca URI must
 retain SNI without insecure/pin bypass. Local certificate checks prove the fixture
 chain and pair only, not guest installation or public client trust.
