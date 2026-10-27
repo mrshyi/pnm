@@ -36,6 +36,32 @@ test_asset_hash_verification() {
     assert_eq 1 "$rc"
 }
 
+test_asset_hash_accepts_backslash_in_source_path() (
+    local temp_dir asset digest
+    temp_dir="$(mktemp -d)"
+    trap 'rm -rf -- "$temp_dir"' EXIT
+    asset="$temp_dir/asset\\name"
+    printf 'verified payload' >"$asset"
+    digest="$(sha256sum <"$asset")"
+    digest="${digest%% *}"
+    pnm_asset_verify_file "$asset" "$digest" || return 1
+    [[ "$(<"$asset")" == 'verified payload' ]]
+)
+
+test_asset_hash_query_failure_refuses_even_with_matching_output() (
+    local temp_dir asset digest
+    temp_dir="$(mktemp -d)"
+    trap 'rm -rf -- "$temp_dir"' EXIT
+    asset="$temp_dir/asset"
+    printf 'verified payload' >"$asset"
+    digest="$(sha256sum <"$asset")"
+    digest="${digest%% *}"
+    sha256sum() { printf '%s  -\n' "$digest"; return 23; }
+    set +o pipefail
+    run_capture pnm_asset_verify_file "$asset" "$digest"
+    assert_eq 1 "$RUN_RC"
+)
+
 test_assets_json_has_no_secrets() {
     local old_config="$PNM_CONFIG_DIR"
     PNM_CONFIG_DIR="$TEST_ROOT/fixtures/config-secrets"
@@ -158,6 +184,8 @@ test_asset_permission_failure_refuses_publication() { asset_publication_failure_
 
 run_test 'asset URLs are fixed by Core and version' test_asset_urls_are_pinned_by_core_and_version
 run_test 'asset SHA-256 verification fails closed' test_asset_hash_verification
+run_test 'asset verification accepts literal backslashes in Linux paths' test_asset_hash_accepts_backslash_in_source_path
+run_test 'failed hash queries refuse matching output without depending on pipefail' test_asset_hash_query_failure_refuses_even_with_matching_output
 run_test 'assets output is JSON and excludes Secret values' test_assets_json_has_no_secrets
 run_test 'verified download atomically installs the payload' test_verified_download_atomically_installs_payload
 run_test 'failed download removes its partial candidate without publication' test_failed_download_removes_partial_candidate

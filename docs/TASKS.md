@@ -10,11 +10,11 @@ Ubuntu22.04/24.04 CI/regressions. Local preparation checks below used parent
 ## Continuation checkpoint
 
 - Local stage commits:166e828 (CI evidence),6ec55cc (asset publication),5eb8be9
-  (ZIP observation/mode errors). They have not been pushed.
-- Stage4 changes only the approved-version test fixture and this record;
-  focused7/7 and full32-suite/406-test gates passed. Its validation parent is
-  5eb8be9; resolve final stage commit identity with Git. Runtime code is unchanged
-  since5eb8be9. Logs: `/tmp/pnm-stage4-versions.S7jmiGqQ/`.
+  (ZIP observation/mode errors),ae838f5 (version-query refusal tests). They have
+  not been pushed.
+- Stage5 repairs shared checksum verification for literal backslashes in Linux
+  paths and propagates hash-tool failures independently of caller pipefail.
+  Validation parent:ae838f5. Resolve the final stage commit with Git.
 - Next integration work needs an explicitly authorized disposable Debian13
   x86_64/root/systemd environment; the environment question is pending.
   Do not provision, run faults on the development host, push or start Phase4.
@@ -249,9 +249,28 @@ same. No additional independent full run is counted. Private logs:
 `/tmp/pnm-stage4-versions.S7jmiGqQ/`. These remain L1 boundary checks, not official
 Core execution, a failed real filesystem, root identity or L2 acceptance.
 
+## Stage 5: filename-independent checksum verification
+
+Validation parentae838f5. A real GNU sha256sum probe rejected a correct approved
+digest when the source filename contained a literal backslash: filename escaping
+prepended a backslash to the parsed digest. The shared verifier now reads the
+content through standard input, checks the tool's exit status directly and
+extracts the digest without an awk pipeline. Download, cached and supplied-asset
+callers retain their interfaces and mismatch refusal behavior.
+
+Two regressions first failed (11 passed/2 failed), then the focused asset suite
+passed13/13. One uses an actual backslash-containing Linux path and real hashing;
+the other injects matching checksum output followed by exit23 with caller
+pipefail disabled. No network, Core or host service is involved. Private logs:
+`/tmp/pnm-stage5-hash.sKgyFC7V/`.
+
+`make release-check` exits0:32 suites,408 passed,0 failed. Standard ShellCheck
+and supplemental asset-test ShellCheck exit0. The same root-only skips remain;
+this is L1 evidence, not a fresh supported-platform integration result.
+
 ## Next priorities
 
-1. Stage5 prerequisite: provide/authorize a disposable Debian13 x86_64 root/systemd
+1. Integration prerequisite: provide/authorize a disposable Debian13 x86_64 root/systemd
    fixture for changed TLS, acquisition and permission paths. The environment
    question is pending; no approved fixture/asset cache has been supplied here.
    Replay changed paths only after those prerequisites are established.

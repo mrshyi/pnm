@@ -25,8 +25,8 @@ pnm_asset_verify_file() {
     [[ -f "$path" && ! -L "$path" ]] || return 1
     pnm_validate_sha256 "$expected_sha256" || return 2
     pnm_command_exists sha256sum || return 2
-    actual="$(sha256sum -- "$path" 2>/dev/null | awk '{print $1}')" || return 1
-    [[ "$actual" == "${expected_sha256,,}" ]]
+    actual="$(sha256sum 2>/dev/null <"$path")" || return 1
+    [[ "${actual%% *}" == "${expected_sha256,,}" ]]
 }
 
 pnm_asset_download_verified() {

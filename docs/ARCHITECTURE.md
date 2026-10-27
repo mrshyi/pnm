@@ -185,6 +185,10 @@ The Core operations include per-Core restart/log/apply/update/rollback and backu
 
 Update/rollback retain the existing exclusive PNM lock from preparation through transaction completion and compensation. Argument validation/root checks precede this boundary; pending deployments are checked under the lock before preparation. Version pins, service state, current/previous binaries and configuration baselines are then read while cooperating PNM writers are excluded. The existing transaction lock is reentrant, and each wrapper releases only its own lock level, including early failures. Asset download remains inside this global boundary, so other writers and consistency-sensitive readers may report contention during preparation. This does not coordinate arbitrary privileged writers that ignore the PNM lock.
 
+Shared asset verification hashes file content through standard input, avoiding
+filename escaping in checksum output, and checks the hash tool's exit status
+directly before comparing the digest.
+
 The shared asset downloader refuses existing destination files and links before
 transport, checks candidate mode0600, and publishes without overwriting or moving
 into a destination directory. A skipped `mv -n` is a failure, not a successful
