@@ -15,14 +15,23 @@ test_nonroot_diagnostics_do_not_claim_deployment_ready() (
     root="$(mktemp -d)"
     trap 'rm -rf -- "$root"' EXIT
     chmod 0755 "$root"
+    # The runner's checkout can live below a home inaccessible to nobody.
+    mkdir -m 0755 "$root/source"
+    cp -R -- "$PROJECT_ROOT/bin" "$PROJECT_ROOT/lib" "$PROJECT_ROOT/adapters" \
+        "$PROJECT_ROOT/VERSION" "$root/source/"
+    chmod -R u=rwX,go=rX "$root/source"
+    cp -- "$TEST_ROOT/fixtures/os-release-debian-13" "$root/os-release"
+    chmod 0644 "$root/os-release"
+    runuser -u nobody -- test -r "$root/source/bin/pnm" || return 1
     mkdir -m 0700 "$root/config" "$root/state"
     touch "$root/lock"
     chmod 0600 "$root/lock"
-    nonroot_pnm() {
+    nonroot_pnm() (
+        cd -- "$root/source" || return 1
         runuser -u nobody -- env PNM_CONFIG_DIR="$root/config" PNM_STATE_DIR="$root/state" \
-            PNM_LOCK_FILE="$root/lock" PNM_OS_RELEASE_FILE="$TEST_ROOT/fixtures/os-release-debian-13" \
-            bash "$PROJECT_ROOT/bin/pnm" "$@"
-    }
+            PNM_LOCK_FILE="$root/lock" PNM_OS_RELEASE_FILE="$root/os-release" \
+            bash "$root/source/bin/pnm" "$@"
+    )
     run_capture nonroot_pnm --json check
     assert_eq 1 "$RUN_RC" || return 1
     CHECK_JSON="$RUN_OUTPUT" python3 - <<'PY'

@@ -2,7 +2,7 @@
 
 **Updated:** 2026-10-26. **Phase 3 remains incomplete; Phase 4 and release work have not started.**
 
-**Published baseline:** branch `dev`, commit `d2b1844`, VERSION
+**Published baseline:** branch `dev`, commit `bd9319a`, VERSION
 `0.16.0-rc.1`, including TLS/test repairs, cloud-development cleanup and
 Ubuntu22.04/24.04 CI/regressions plus stage11 integration below. Earlier preparation checks
 used their recorded parents; do not attribute earlier39312aa CI to this baseline.
@@ -22,6 +22,10 @@ used their recorded parents; do not attribute earlier39312aa CI to this baseline
   [integration run40446477495](https://github.com/mrshyi/pnm/actions/runs/40446477495)
   targets d2b1844d7acaf79e8baf04c5fa007ee4e906688f. Both Ubuntu jobs passed L1,
   real systemd8/8 and official-Core10/10; see stage11 below.
+- Stage12 candidate bd9319a is published:
+  [run40448066295](https://github.com/mrshyi/pnm/actions/runs/40448066295)
+  targets bd9319a65c9f4af6abdbe172fe3b7ae2e96377eb; both jobs exposed a read-access
+  fixture bootstrap failure (126). The fixture correction is awaiting a fresh run.
 - Root service/Core integration now uses disposable Ubuntu22.04/24.04 amd64
   GitHub-hosted runners. The ARM64/non-root development host remains L1 only;
   do not provision it, run service/storage faults on it or start Phase4 automatically.
@@ -465,6 +469,18 @@ permission checks or expectations. Ordinary non-root L1 behavior remains a skip.
 Local Bash syntax, supplemental ShellCheck and the workflow matrix/entry-point
 assertions pass. Actual privileged execution remains pending the new CI source;
 the previous stage11 Core/service results do not count as this suite's run.
+
+Candidate run40448066295 failed on both Ubuntu versions: CLI11/11 passes, then
+read-access0/1 returns126 instead of1 before the remaining privileged suites can
+run. Ordinary check/release-check32/419 and ShellCheck pass. The nobody process
+cannot open the checkout below the runner's protected workspace. The corrected
+test copies only bin/lib/adapters/VERSION and the public OS fixture into its
+owned readable temporary tree, confirms nobody can read the entry point, and
+leaves config/state0700 and lock0600. All original exit/status assertions remain.
+CLI code runs from the copied tree; production permission guards are unchanged.
+Local copied-CLI version/help bootstrap, Bash syntax, supplemental ShellCheck and
+workflow assertions pass. Move the privileged step after initial check/ShellCheck
+and before the repeated release-check to surface these failures sooner.
 
 ## Next priorities
 
