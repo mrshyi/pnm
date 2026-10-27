@@ -9,7 +9,7 @@ SYSTEMCTL="$(command -v systemctl)" || exit 69
 case "$("$SYSTEMCTL" is-system-running 2>/dev/null || true)" in running|degraded) ;; *) exit 69 ;; esac
 [[ -d /run/systemd/system && ! -L /run/systemd/system &&
     -d /etc/systemd/system/multi-user.target.wants && ! -L /etc/systemd/system/multi-user.target.wants &&
-    -x /usr/bin/sleep ]] || exit 69
+    -x /usr/bin/python3 ]] || exit 69
 id nobody >/dev/null || exit 69
 
 TEST_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
@@ -21,6 +21,7 @@ source "$PROJECT_ROOT/lib/render.sh"
 source "$PROJECT_ROOT/lib/lock.sh"
 source "$PROJECT_ROOT/lib/transaction.sh"
 source "$PROJECT_ROOT/adapters/systemd.sh"
+source "$PROJECT_ROOT/adapters/network.sh"
 source "$PROJECT_ROOT/lib/lifecycle.sh"
 source "$PROJECT_ROOT/lib/core-ops.sh"
 source "$TEST_ROOT/testlib.sh"
@@ -76,17 +77,39 @@ trap 'cleanup $?' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
+ports="$(python3 - <<'PY'
+import socket
+with socket.socket() as tcp, socket.socket(type=socket.SOCK_DGRAM) as udp:
+    tcp.bind(("127.0.0.1", 0))
+    udp.bind(("127.0.0.1", 0))
+    print(tcp.getsockname()[1], udp.getsockname()[1])
+PY
+)" || exit 69
+read -r xray_port hy2_port <<<"$ports"
+pnm_validate_port "$xray_port" && pnm_validate_port "$hy2_port" &&
+    ((xray_port > 1024 && hy2_port > 1024)) || exit 69
+
 create_test_units() {
-    local unit file load text digest
+    local core unit file load text digest port socket_type listen
     for unit in "${fixture_units[@]}"; do
         file="/run/systemd/system/$unit"
         [[ ! -e "$file" && ! -L "$file" && ! -e "/etc/systemd/system/$unit" && ! -L "/etc/systemd/system/$unit" ]] || return 73
         load="$(real_systemctl show "$unit" --property LoadState --value)" || return 69
         [[ "$load" == not-found ]] || return 73
     done
-    text=$'[Unit]\nDescription=PNM isolated lifecycle acceptance fixture\n[Service]\nType=exec\nUser=nobody\nExecStart=/usr/bin/sleep infinity\nNoNewPrivileges=yes\nCapabilityBoundingSet=\nAmbientCapabilities=\nTimeoutStartSec=10\nTimeoutStopSec=5\n[Install]\nWantedBy=multi-user.target\n'
-    digest="$(printf '%s' "$text" | sha256sum)"; digest=${digest%% *}
-    for unit in "${fixture_units[@]}"; do
+    for core in xray.service hysteria-server.service; do
+        unit=${fixture_units[$core]}
+        if [[ "$core" == xray.service ]]; then
+            port=$xray_port socket_type=STREAM listen='s.listen();'
+        else
+            port=$hy2_port socket_type=DGRAM listen=''
+        fi
+        printf -v text '%s\n' '[Unit]' 'Description=PNM isolated lifecycle acceptance fixture' \
+            '[Service]' 'Type=exec' 'User=nobody' \
+            "ExecStart=/usr/bin/python3 -c 'import socket,time; s=socket.socket(socket.AF_INET,socket.SOCK_$socket_type); s.bind((\"127.0.0.1\",$port)); $listen time.sleep(86400)'" \
+            'NoNewPrivileges=yes' 'CapabilityBoundingSet=' 'AmbientCapabilities=' \
+            'TimeoutStartSec=10' 'TimeoutStopSec=5' '[Install]' 'WantedBy=multi-user.target'
+        digest="$(printf '%s' "$text" | sha256sum)"; digest=${digest%% *}
         file="/run/systemd/system/$unit"
         created_units[$unit]=$digest
         (umask 022; set -o noclobber; printf '%s' "$text" >"$file") || return 73
@@ -121,8 +144,14 @@ pnm_systemctl() {
 PNM_STATE_DIR="$fixture_root/state" PNM_LOCK_FILE="$fixture_root/pnm.lock"
 PNM_XRAY_CONFIG="$fixture_root/xray.json" PNM_HY2_CONFIG="$fixture_root/hy2.yaml"
 mkdir -m 0700 "$PNM_STATE_DIR"
-printf '{}\n' >"$PNM_XRAY_CONFIG"
-printf 'fixture: true\n' >"$PNM_HY2_CONFIG"
+PNM_CONFIG_DIR="$TEST_ROOT/fixtures/config-secrets"
+declare -A fixture_node=() fixture_reality=() fixture_hysteria=()
+pnm_load_node_config fixture_node
+pnm_load_reality_secret fixture_reality
+pnm_load_hysteria_secret fixture_hysteria
+fixture_node[XRAY_PORT]=$xray_port fixture_node[HY2_PORT]=$hy2_port
+pnm_render_xray_config fixture_node fixture_reality >"$PNM_XRAY_CONFIG"
+pnm_render_hysteria_config fixture_node fixture_hysteria >"$PNM_HY2_CONFIG"
 
 seed_applied_fixture() {
     local core=$1 config=$2 unit=$3 directory="$PNM_STATE_DIR/cores/$1"
@@ -141,6 +170,8 @@ test_real_activation() {
     pnm_core_lifecycle_apply hysteria2 || return 1
     assert_service_policy xray.service active enabled || return 1
     assert_service_policy hysteria-server.service active enabled || return 1
+    pnm_core_runtime_listener_ready xray "$PNM_XRAY_CONFIG" || return 1
+    pnm_core_runtime_listener_ready hysteria2 "$PNM_HY2_CONFIG" || return 1
     assert_eq nobody "$(pnm_systemd_show_value xray.service User)"
 }
 test_real_restart_retains_peer_and_binds_applied_invocation() {
@@ -183,16 +214,18 @@ test_real_term_recovery() {
 }
 
 test_real_config_compensation_preserves_disabled_policy() {
+    local original
     pnm_systemctl start xray.service && pnm_systemctl disable xray.service || return 1
     pnm_core_resolve xray || return 1
     pnm_core_lifecycle_snapshot xray || return 1
+    original="$(pnm_tx_file_sha256 "$PNM_XRAY_CONFIG")" || return 1
     printf 'candidate\n' >"$fixture_root/candidate"
     pnm_tx_begin core-config-xray || return 1
     pnm_tx_add_rollback pnm_core_restore_config || return 1
     pnm_tx_write_file "$fixture_root/candidate" "$PNM_XRAY_CONFIG" core_config 0640 required || return 1
     pnm_tx_rollback || return 1
     pnm_tx_close || return 1
-    assert_eq '{}' "$(<"$PNM_XRAY_CONFIG")" || return 1
+    assert_eq "$original" "$(pnm_tx_file_sha256 "$PNM_XRAY_CONFIG")" || return 1
     assert_service_policy xray.service active disabled
 }
 

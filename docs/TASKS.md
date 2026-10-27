@@ -400,6 +400,34 @@ The follow-up CI preparation reuses existing isolated integration targets; it
 must retain their ownership/cleanup guards and needs actual run results before
 any stronger acceptance claim.
 
+## Stage 11: Ubuntu-hosted service and real-Core integration candidate
+
+Validation parentd76379d. CI now explicitly invokes existing test-systemd and
+test-real-cores after the ordinary gates, on the same disposable Ubuntu22.04/24.04
+amd64 runners. A30-minute job deadline bounds the CI operation. Pinned fixture
+assets are acquired by the existing shared downloader from the test manifest's
+versions/hashes into an owned root-private temporary cache; the real-Core harness
+independently validates size/hash/ownership before execution. EXIT removes the
+owned cache. No managed PNM install, host package change or production operation
+is added by these integration steps.
+
+The old systemd fixture's empty runtime configs both returned70 from the current
+listener gate in a local reproduction. Replace sleep-only services with nobody
+Python TCP/UDP listeners on temporary high ports, render configs using existing
+fixtures/production functions, and exercise actual listener readiness during
+activation. Compensation compares the restored config digest rather than an
+empty JSON literal. UUID-scoped unit names, ownership/hash checks, cleanup and
+root/opt-in refusal remain in place. These listeners are test programs, not Cores.
+
+Local validation: workflow matrix/runner/deadline/entry-point assertions, both
+outer and inner Bash syntax/ShellCheck, integration-script syntax/ShellCheck,
+repository syntax/security scans and diff whitespace checks pass. Actual local
+TCP/UDP listeners plus production render/parser/readiness pass as the normal
+workspace user outside the socket-restricted sandbox; this starts no systemd
+unit. Systemd opt-out returns64 and non-root opt-in returns77. Hosted systemd
+and official-Core execution are pending the candidate's actual CI run; no root
+or traffic acceptance result is claimed yet.
+
 ## Next priorities
 
 1. Continue Ubuntu development/main-flow validation and fix reproducible local

@@ -9,6 +9,7 @@ permissions:
 
 jobs:
   checks:
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -42,3 +43,28 @@ jobs:
 
       - name: Run release checks
         run: make release-check
+
+      - name: Run isolated systemd lifecycle checks
+        run: sudo make test-systemd
+
+      - name: Run pinned real-Core checks in private namespaces
+        run: |
+          sudo bash -Eeuo pipefail <<'BASH'
+          umask 077
+          source lib/common.sh
+          source lib/config.sh
+          source adapters/assets.sh
+          cache="$(mktemp -d /tmp/pnm-ci-assets.XXXXXXXX)"
+          trap 'rm -rf -- "$cache"' EXIT
+          manifest=tests/integration/real_core_versions.json
+          for core in xray hysteria2; do
+              version="$(jq -er --arg core "$core" '.[$core].version' "$manifest")"
+              hash="$(jq -er --arg core "$core" '.[$core].sha256' "$manifest")"
+              case "$core" in
+                  xray) filename=xray.zip ;;
+                  hysteria2) filename=hysteria ;;
+              esac
+              pnm_asset_download_verified "$core" "$version" "$hash" "$cache/$filename"
+          done
+          PNM_REAL_CORE_ASSETS="$cache" make test-real-cores
+          BASH

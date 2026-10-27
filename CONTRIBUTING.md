@@ -58,8 +58,13 @@ and recording OS, Bash, Python, OpenSSL and systemd versions. The service suite 
 the real `systemd-analyze verify` against generated units with temporary Core
 paths and isolated target fixtures; it starts no service. Platform tests accept
 only approved release/architecture pairs and reject derivatives and other versions.
-These are L1 checks, not root/service/reboot acceptance. Check actual CI run results
-before claiming either runner passed.
+The check/ShellCheck/release-check steps are L1 checks. On the disposable
+GitHub-hosted Ubuntu runners, CI then explicitly runs `sudo make test-systemd`
+against owned temporary units with unprivileged Python TCP/UDP listeners, followed
+by `make test-real-cores` with root-private, hash-verified pinned test assets and
+private network namespaces. These integration steps do not install managed PNM,
+change production services, reboot the runner or prove external connectivity.
+Check actual job results before claiming either runner or integration step passed.
 `make release-check` adds release scanning and repeats `make check`; it does not
 publish anything, and its repeated tests are not additional independent coverage.
 Keep each gate's exit code, suite totals and explicit skips. A non-root run may
