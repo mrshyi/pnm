@@ -2,9 +2,9 @@
 
 **Updated:** 2026-10-26. **Phase 3 remains incomplete; Phase 4 and release work have not started.**
 
-**Published baseline:** branch `dev`, commit `d7919a2`, VERSION
+**Published baseline:** branch `dev`, commit `d2b1844`, VERSION
 `0.16.0-rc.1`, including TLS/test repairs, cloud-development cleanup and
-Ubuntu22.04/24.04 CI/regressions plus stages1–9 below. Earlier preparation checks
+Ubuntu22.04/24.04 CI/regressions plus stage11 integration below. Earlier preparation checks
 used their recorded parents; do not attribute earlier39312aa CI to this baseline.
 
 ## Continuation checkpoint
@@ -15,13 +15,16 @@ used their recorded parents; do not attribute earlier39312aa CI to this baseline
   Debian acceptance is deferred by the latest user instruction and is not a
   prerequisite for Ubuntu development. Stage9 validation parent:71e4c2b;
   logs: `/tmp/pnm-stage9-ubuntu.MwuaZn23/`.
-- Current CI targets exactlyd7919a2:
+- Completed L1 CI targets exactlyd7919a2:
   [run40444662565](https://github.com/mrshyi/pnm/actions/runs/40444662565).
   Both Ubuntu22.04/24.04 amd64 jobs passed; see stage10 below.
-- Real Core/lifecycle integration can proceed on an authorized disposable
-  Ubuntu22.04/24.04 amd64/root/systemd environment. Current ARM64/non-root L1
-  execution does not establish that environment. Do not provision, run faults
-  on the development host, push or start Phase4 automatically.
+- Stage11 d2b1844 is also published:
+  [integration run40446477495](https://github.com/mrshyi/pnm/actions/runs/40446477495)
+  targets d2b1844d7acaf79e8baf04c5fa007ee4e906688f. Both Ubuntu jobs passed L1,
+  real systemd8/8 and official-Core10/10; see stage11 below.
+- Root service/Core integration now uses disposable Ubuntu22.04/24.04 amd64
+  GitHub-hosted runners. The ARM64/non-root development host remains L1 only;
+  do not provision it, run service/storage faults on it or start Phase4 automatically.
 
 ## Current environment
 
@@ -56,7 +59,7 @@ production access, deployment or package installation on the development host.
 | G-05 dependency preflight | Declared prerequisite checks and historical Debian guest19-tool refusal records | Remaining acquisition/DNS/PKI/timeout/archive cases and other distributions |
 | G-06 HY2 TLS/account access | Ownership/mode/effective-read checks, historical managed-account and TLS fault records | Root/platform/NSS variations, changed TLS paths on supported amd64, external handshake/traffic |
 | T-04/T-20/T-26 | Historical configured-port conflict, real lock contention, stale-binding refusal and same-disk reboot slices | Other topology/scheduling combinations and external-client routing |
-| Platform/L3 | Ubuntu development validation is prioritized; Ubuntu22.04/24.04 amd64 L1 CI passed at39312aa | Fresh Ubuntu root/service/reboot and controlled external client acceptance; Debian12/13 acceptance is deferred |
+| Platform/L3 | Ubuntu22.04/24.04 amd64 L1, selected real systemd and isolated official-Core tests passed atd2b1844 | Full CLI install/account/reboot and external client acceptance remain open; Debian12/13 acceptance is deferred |
 
 These are source observations and explicitly historical results, not fresh cloud
 L2 passes. The [dated T-01–T-27 reconciliation](history/PHASE3_EXECUTION_2026-10-22_26.md#matrix-reconciliation--2026-10-25)
@@ -376,8 +379,8 @@ passes. Table entries are part of419, not additional independent passes.
 Standard ShellCheck exits0. Offline guest guards exit0:33 total,25 executed and8
 root-only skipped; real-Core refusal guard exits0:1 passed. Neither boots a guest
 or executes an official Core. Private full-gate logs:
-`/tmp/pnm-stage9-ubuntu.MwuaZn23/`. Current Ubuntu amd64 CI evidence remains at
-39312aa until these local commits are pushed and new jobs actually succeed.
+`/tmp/pnm-stage9-ubuntu.MwuaZn23/`. At stage9, Ubuntu amd64 CI evidence remained
+at39312aa; stage10 records the subsequent successful latest-source jobs.
 
 ## Stage 10: refreshed Ubuntu amd64 CI
 
@@ -400,7 +403,7 @@ The follow-up CI preparation reuses existing isolated integration targets; it
 must retain their ownership/cleanup guards and needs actual run results before
 any stronger acceptance claim.
 
-## Stage 11: Ubuntu-hosted service and real-Core integration candidate
+## Stage 11: Ubuntu-hosted service and real-Core integration
 
 Validation parentd76379d. CI now explicitly invokes existing test-systemd and
 test-real-cores after the ordinary gates, on the same disposable Ubuntu22.04/24.04
@@ -426,7 +429,25 @@ TCP/UDP listeners plus production render/parser/readiness pass as the normal
 workspace user outside the socket-restricted sandbox; this starts no systemd
 unit. Systemd opt-out returns64 and non-root opt-in returns77. Hosted systemd
 and official-Core execution are pending the candidate's actual CI run; no root
-or traffic acceptance result is claimed yet.
+or traffic acceptance result was claimed during local preparation.
+
+Actual result: [run40446477495](https://github.com/mrshyi/pnm/actions/runs/40446477495),
+push/attempt1, exact sourced2b1844d7acaf79e8baf04c5fa007ee4e906688f,
+completed success. Jobs121998867541 (Ubuntu22.04) and121998867796 (Ubuntu24.04)
+each pass check32 suites/419 wrappers, ShellCheck, release-check32/419, real
+systemd8/8 and official-Core10/10. Each job has66 suite summaries:64 from the
+repeated L1 gates, one service suite and one Core suite; do not sum them as unique
+independent cases. L1 root-only skips remain explicit.
+
+Real service checks cover activation, independent restart/applied InvocationID,
+inactive/disabled and active/disabled recovery, TERM/lock release, config/update
+compensation and failed-apply evidence recovery. Official Xray v26.10.21 and
+Hysteria2 v2.13.0 run as nobody, accept production-rendered config/certificate
+fixtures and transfer through real local clients. Wrong VLESS UUID, REALITY short
+ID, HY2 certificate pin and password are refused; a valid PNM HY2 pin URI still
+transfers. Both harnesses report success only after owned-unit/resource cleanup.
+These are actual Ubuntu service and private-network protocol results, not full
+managed-account CLI installation, persisted reboot or public L3 connectivity.
 
 ## Next priorities
 
