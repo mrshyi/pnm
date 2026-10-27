@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Opt-in offline-cache CLI acceptance in a clone of a verified Debian fixture."""
+"""Opt-in offline-cache CLI acceptance in a clone of a verified Linux fixture."""
 from __future__ import annotations
 import argparse
 import stat
@@ -133,6 +133,7 @@ prefix=[('--directory='+str(root)) if s.startswith('--directory=') else ('--mach
 (base/'nspawn-prefix.json').write_text(json.dumps(prefix))
 (base/'guest-identity.json').write_text(json.dumps({'machine':machine,'dev':root.stat().st_dev,'ino':root.stat().st_ino}))
 (base/'source-hashes.json').write_text(json.dumps(hashes,indent=2))
+write_clone_file(root/'opt/pnm-source-hashes.json',json.dumps(hashes,sort_keys=True))
 (base/'source-origin.json').write_text(json.dumps({'snapshot':'copied worktree; source-hashes.json is authoritative'}))
 print('install_fixture='+str(base)+' source_files='+str(len(hashes)),flush=True)
 

@@ -42,6 +42,9 @@ jobs:
       - name: Run ShellCheck
         run: make shellcheck
 
+      - name: Run main-flow preparation checks without deployment
+        run: python3 -B tests/integration/test_guest_mainflow_guard.py
+
       - name: Run privileged CLI access and recovery checks
         run: |
           sudo bash tests/unit/test_cli.sh

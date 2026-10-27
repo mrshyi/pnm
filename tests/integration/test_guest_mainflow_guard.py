@@ -2,6 +2,7 @@
 """Offline regression for host-side clone file writes and explicit opt-in."""
 import ast
 import importlib.util
+import hashlib
 import io
 import json
 import os
@@ -13,11 +14,64 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest.mock import patch
 
 DRIVER=Path(__file__).with_name('test_guest_mainflow.py')
 
 
 class GuestGuardTests(unittest.TestCase):
+    def test_mainflow_source_identity_detects_changed_missing_and_extra_files(self):
+        tree=ast.parse(DRIVER.with_name('guest_mainflow_cases.py').read_text())
+        function=next(n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name=='verify_source_snapshot')
+        namespace={'Path':Path,'hashlib':hashlib,'json':json}
+        exec(compile(ast.Module(body=[function],type_ignores=[]),'<source identity>','exec'),namespace)
+        with tempfile.TemporaryDirectory(prefix='pnm-mainflow-source.') as directory:
+            root=Path(directory)/'pnm'
+            (root/'bin').mkdir(parents=True)
+            cli=root/'bin/pnm'
+            cli.write_text('synthetic CLI source')
+            manifest=Path(directory)/'source.json'
+            manifest.write_text(json.dumps({'bin/pnm':hashlib.sha256(cli.read_bytes()).hexdigest()}))
+            verify=namespace['verify_source_snapshot']
+            self.assertEqual(verify(root,manifest)['files'],1)
+            self.assertEqual(verify(root,manifest)['manifest_sha256'],hashlib.sha256(manifest.read_bytes()).hexdigest())
+            cli.write_text('different source')
+            with self.assertRaisesRegex(RuntimeError,'differs'):
+                verify(root,manifest)
+            cli.unlink()
+            with self.assertRaisesRegex(RuntimeError,'differs'):
+                verify(root,manifest)
+            cli.write_text('synthetic CLI source')
+            extra=root/'unexpected.sh'
+            extra.write_text('extra source')
+            with self.assertRaisesRegex(RuntimeError,'differs'):
+                verify(root,manifest)
+            extra.unlink()
+            extra.symlink_to(cli)
+            with self.assertRaisesRegex(RuntimeError,'symlink'):
+                verify(root,manifest)
+
+    def test_vm_platform_matches_managed_platform_policy(self):
+        import guest_vm_boot as fixture
+        adapter=DRIVER.parents[2]/'adapters/platform-linux.sh'
+        cases=(('debian','12'),('debian','13'),('ubuntu','22.04'),('ubuntu','24.04'),
+               ('ubuntu','20.04'),('debian','14'),('fedora','42'),('ubuntu',''))
+        with tempfile.TemporaryDirectory(prefix='pnm-guest-platform.') as directory:
+            release=Path(directory)/'os-release'
+            for os_id,version in cases:
+                with self.subTest(os_id=os_id,version=version):
+                    release.write_text(f'ID="{os_id}"\nVERSION_ID="{version}"\n')
+                    result=subprocess.run(['bash','-c',
+                        'source "$1"; PNM_OS_RELEASE_FILE="$2"; uname() { printf "x86_64\\n"; }; pnm_platform_supported',
+                        '--',str(adapter),str(release)],capture_output=True,timeout=5)
+                    with patch.object(fixture.platform,'freedesktop_os_release',
+                                      return_value={'ID':os_id,'VERSION_ID':version}):
+                        if result.returncode==0:
+                            self.assertEqual(fixture.guest_operating_system(),(os_id,version))
+                        else:
+                            with self.assertRaises(fixture.GuestRefusal):
+                                fixture.guest_operating_system()
+
     @unittest.skipUnless(sys.platform=='linux','Linux VM acquisition guard')
     def test_install_acquisition_refuses_host_before_io(self):
         script='''import sys

@@ -714,6 +714,21 @@ Debian acceptance are unchanged. Phase3 remains open.
 
 ## Next priorities
 
+Main-flow preparation update (U-02, 2026-10-27): the independent VM worker's
+Debian13-only OS check prevented Ubuntu boot admission. It now follows the
+managed Debian/Ubuntu version policy and reports actual OS identity; VM isolation
+and per-boot approval are unchanged. The existing clone driver carries its source
+manifest into the guest; CLI cases compare actual entry/library files before
+and after the successful lifecycle and report the manifest digest/file count.
+No additional fault campaign or product feature was added. These preparation
+changes do not clear U-02–U-08's environment/asset/authorization blocks.
+
+Local preparation suite:35 total,27 executed/8 root-only skipped, exit0.
+Existing L1 main-flow suites also pass: sandbox install12/12, Core operations15/15,
+host apply14/14. Four changed Python sources parse successfully; workflow YAML
+retains both Ubuntu versions and adds the non-deploying preparation suite.
+These are local fixture/L1 results, not full CLI deployment or reboot acceptance.
+
 1. Freeze runtime baseline c4e906c and the finite U-01–U-08 checklist. This
    documentation closeout adds no runtime changes or new dynamic-test claims.
 2. Obtain explicitly authorized disposable Ubuntu22.04/24.04 amd64/systemd boot

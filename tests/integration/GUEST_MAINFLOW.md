@@ -1,5 +1,18 @@
 # Private guest main-flow checks
 
+Current Ubuntu work is limited to [U-01–U-08](../../docs/ACCEPTANCE_PLAN.md#ubuntu-closeout).
+The independent VM boot worker recognizes the managed platform policy, including
+Ubuntu22.04/24.04, and reports the actual OS identity in its handshake. Platform
+policy fixtures do not prove that a Ubuntu VM was prepared or booted. Existing
+VM nonce, source-worker digest, isolation and per-boot approval remain required.
+
+The main-flow clone driver copies its runtime source digest map to the private
+guest `/opt/pnm-source-hashes.json`. The CLI cases verify `/opt/pnm` against that
+map before any CLI operation and after the successful lifecycle. Results include
+only the source file count and manifest digest. Independent VM preparers must
+carry the same map for their exact copied source; no legacy fixture is inferred
+to have it. This source check does not authenticate Core or backup assets.
+
 `make test-commit-storage` is a separate explicit Linux-root publisher check that
 does not clone or boot a guest. Its child mount namespaces own a64KiB tmpfs with
 64 inodes and nodev/nosuid/noexec. Synthetic protected records exercise the
@@ -121,8 +134,8 @@ compensation and terminal rollback for all three faults, then normal14 lifecycle
 and, on the independent VM,7 same-disk reboot checks. No product file API is
 replaced. EFBIG is a process-scoped file-size refusal, not physical ENOSPC/EIO.
 
-The separate `guest_vm_boot.py` worker is a boot-only probe for the privately
-prepared independent Debian VM described in the
+The separate `guest_vm_boot.py` worker is a boot-only probe for a privately
+prepared independent supported Linux VM. The earlier Debian preparation is described in the
 [VM plan](../../docs/history/plans/2026-10-25-independent-debian-vm.md).
 It does not install PNM or extend the mapped-container acceptance route. Its
 read-only guard requires the expected protected worker hash/kernel/root UUID,

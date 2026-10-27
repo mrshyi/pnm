@@ -82,8 +82,9 @@ python3 -B tests/integration/test_guest_mainflow_guard.py
 python3 -B tests/integration/test_real_core_refusal_guard.py
 ```
 
-These test harness refusal behavior; they do not boot a guest or validate actual
-Core traffic. Record their root-only skips too.
+These check harness refusal behavior, copied-source identity and guest platform
+policy; they do not boot a guest or validate actual Core traffic. The main-flow
+preparation suite also runs in Ubuntu CI without deployment. Record root-only skips.
 
 `make test-asset-network` runs non-root, loopback-only real curl/TLS acquisition
 checks against synthetic assets, reusing the existing HTTPS fixture. It covers

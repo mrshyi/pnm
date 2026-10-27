@@ -1,4 +1,4 @@
-"""Guest-only nonce handshake for an independently booted private Debian VM."""
+"""Guest-only nonce handshake for an independently booted supported Linux VM."""
 from dataclasses import dataclass
 import hashlib
 import json
@@ -26,6 +26,14 @@ class VmIdentity:
     root_uuid: str
     kernel_release: str
     host_machine_id_sha256: str
+
+
+def guest_operating_system() -> tuple[str,str]:
+    release=platform.freedesktop_os_release()
+    identity=(release.get('ID'),release.get('VERSION_ID'))
+    if identity not in (('debian','12'),('debian','13'),('ubuntu','22.04'),('ubuntu','24.04')):
+        raise GuestRefusal('unexpected independent guest operating system')
+    return identity
 
 
 def require_vm() -> VmIdentity:
@@ -134,14 +142,8 @@ def main(*, action: Callable[[],dict] | None=None, scope: str='boot-only',
                        for name in ('/etc/pnm','/usr/local/bin/xray','/usr/local/bin/hysteria'))
         if absent!=(scope not in ('pnm-reboot','deployment-recovery')):
             raise RuntimeError('guest managed-resource baseline differs from scope')
-        stage='Debian operating-system identity'
-        os_release={}
-        for line in Path('/usr/lib/os-release').read_text().splitlines():
-            if '=' in line:
-                key,value=line.split('=',1)
-                os_release[key]=value.strip('"')
-        if os_release.get('ID')!='debian' or os_release.get('VERSION_ID')!='13':
-            raise RuntimeError('unexpected independent guest operating system')
+        stage='supported operating-system identity'
+        os_id,os_version=guest_operating_system()
         stage='independent hypervisor detection'
         detected=subprocess.run(['systemd-detect-virt','--vm'],capture_output=True,text=True,timeout=10)
         if detected.returncode or detected.stdout.strip() not in ('kvm','qemu'):
@@ -163,7 +165,7 @@ def main(*, action: Callable[[],dict] | None=None, scope: str='boot-only',
             raise RuntimeError('guest reused host machine identity')
         ready={'schema':1,'kind':'boot-ready','instance':identity.instance,'boot_id':identity.boot_id,
                'kernel_release':identity.kernel_release,'root_uuid':identity.root_uuid,
-               'os_id':'debian','os_version':'13','vm_detected':detected.stdout.strip(),
+               'os_id':os_id,'os_version':os_version,'vm_detected':detected.stdout.strip(),
                'manager_state':manager,'network_only_loopback':True,'pnm_absent':absent,'scope':scope,
                'machine_id_differs_from_host':True}
         stage='host approval'

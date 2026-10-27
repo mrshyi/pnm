@@ -27,6 +27,7 @@ os.umask(0o077)
 passed=[]
 stage='initial managed-resource baseline'
 result={}
+source_identity=None
 ports={'xray':443,'hysteria2':8443}
 default_sockets=[]
 reused_accounts={}
@@ -106,6 +107,18 @@ def fingerprint(path: str | Path) -> tuple[str,int,int,int]:
     p=Path(path)
     st=p.stat()
     return (hashlib.sha256(p.read_bytes()).hexdigest(),st.st_mode,st.st_uid,st.st_gid)
+
+def verify_source_snapshot(root: Path,manifest: Path) -> dict:
+    expected=json.loads(manifest.read_text())
+    actual={}
+    for path in root.rglob('*'):
+        if path.is_symlink():
+            raise RuntimeError('guest source contains a symlink')
+        if path.is_file():
+            actual[str(path.relative_to(root))]=hashlib.sha256(path.read_bytes()).hexdigest()
+    if not actual or actual!=expected:
+        raise RuntimeError('guest source differs from the copied worktree snapshot')
+    return {'files':len(actual),'manifest_sha256':hashlib.sha256(manifest.read_bytes()).hexdigest()}
 
 def deployment_failure_cases() -> None:
     # Filter command discovery only within this guest process. No package or
@@ -353,6 +366,8 @@ def runtime_evidence_cases(core_state, binding, links_ready) -> None:
     passed.append('real cross-process lock refuses writers and protected readers then releases without leakage')
 
 try:
+    stage='guest source identity'
+    source_identity=verify_source_snapshot(Path('/opt/pnm'),Path('/opt/pnm-source-hashes.json'))
     absent()
     passed.append('fresh guest has no managed accounts or resources')
     scenario=Path('/opt/pnm-test-scenario').read_text().strip()
@@ -681,6 +696,7 @@ try:
         run_restore_interruptions(logs,call,core_state,binding,links_ready,all_paths,archive,
             backup_resources,passed,hard_core=scenario.rsplit('-',1)[-1] if '-sigkill-' in scenario else None)
     restore_interrupted=scenario.startswith('restore-sigkill-')
+    verify_source_snapshot(Path('/opt/pnm'),Path('/opt/pnm-source-hashes.json'))
     result={'passed':True,'checks':passed,'clock_diagnostic':checks.get('time_sync'),'uids_distinct':True,
             'mainflow_completed':True,
             'update_matrix_completed':not update_interrupted if scenario in update_interruptions else None,
@@ -692,6 +708,7 @@ except Exception as error:
     if isinstance(error,RuntimeError):
         result['reason']=str(error)
 finally:
+    result['source_identity']=source_identity
     for fixture in default_sockets:
         fixture.close()
     path=Path('/var/tmp/pnm-install-result.json')
