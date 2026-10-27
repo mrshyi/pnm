@@ -30,6 +30,53 @@ test_selfsigned_pair_is_valid_and_pinned() {
     pnm_validate_pin_sha256 "$pin" && assert_eq 600 "$mode"
 }
 
+tls_spki_pipeline_failure_refuses_pin() (
+    local failed_stage="$1" temp_dir pipefail_mode
+    temp_dir="$(mktemp -d)"
+    trap 'rm -rf -- "$temp_dir"' EXIT
+    command openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes -days 1 \
+        -subj '/CN=fixture.invalid' -keyout "$temp_dir/key" -out "$temp_dir/cert" >/dev/null 2>&1 || return 1
+    openssl() {
+        command openssl "$@" || return $?
+        if [[ "$failed_stage" == der && "$1" == pkey && "$2" == -pubin ]] ||
+            [[ "$failed_stage" == digest && "$1" == dgst ]]; then return 23; fi
+    }
+    base64() {
+        command base64 "$@" || return $?
+        if [[ "$failed_stage" == base64 ]]; then return 23; fi
+    }
+    for pipefail_mode in on off; do
+        if [[ "$pipefail_mode" == on ]]; then set -o pipefail; else set +o pipefail; fi
+        run_capture pnm_tls_spki_pin "$temp_dir/cert"
+        assert_eq "$PNM_EXIT_CONFIG" "$RUN_RC" || return 1
+        assert_eq '' "$RUN_OUTPUT$RUN_ERROR" || return 1
+        assert_eq "$pipefail_mode" "$(set -o | awk '$1 == "pipefail" {print $2}')" || return 1
+    done
+)
+
+test_spki_der_failure_refuses_pin() { tls_spki_pipeline_failure_refuses_pin der; }
+test_spki_digest_failure_refuses_pin() { tls_spki_pipeline_failure_refuses_pin digest; }
+test_spki_base64_failure_refuses_pin() { tls_spki_pipeline_failure_refuses_pin base64; }
+
+test_key_publication_failure_refuses_pair_without_caller_pipefail() (
+    local temp_dir pipefail_mode
+    temp_dir="$(mktemp -d)"
+    trap 'rm -rf -- "$temp_dir"' EXIT
+    command openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes -days 1 \
+        -subj '/CN=fixture.invalid' -keyout "$temp_dir/key" -out "$temp_dir/cert" >/dev/null 2>&1 || return 1
+    openssl() {
+        command openssl "$@" || return $?
+        if [[ "$1" == pkey && "$*" == *-pubout* ]]; then return 23; fi
+    }
+    for pipefail_mode in on off; do
+        if [[ "$pipefail_mode" == on ]]; then set -o pipefail; else set +o pipefail; fi
+        run_capture pnm_tls_validate_pair "$temp_dir/cert" "$temp_dir/key"
+        assert_eq "$PNM_EXIT_CONFIG" "$RUN_RC" || return 1
+        assert_eq '' "$RUN_OUTPUT$RUN_ERROR" || return 1
+        assert_eq "$pipefail_mode" "$(set -o | awk '$1 == "pipefail" {print $2}')" || return 1
+    done
+)
+
 test_mismatched_pair_is_rejected() {
     local temp_dir cert1 key1 cert2 key2 rc
     temp_dir="$(mktemp -d)"
@@ -149,6 +196,10 @@ run_test 'DNS matching rejects mismatches and unknown tool results while preserv
 run_test 'client fingerprint hashes full certificate DER and changes on same-key renewal' test_client_fingerprint_hashes_certificate_der_not_spki
 run_test 'client fingerprint rejects invalid input and tool failure or malformed output' test_client_fingerprint_rejects_invalid_inputs_and_tool_output
 run_test 'self-signed certificate pair is valid and produces Base64 pin' test_selfsigned_pair_is_valid_and_pinned
+run_test 'SPKI DER conversion failure refuses a pin without leaking pipeline output' test_spki_der_failure_refuses_pin
+run_test 'SPKI digest failure refuses a pin without leaking pipeline output' test_spki_digest_failure_refuses_pin
+run_test 'SPKI encoding failure refuses a pin without leaking pipeline output' test_spki_base64_failure_refuses_pin
+run_test 'key public-output failure refuses the pair independently of caller pipefail' test_key_publication_failure_refuses_pair_without_caller_pipefail
 run_test 'certificate/private-key mismatch is rejected' test_mismatched_pair_is_rejected
 run_test 'TLS certificate check reports valid, expired, unreadable, and skipped modes' test_certificate_check_reports_valid_expired_unreadable_and_skipped_modes
 finish_tests

@@ -6,14 +6,17 @@ pnm_tls_require_openssl() {
 
 pnm_tls_spki_pin() {
     local certificate="${1:?certificate required}"
-    local public_key
+    local public_key pin
 
     pnm_tls_require_openssl || return $?
     [[ -f "$certificate" && ! -L "$certificate" ]] || return "$PNM_EXIT_CONFIG"
     public_key="$(openssl x509 -in "$certificate" -pubkey -noout 2>/dev/null)" || return "$PNM_EXIT_CONFIG"
-    printf '%s\n' "$public_key" | openssl pkey -pubin -outform DER 2>/dev/null \
-        | openssl dgst -sha256 -binary 2>/dev/null | base64 -w0
-    printf '\n'
+    pin="$(
+        set -o pipefail
+        printf '%s\n' "$public_key" | openssl pkey -pubin -outform DER 2>/dev/null \
+            | openssl dgst -sha256 -binary 2>/dev/null | base64 -w0
+    )" || return "$PNM_EXIT_CONFIG"
+    printf '%s\n' "$pin"
 }
 
 # Official Hysteria clients pin the full leaf certificate DER, not its SPKI.
@@ -42,7 +45,10 @@ pnm_tls_validate_pair() {
     openssl x509 -in "$certificate" -noout >/dev/null 2>&1 || return "$PNM_EXIT_CONFIG"
     openssl pkey -in "$private_key" -noout -check >/dev/null 2>&1 || return "$PNM_EXIT_CONFIG"
     certificate_pin="$(pnm_tls_spki_pin "$certificate")" || return "$PNM_EXIT_CONFIG"
-    key_pin="$(openssl pkey -in "$private_key" -pubout 2>/dev/null | openssl pkey -pubin -outform DER 2>/dev/null | openssl dgst -sha256 -binary 2>/dev/null | base64 -w0)" || return "$PNM_EXIT_CONFIG"
+    key_pin="$(
+        set -o pipefail
+        openssl pkey -in "$private_key" -pubout 2>/dev/null | openssl pkey -pubin -outform DER 2>/dev/null | openssl dgst -sha256 -binary 2>/dev/null | base64 -w0
+    )" || return "$PNM_EXIT_CONFIG"
     [[ -n "$certificate_pin" && "$certificate_pin" == "$key_pin" ]]
 }
 

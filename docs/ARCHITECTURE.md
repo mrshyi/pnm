@@ -148,6 +148,11 @@ full DER SHA-256 fingerprint in lowercase hex, as required by the official Hyste
 client. Failure to obtain this fingerprint suppresses only the HY2 link; a ready
 Xray link remains available. Link generation does not migrate stored credentials.
 
+TLS SPKI and private-key pin pipelines enable pipefail only inside their command
+substitutions. A failed conversion, hash or encoding step returns78 without
+publishing a pin, even if a downstream step produces plausible output. Caller
+shell options and the existing SPKI/full-certificate pin formats are preserved.
+
 ## Install and apply flow
 
 The public install path is `lib/install.sh` → preflight → `lib/apply-gate.sh` → `lib/deploy.sh`. The gate holds the exclusive lock through final health/deadline checks. Explicit sandbox, lifecycle and node/applied-state participants share one `deployment` transaction. Standalone sandbox and per-Core lifecycle wrappers retain independent transactions; arbitrary implicit transaction nesting is rejected.

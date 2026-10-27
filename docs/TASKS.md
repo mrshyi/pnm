@@ -10,11 +10,13 @@ Ubuntu22.04/24.04 CI/regressions. Local preparation checks below used parent
 ## Continuation checkpoint
 
 - Local stage commits:166e828 (CI evidence),6ec55cc (asset publication),5eb8be9
-  (ZIP observation/mode errors),ae838f5 (version-query refusal tests). They have
-  not been pushed.
-- Stage5 repairs shared checksum verification for literal backslashes in Linux
-  paths and propagates hash-tool failures independently of caller pipefail.
-  Validation parent:ae838f5. Resolve the final stage commit with Git.
+  (ZIP observation/mode errors),ae838f5 (version-query refusal tests),9dda49f
+  (filename-independent asset checksums). They have not been pushed.
+- Stage6 repairs error propagation in TLS SPKI/private-key pin pipelines, with
+  caller shell options preserved. Validation parent:9dda49f; resolve the final
+  stage commit with Git. Logs: `/tmp/pnm-stage6-tls.L98Uhzxk/`.
+- Actual Ubuntu amd64 CI evidence remains at39312aa; unpublished increments
+  have local ARM64 L1 evidence only.
 - Next integration work needs an explicitly authorized disposable Debian13
   x86_64/root/systemd environment; the environment question is pending.
   Do not provision, run faults on the development host, push or start Phase4.
@@ -267,6 +269,28 @@ pipefail disabled. No network, Core or host service is involved. Private logs:
 `make release-check` exits0:32 suites,408 passed,0 failed. Standard ShellCheck
 and supplemental asset-test ShellCheck exit0. The same root-only skips remain;
 this is L1 evidence, not a fresh supported-platform integration result.
+
+## Stage 6: TLS pin pipeline failure propagation
+
+Validation parent9dda49f. Shared SPKI pin generation previously masked pipeline
+failure with a successful final newline. The private-key pipeline also depended
+on caller pipefail. Both now enable pipefail within command
+substitutions, check status before using output and return78 on tool failure.
+The SPKI helper buffers output until the pipeline succeeds. No persisted pin,
+certificate, CLI or client-link format changed; caller shell options are retained.
+
+Four regressions first failed (6 passed/4 failed). The focused TLS suite then
+passed10/10. Actual temporary EC certificates, public-key DER conversion, hashing
+and encoding run; controlled wrappers emit their normal valid output before
+exit23 at DER/digest/base64 or private-key export. Tests cover caller pipefail
+both on/off, empty failure output and unchanged caller options. Standard and
+supplemental TLS-test ShellCheck pass. Private logs:
+`/tmp/pnm-stage6-tls.L98Uhzxk/`. These are L1 tool-failure boundary checks,
+not actual Core TLS handshakes or root/service permission acceptance.
+
+`make release-check` exits0:32 suites,412 passed,0 failed, including syntax and
+security/release scans. Existing root-only skips remain unchanged. No second
+independent full test run or new Ubuntu amd64 CI execution is claimed.
 
 ## Next priorities
 
