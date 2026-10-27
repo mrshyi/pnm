@@ -2,35 +2,25 @@
 
 **Updated:** 2026-10-26. **Phase 3 remains incomplete; Phase 4 and release work have not started.**
 
-**Published baseline:** branch `dev`, commit `ed2b3b1`, VERSION
+**Published baseline:** branch `dev`, commit `a2f12d6`, VERSION
 `0.16.0-rc.1`, including TLS/test repairs, cloud-development cleanup and
 Ubuntu22.04/24.04 CI/regressions plus stages11–12 integration below. Earlier preparation checks
 used their recorded parents; do not attribute earlier39312aa CI to this baseline.
 
 ## Continuation checkpoint
 
-- Stages1–9 are published throughd7919a2. The nine-commit fast-forward from
-  39312aa was checked against the remote before push; no force push was used.
-- Current priority: validate development/main-flow behavior on Ubuntu first;
-  Debian acceptance is deferred by the latest user instruction and is not a
-  prerequisite for Ubuntu development. Stage9 validation parent:71e4c2b;
-  logs: `/tmp/pnm-stage9-ubuntu.MwuaZn23/`.
-- Completed L1 CI targets exactlyd7919a2:
-  [run40444662565](https://github.com/mrshyi/pnm/actions/runs/40444662565).
-  Both Ubuntu22.04/24.04 amd64 jobs passed; see stage10 below.
-- Stage11 d2b1844 is also published:
-  [integration run40446477495](https://github.com/mrshyi/pnm/actions/runs/40446477495)
-  targets d2b1844d7acaf79e8baf04c5fa007ee4e906688f. Both Ubuntu jobs passed L1,
-  real systemd8/8 and official-Core10/10; see stage11 below.
-- Stage12 candidate bd9319a is published:
-  [run40448066295](https://github.com/mrshyi/pnm/actions/runs/40448066295)
-  targets bd9319a65c9f4af6abdbe172fe3b7ae2e96377eb; both jobs exposed a read-access
-  fixture bootstrap failure (126), corrected and verified by the following retry.
-- Read-access correction ed2b3b1 is published; retry
-  [run40449338994](https://github.com/mrshyi/pnm/actions/runs/40449338994)
-  targets ed2b3b137af2eee9103b54c6288955a605759127. Both Ubuntu jobs pass:
-  ordinary gates419 per run, privileged suites48, real systemd8 and official
-  Cores10. The privileged log sections contain no skips; see stage12 below.
+- Ubuntu development validation remains first; Debian acceptance is deferred.
+- Latest published/validated source:a2f12d6ced683801967c2fe20ff22589925f614f,
+  [run40455459999](https://github.com/mrshyi/pnm/actions/runs/40455459999), success
+  on both Ubuntu22.04/24.04 amd64. See stage13 for exact jobs and limits.
+- Per Ubuntu job: normal check/release419 each; privileged suites48; loopback
+  asset transport5; real systemd8; official-Core private-network10; ShellCheck
+  success. These are separate execution layers, not an independent total.
+- The five ordinary non-root skips remain intentional; their corresponding
+  privileged suites actually execute without skips. Current ARM64 transport
+  self-checks use synthetic assets and do not execute amd64 binaries.
+- Stages1–12 and the corrected protected-checkout failure remain below as dated,
+  source-specific evidence; earlier CI is not substituted for latest-source runs.
 - Root service/Core integration now uses disposable Ubuntu22.04/24.04 amd64
   GitHub-hosted runners. The ARM64/non-root development host remains L1 only;
   do not provision it, run service/storage faults on it or start Phase4 automatically.
@@ -65,7 +55,7 @@ remain outside scope.
 | G-02 deployment recovery | Shared deployment transaction, metadata/directory/account receipts, uncertainty guards; selected native/VM fault and reboot records | Remaining commit/storage/corruption windows and concurrent schedules; physical media behavior is not established |
 | G-03 Core update/rollback | Paired current/previous binaries and version metadata; selected distinct-version, fault and reboot records | Remaining commit/storage and abrupt-VM update/rollback positions |
 | G-04 backup/restore | Trusted archive validation, bounded parsing, metadata compensation; selected real restore/fault/reboot records | Remaining storage and abrupt-VM restore positions; arbitrary untrusted executables remain outside the trusted-input contract |
-| G-05 dependency preflight | Declared prerequisite checks and historical Debian guest19-tool refusal records | Remaining acquisition/DNS/PKI/timeout/archive cases and other distributions |
+| G-05 dependency preflight | Declared preflight; fresh Ubuntu loopback curl/TLS acquisition5/5; historical Debian guest19-tool refusals | Upstream DNS/PKI outages, default retry/deadline policy, full install compensation and remaining platforms |
 | G-06 HY2 TLS/account access | Ownership/mode/effective-read checks; fresh Ubuntu root access8/8 and isolated real-Core TLS/traffic; historical managed-account records | Real managed-account provisioning/NSS variants and public-client/deployment acceptance |
 | T-04/T-20/T-26 | Historical configured-port conflict, real lock contention, stale-binding refusal and same-disk reboot slices | Other topology/scheduling combinations and external-client routing |
 | Platform/L3 | Ubuntu22.04/24.04 amd64 ordinary/root gates, selected real systemd and isolated official-Core tests passed ated2b3b1 | Full CLI install/account/reboot and external client acceptance remain open; Debian12/13 acceptance is deferred |
@@ -511,7 +501,7 @@ Ubuntu execution gap, not the remaining real account-install/NSS variants or
 physical storage/reboot/external-client matrix. The protected-checkout failure
 was a test-fixture bootstrap defect; no production permission expectation changed.
 
-## Stage 13: real loopback asset-acquisition candidate
+## Stage 13: real loopback asset acquisition
 
 Validation parent78c528c. Add a separate non-root test-asset-network target and
 Ubuntu CI step using the existing AssetServer from guest_update_cases, without
@@ -533,7 +523,17 @@ outages, full install compensation or archive/Core execution safety. Python AST,
 embedded Bash syntax/ShellCheck, repository syntax/security scans, standard
 ShellCheck and workflow entry-point/matrix checks pass. Socket creation needs the
 approved local loopback execution context outside the restrictive sandbox.
-Ubuntu amd64 CI execution is pending the candidate's publication.
+Ubuntu amd64 execution was pending during local preparation.
+
+Published sourcea2f12d6ced683801967c2fe20ff22589925f614f passed
+[run40455459999](https://github.com/mrshyi/pnm/actions/runs/40455459999),
+push/attempt1, completed success. Jobs122027642713 (Ubuntu22.04) and122027642994
+(Ubuntu24.04) each run all5 acquisition cases successfully, with no skips.
+Each also passes normal check/release-check32 suites/419 wrappers per gate,
+ShellCheck, privileged11+1+8+28=48, real systemd8/8 and official-Core10/10.
+The acquisition unittest result is separate from the70 existing suite summaries;
+do not add repeated gates or execution layers as unique independent cases.
+No runtime module, CLI/config/URI format or VERSION changed in this stage.
 
 ## Next priorities
 

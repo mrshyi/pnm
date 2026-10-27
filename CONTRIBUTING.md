@@ -98,7 +98,7 @@ upstream DNS outages. Ubuntu CI runs this target separately from the L1 suites.
 
 | Layer | Environment | Boundary |
 |---|---|---|
-| L1 | Linux workspace, including ARM64/non-root | Real temporary files/crypto with mocked service, account and network observations; skips remain visible |
+| L1 | Linux workspace, including ARM64/non-root | Real temporary files/crypto and selected loopback transport; managed service/account observations may be mocked and skips remain visible |
 | L2 | Approved disposable supported Ubuntu/Debian amd64/systemd environment | Real accounts, pinned Core programs, units, listeners, fault recovery and same-disk reboot |
 | Other supported platforms | Separate execution for each remaining supported amd64 release | Their own acceptance; os-release fixtures are L1 only |
 | L3 | Authorized targets and controlled external clients | Separate Xray REALITY and HY2 handshakes and traffic |
