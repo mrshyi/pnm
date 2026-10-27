@@ -8,7 +8,7 @@ This is a planning document, not an implementation claim or authorization. Curre
 |---|---|---|
 | Phase 1 | Targeted HY2 configuration/link consistency and TLS/SNI fixes | Source changes exist in current history; production/client verification is environment-specific and must not be inferred from unit tests |
 | Phase 2 | Gap classification and minimal implementation plan | Completed as a read-only report in the historical archive; it records its own HEAD and findings |
-| Phase 3 | Repair and accept existing defects G-01–G-06 | In progress / acceptance incomplete; see `TASKS.md` |
+| Phase 3 | Repair and accept existing defects G-01–G-06 | Repair scope frozen; bounded Ubuntu acceptance pending; see `TASKS.md` |
 | Phase 4 | Desired-state deployment Profiles (`dual`, `reality`, `hy2`) | Planned; not implemented in this baseline |
 | Phase 5 | Profile-aware health reporting, lightweight resource diagnostics, optional external checks | Planned; dependency on Phase 4 state semantics |
 | Phase 6 | Verifiable firewall-rule ownership and additional recovery/secret protections | Design and ownership decisions required before any automatic rule deletion; planned |
@@ -26,6 +26,13 @@ This is a planning document, not an implementation claim or authorization. Curre
 6. G-06: prove HY2 TLS certificate/key ownership, modes, and service-account readability checks.
 
 Do not use production nodes for fault injection. The acceptance evidence must state which tests are mocks, Linux/systemd integration, or real host observations.
+
+The 2026-10-27 closeout freezes Ubuntu work to
+[U-01–U-08](ACCEPTANCE_PLAN.md#ubuntu-closeout). Development dispositions and
+explicit deferrals are recorded once in TASKS. Missing environments or speculative
+failure combinations do not create new hardening stages by default. Debian is
+deferred; bounded Ubuntu acceptance and the residual dispositions must be recorded
+before Phase3 closure. Closure does not authorize Phase4, deployment or release.
 
 ## Phase 4 — Deployment Profiles
 

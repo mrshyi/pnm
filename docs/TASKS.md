@@ -1,6 +1,6 @@
 # PNM Current Tasks
 
-**Updated:** 2026-10-27. **Phase 3 remains incomplete; Phase 4 and release work have not started.**
+**Updated:** 2026-10-27. **Phase 3 repair scope is frozen; bounded Ubuntu acceptance is pending. Phase 4 and release work have not started.**
 
 **Published baseline:** branch `dev`, commit `c4e906c`, VERSION
 `0.16.0-rc.1`, including TLS/test repairs, cloud-development cleanup and
@@ -58,16 +58,57 @@ remain outside scope.
 
 ## Current implementation and remaining acceptance
 
-| Item | Source / historical evidence | Still open |
+Status is split into development disposition and remaining acceptance. **开发完成**
+means the scoped repair exists with recorded automated evidence, not complete
+deployment acceptance. **必须修复** requires a reproduced defect in this frozen
+scope. **验收挂起** means specified evidence or an authorized fixture is missing.
+**明确延期** records work excluded from this closeout, without claiming it passed.
+
+| Item | Development disposition / source anchors | Remaining acceptance |
 |---|---|---|
-| G-01 runtime/config/link state | Both Core runtime rows and applied/InvocationID gates exist | Read-only source identity comparison on an authorized deployed target; none supplied |
-| G-02 deployment recovery | Shared deployment transaction, metadata/directory/account receipts, uncertainty guards; selected native/VM fault and reboot records | Remaining commit/storage/corruption windows and concurrent schedules; physical media behavior is not established |
-| G-03 Core update/rollback | Paired current/previous binaries and version metadata; selected distinct-version, fault and reboot records | Remaining commit/storage and abrupt-VM update/rollback positions |
-| G-04 backup/restore | Trusted archive validation, bounded parsing, metadata compensation; selected real restore/fault/reboot records | Remaining storage and abrupt-VM restore positions; arbitrary untrusted executables remain outside the trusted-input contract |
-| G-05 dependency preflight | Declared preflight; fresh Ubuntu loopback curl/TLS acquisition7/7 with actual503 retry counts; historical Debian guest19-tool refusals | Upstream DNS/PKI outages, other retry statuses/Retry-After, default overall deadlines, full install compensation and remaining platforms |
-| G-06 HY2 TLS/account access | Ownership/mode/effective-read checks; fresh Ubuntu root access8/8 and isolated real-Core TLS/traffic; historical managed-account records | Real managed-account provisioning/NSS variants and public-client/deployment acceptance |
-| T-04/T-20/T-26 | Historical configured-port conflict, real lock contention, stale-binding refusal and same-disk reboot slices | Other topology/scheduling combinations and external-client routing |
-| Platform/L3 | Ubuntu22.04/24.04 amd64 ordinary/root gates, selected real systemd and isolated official-Core tests passed ated2b3b1 | Full CLI install/account/reboot and external client acceptance remain open; Debian12/13 acceptance is deferred |
+| G-01 runtime/config/link state | 验收挂起; dual-Core runtime/applied/InvocationID gates exist in `lib/node.sh` and `lib/render.sh`; no new implementation gap confirmed | U-02/U-04/U-08: verify installed source identity and runtime/link evidence on the disposable Ubuntu targets. Any separate existing deployment stays unverified until supplied |
+| G-02 deployment recovery | 开发完成; `lib/deploy.sh` and `lib/transaction.sh` implement common commit/compensation, metadata/directory/account receipts and uncertainty guards | 验收挂起: U-02/U-03/U-07/U-08; full CLI installation and the selected compensation/reboot checks |
+| G-03 Core update/rollback | 开发完成; `lib/core-ops.sh` pairs current/previous binaries and version metadata and isolates the peer Core | 验收挂起: U-05/U-07/U-08; distinct approved versions, selected startup failure and persisted state |
+| G-04 backup/restore | 开发完成; `lib/core-ops.sh` validates trusted archives, bounds parsing and compensates resource metadata; D-009 remains binding | 验收挂起: U-06/U-07/U-08; trusted round trip, rejected archive and selected restore failure |
+| G-05 dependency preflight | 开发完成; `lib/preflight.sh` and `adapters/assets.sh`; recorded real curl/TLS7-case transport checks include503 retry counts | 验收挂起: U-01/U-07; actual install missing-tool refusal before managed changes |
+| G-06 HY2 TLS/account access | 开发完成; `lib/tls.sh`, `lib/accounts.sh`, `lib/check.sh`; recorded privileged access8/8 and isolated real-Core TLS/traffic | 验收挂起: U-02/U-03/U-07; actual managed accounts, self-signed/external certificate loading and compensation |
+
+**必须修复 queue: no newly confirmed item in this closeout review.** This is a
+targeted source/evidence reconciliation, not a claim of an exhaustive defect-free
+audit. If U-01–U-08 reproduce a security, correctness, recovery or compatibility
+failure, record its source, command, expected/actual state and minimal fix here;
+do not turn an untested combination into a new implementation task by default.
+
+**明确延期:** Debian12/13 acceptance; public external-client T-27 and separately
+supplied deployed-node comparisons; physical media/power-loss faults, exhaustive
+storage/commit/concurrency combinations, alternative NSS providers, other HTTP
+retry statuses/Retry-After and upstream DNS/PKI outage campaigns. Retain these
+limits for supported-platform/production readiness; they do not automatically
+expand the bounded Ubuntu closeout. Basic Ubuntu reboot and selected rollback
+failures remain required below, not deferred.
+
+The finite execution contract is [U-01–U-08](ACCEPTANCE_PLAN.md#ubuntu-closeout).
+All eight must have evidence on Ubuntu22.04 and24.04 before Ubuntu closeout is
+declared. The existing c4e906c CI satisfies only the recorded U-01 layer for that
+runtime source; U-02–U-08 remain pending. No target, assets or installation/reboot
+authorization is inferred from this checklist. Phase3 remains acceptance-pending;
+closure requires the bounded results and an explicit disposition of residuals,
+not merely this document edit. Phase4 still requires separate authorization.
+
+| Closeout ID | Ubuntu22.04 | Ubuntu24.04 |
+|---|---|---|
+| U-01 | PASS recorded for runtimec4e906c, run40465705895; not rerun here | PASS recorded for runtimec4e906c, same run; not rerun here |
+| U-02 | BLOCKED | BLOCKED |
+| U-03 | BLOCKED | BLOCKED |
+| U-04 | BLOCKED | BLOCKED |
+| U-05 | BLOCKED | BLOCKED |
+| U-06 | BLOCKED | BLOCKED |
+| U-07 | BLOCKED | BLOCKED |
+| U-08 | BLOCKED | BLOCKED |
+
+BLOCKED here is a pre-execution disposition: authorized disposable full-flow/boot
+fixtures and the required verified assets have not been established. No new
+attempt or failure is implied. Existing hosted service/Core CI is not that fixture.
 
 Current source, historical observations and fresh Ubuntu checks have separate
 evidence below; selected CI integration does not establish the full L2 matrix.
@@ -75,7 +116,7 @@ The [dated T-01–T-27 reconciliation](history/PHASE3_EXECUTION_2026-10-22_26.md
 retains exact prior coverage and limits. Earlier A-01–A-05 reports are pre-repair
 findings; do not reopen them solely because the archived text describes old code.
 
-## Latest completed code increment: shared TLS and non-root tests
+## Earlier cloud increment: shared TLS and non-root tests
 
 - Shared TLS validation rejects OpenSSL3.0's exit0 hostname mismatches and uses
   locale-stable default certificate dates instead of unsupported date options.
@@ -673,18 +714,17 @@ Debian acceptance are unchanged. Phase3 remains open.
 
 ## Next priorities
 
-1. Continue Ubuntu development/main-flow validation and fix reproducible local
-   failures without waiting for Debian. Preserve the L1/mock versus real Core
-   boundary and the supported amd64 deployment guard.
-2. Keep the passing Ubuntu normal/root/systemd/Core CI gates for future changes.
-   Next integration scope is full managed-account CLI install/update/restore on
-   an explicitly authorized disposable Ubuntu fixture; existing selected service
-   and protocol checks do not establish that full deployment acceptance.
-3. Continue applicable L2 commit/storage/interruption and persisted-reboot
-   positions on that approved Ubuntu fixture. Do not reuse old private paths or
-   fault the development host or reboot the hosted CI controller.
-4. Obtain an authorized deployed target for G-01 and controlled external clients
-   for T-27; record source identity and each protocol's handshake/traffic separately.
-5. Perform deferred Debian12/13 and remaining supported-platform acceptance,
-   then reassess Phase3 closure.
-   Do not start Profiles, production changes or release work automatically.
+1. Freeze runtime baseline c4e906c and the finite U-01–U-08 checklist. This
+   documentation closeout adds no runtime changes or new dynamic-test claims.
+2. Obtain explicitly authorized disposable Ubuntu22.04/24.04 amd64/systemd boot
+   fixtures and independently verified approved Core/backup assets; record what
+   installation, account changes, scoped faults and guest reboot are authorized.
+   Do not provision the development host or reboot the hosted CI controller.
+3. Execute only U-01–U-08, reusing existing integration harnesses where suitable;
+   record per-OS/ID PASS, FAIL or BLOCKED and source identity. A missing prerequisite
+   is BLOCKED, not a new open-ended hardening stage or a claimed pass.
+4. Fix only reproduced in-scope defects, rerun affected checks and required gates,
+   then issue one closeout table with remaining explicit deferrals. Do not rerun
+   unchanged gates solely to increase counts or add speculative fault campaigns.
+5. Keep Debian and extended production acceptance deferred. Do not start Profiles,
+   production changes or release work automatically after Ubuntu closeout.
