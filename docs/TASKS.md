@@ -2,7 +2,7 @@
 
 **Updated:** 2026-10-27. **Phase 3 repair scope is frozen; bounded Ubuntu acceptance is pending. Phase 4 and release work have not started.**
 
-**Published baseline:** branch `dev`, commit `d976f57`, VERSION
+**Published baseline:** branch `dev`, commit `61c5a86`, VERSION
 `0.16.0-rc.1`, including TLS/test repairs, cloud-development cleanup and
 Ubuntu22.04/24.04 CI/regressions plus stages11–17 and bounded main-flow preparation below. Earlier preparation checks
 used their recorded parents; do not attribute earlier39312aa CI to this baseline.
@@ -10,11 +10,11 @@ used their recorded parents; do not attribute earlier39312aa CI to this baseline
 ## Continuation checkpoint
 
 - Ubuntu development validation remains first; Debian acceptance is deferred.
-- Latest published/validated source:d976f57202764aa2d1aac20a17c15f20c5743e44,
-  [run40482079293](https://github.com/mrshyi/pnm/actions/runs/40482079293), success
-  on both Ubuntu22.04/24.04 amd64. Product runtime files remain identical to
-  c4e906c; these increments prepare U-02/U-03/U-06, not a deployed-mainflow pass.
-- Per Ubuntu job: normal check/release438 each; privileged suites48; loopback
+- Latest published/validated source:61c5a86b7b35fd91496f692cd1c763b427c6070c,
+  [run40485517751](https://github.com/mrshyi/pnm/actions/runs/40485517751), success
+  on both Ubuntu22.04/24.04 amd64. This runtime increment adds the public
+  external-ca install inputs; it does not establish a full guest-install pass.
+- Per Ubuntu job: normal check/release444 each; privileged suites49; loopback
   asset transport7; real systemd8; official-Core private-network10; ShellCheck
   success. These are separate execution layers, not an independent total.
 - Main-flow preparation per Ubuntu job:36 total,28 executed/8 root-only skipped;
@@ -92,7 +92,7 @@ failures remain required below, not deferred.
 
 The finite execution contract is [U-01–U-08](ACCEPTANCE_PLAN.md#ubuntu-closeout).
 All eight must have evidence on Ubuntu22.04 and24.04 before Ubuntu closeout is
-declared. The recordedd976f57 CI satisfies only the U-01 layer for that
+declared. The recorded61c5a86 CI satisfies only the U-01 layer for that
 source; U-02–U-08 remain pending. No target, assets or installation/reboot
 authorization is inferred from this checklist. Phase3 remains acceptance-pending;
 closure requires the bounded results and an explicit disposition of residuals,
@@ -100,7 +100,7 @@ not merely this document edit. Phase4 still requires separate authorization.
 
 | Closeout ID | Ubuntu22.04 | Ubuntu24.04 |
 |---|---|---|
-| U-01 | PASS atd976f57, run40482079293 | PASS atd976f57, same run |
+| U-01 | PASS at61c5a86, run40485517751 | PASS at61c5a86, same run |
 | U-02 | BLOCKED | BLOCKED |
 | U-03 | BLOCKED | BLOCKED |
 | U-04 | BLOCKED | BLOCKED |
@@ -786,7 +786,31 @@ ShellCheck pass. Guest scenarios now use the public arguments and require wrong
 keys to refuse before any write transaction rather than exercising rollback.
 Local `make release-check` exits0:32 suites/444 passed/0 failed, retaining the
 five ordinary non-root skips. Full Ubuntu guest installation/reboot remains
-BLOCKED; Ubuntu CI execution of this runtime repair is pending.
+BLOCKED.
+
+Actual source61c5a86b7b35fd91496f692cd1c763b427c6070c passes
+[run40485517751](https://github.com/mrshyi/pnm/actions/runs/40485517751),
+push/attempt1. Jobs122126204236 (Ubuntu22.04) and122126203737 (Ubuntu24.04)
+each pass normal check/release32 suites/444 per gate, standard ShellCheck,
+privileged49 (CLI12/read1/TLS8/transaction28), preparation36 total/28 executed/
+8 skipped, transport7, real systemd8 and official-Core10. All70 shell summaries
+per job report zero failures. The newly public install inputs are covered by
+CLI/preflight L1 tests; actual full guest installation and U-02–U-08 remain
+unaccepted. No installation/deployment was performed on the development host.
+
+U-03 interactive entry update (2026-10-27): the menu's install action previously
+called installation without external certificate inputs. New uncommitted
+external-ca nodes now prompt for both file paths and forward the public arguments
+to the same installer. Missing input never invokes installation; self-signed
+nodes retain the old action without extra prompts. Node-init guidance also
+mentions the required external-ca arguments. No alternate installation framework,
+new protocol or expanded acceptance scope was added.
+
+Local CLI/menu tests pass15/15 with the ordinary real-update root-only skip.
+Standard ShellCheck and targeted test ShellCheck pass. Local `make release-check`
+exits0:32 suites/447 passed/0 failed, with the five ordinary non-root skips.
+Native Ubuntu validation of this menu change is pending; the prior61c5a86 CI
+record above applies only to that committed source.
 
 1. Pin the latest validated runtime baseline above and the finite U-01–U-08
    checklist. Change it only for reproduced in-scope main-flow defects.

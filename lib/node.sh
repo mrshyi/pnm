@@ -453,6 +453,7 @@ pnm_node_init() {
     else
         pnm_success "Node configuration saved under $PNM_CONFIG_DIR."
         pnm_info 'Next: sudo pnm node validate && sudo pnm install --apply --yes'
+        pnm_info 'For external-ca, add --tls-cert FILE --tls-key FILE to the install command.'
     fi
 }
 

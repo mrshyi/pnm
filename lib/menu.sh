@@ -1,5 +1,19 @@
 #!/usr/bin/env bash
 
+pnm_menu_install() {
+    local certificate private_key
+    local -A node=()
+
+    if pnm_load_node_config node && [[ "${node[HY2_TLS_MODE]-}" == external-ca && "${node[PNM_CONFIGURED]-}" != yes ]]; then
+        IFS= read -r -p 'TLS certificate chain file: ' certificate || return "$PNM_EXIT_USAGE"
+        IFS= read -r -p 'TLS private key file: ' private_key || return "$PNM_EXIT_USAGE"
+        [[ -n "$certificate" && -n "$private_key" ]] || { pnm_error 'Both TLS file paths are required.'; return "$PNM_EXIT_USAGE"; }
+        pnm_install --apply --yes --tls-cert "$certificate" --tls-key "$private_key"
+    else
+        pnm_install --apply --yes
+    fi
+}
+
 pnm_menu() {
     local choice
 
@@ -25,7 +39,7 @@ Proxy Node Manager
 EOF
         read -r -p 'Select: ' choice || return "$PNM_EXIT_OK"
         case "$choice" in
-            1) pnm_install --apply --yes || true ;;
+            1) pnm_menu_install || true ;;
             2) pnm_status || true ;;
             3) pnm_check || true ;;
             4) pnm_core_command apply xray || true ;;

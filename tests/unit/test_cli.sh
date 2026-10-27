@@ -6,6 +6,40 @@ PROJECT_ROOT="$(cd -- "$TEST_ROOT/.." && pwd -P)"
 # shellcheck source=../testlib.sh
 source "$TEST_ROOT/testlib.sh"
 
+menu_install_fixture() (
+    local mode="$1" canceled="${2:-no}" fixture input expected
+    fixture="$(mktemp -d)" || return 1
+    trap 'rm -rf -- "$fixture"' EXIT
+    source "$PROJECT_ROOT/lib/common.sh"
+    source "$PROJECT_ROOT/lib/config.sh"
+    source "$PROJECT_ROOT/lib/output.sh"
+    source "$PROJECT_ROOT/lib/menu.sh"
+    PNM_CONFIG_DIR="$fixture"
+    sed "s/^HY2_TLS_MODE=.*/HY2_TLS_MODE=$mode/;s/^PNM_CONFIGURED=.*/PNM_CONFIGURED=no/" \
+        "$TEST_ROOT/fixtures/config-valid/node.conf" >"$fixture/node.conf"
+    chmod 0600 "$fixture/node.conf"
+    pnm_install() { printf '%s\n' "$@" >"$fixture/called"; }
+    input=$'1\n0'
+    expected=$'--apply\n--yes'
+    if [[ "$mode" == external-ca ]]; then
+        input=$'1\n/certificate with spaces\n/private key with spaces\n0'
+        expected+=$'\n--tls-cert\n/certificate with spaces\n--tls-key\n/private key with spaces'
+        if [[ "$canceled" == yes ]]; then input=$'1\n/certificate with spaces'; fi
+    fi
+    run_capture pnm_menu <<<"$input"
+    assert_eq 0 "$RUN_RC" || return 1
+    if [[ "$canceled" == yes ]]; then
+        [[ ! -e "$fixture/called" ]]
+    else
+        [[ -f "$fixture/called" ]] || return 1
+        assert_eq "$expected" "$(<"$fixture/called")"
+    fi
+)
+
+test_menu_external_tls_installation() { menu_install_fixture external-ca; }
+test_menu_selfsigned_installation() { menu_install_fixture selfsigned-pin; }
+test_menu_canceled_external_tls_installation() { menu_install_fixture external-ca yes; }
+
 test_external_tls_cli_usage() {
     local args
     for args in cert key; do
@@ -102,6 +136,9 @@ test_update_cli_loads_approved_assets_before_preparation() (
 )
 
 run_test 'help command' test_help
+run_test 'menu forwards external TLS paths to the installation CLI' test_menu_external_tls_installation
+run_test 'menu preserves self-signed installation without extra prompts' test_menu_selfsigned_installation
+run_test 'menu does not install when external TLS path entry ends early' test_menu_canceled_external_tls_installation
 run_test 'install TLS arguments require paired values and appear in help' test_external_tls_cli_usage
 run_test 'version command' test_version
 run_test 'unknown command returns usage' test_unknown_command

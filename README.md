@@ -93,6 +93,9 @@ checks the pair and TLS server name before deployment, imports them into its
 managed TLS paths, and preserves the source files. The two options must be
 supplied together and apply to `external-ca` nodes. Self-signed nodes retain
 the existing installation command without these options.
+The interactive menu's installation option asks for both file paths on a new
+external-ca node and uses the same installation checks. Ending input before both
+paths are supplied cancels that installation attempt.
 
 ## Install and use PNM on a VPS
 
