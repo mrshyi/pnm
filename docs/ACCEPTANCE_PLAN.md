@@ -10,10 +10,10 @@
 |---|---|---|---|
 | L0 | 当前工作区的源码、Git 和文档静态检查 | 分支与差异、静态缺口、设计可追踪 | 动态测试、真实权限及服务行为 |
 | L1 | Linux 开发环境，含 Ubuntu ARM64／非 root；既有 mock/私有临时目录测试 | 返回码、步骤、状态记录、实际文件/权限和注入分支；root 专项明确跳过 | 目标 amd64 平台、真实 systemd/Core、reboot、公网握手 |
-| L2 | 可丢弃的 Debian 13 amd64/systemd VM | root/账户/权限、真实 unit、监听、恢复、reboot | 其他发行版矩阵及公网客户端连通 |
+| L2 | 可丢弃的受支持 Ubuntu/Debian amd64/systemd 环境 | root/账户/权限、真实 unit、监听、恢复、reboot | 其他发行版矩阵及公网客户端连通 |
 | L3 | 受控外部 Xray/HY2 客户端 | 相应网络条件下真实协议握手和传输 | 服务故障补偿和其他网络条件 |
 
-README 声明支持 Debian 12/13、Ubuntu 22.04/24.04 amd64。Debian 13 是首轮集成基线；其他发行版未执行就保留未验证，不能仅靠 os-release fixture 宣称整个平台验收完成。
+README 声明支持 Debian 12/13、Ubuntu 22.04/24.04 amd64。当前验证优先级见 TASKS；各发行版未执行就保留未验证，不能仅靠 os-release fixture 宣称整个平台验收完成，也不要求完成 Debian 验收后才验证 Ubuntu。
 
 云端开发准备和只运行 L1 的边界见 [CONTRIBUTING.md](../CONTRIBUTING.md)。旧 WSL
 宿主、磁盘容量、私有夹具路径和已完成的准备计划不作为当前环境前提；每次重新检查

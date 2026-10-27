@@ -12,15 +12,18 @@ Ubuntu22.04/24.04 CI/regressions. Local preparation checks below used parent
 - Local stage commits:166e828 (CI evidence),6ec55cc (asset publication),5eb8be9
   (ZIP observation/mode errors),ae838f5 (version-query refusal tests),9dda49f
   (filename-independent asset checksums),fd3710c (TLS pin pipeline failures),
-  e4999df (transaction hash/inspect refusals). They have not been pushed.
-- Stage8 repairs the remaining runtime-config checksum parsing in applied
-  publication/status. Validation parent:e4999df; resolve the final stage commit
-  with Git. Logs: `/tmp/pnm-stage8-binding.qk3v4VNg/`.
+  e4999df (transaction hash/inspect refusals),71e4c2b (applied binding hashes).
+  They have not been pushed.
+- Current priority: validate development/main-flow behavior on Ubuntu first;
+  Debian acceptance is deferred by the latest user instruction and is not a
+  prerequisite for Ubuntu development. Stage9 validation parent:71e4c2b;
+  logs: `/tmp/pnm-stage9-ubuntu.MwuaZn23/`.
 - Actual Ubuntu amd64 CI evidence remains at39312aa; unpublished increments
   have local ARM64 L1 evidence only.
-- Next integration work needs an explicitly authorized disposable Debian13
-  x86_64/root/systemd environment; the environment question is pending.
-  Do not provision, run faults on the development host, push or start Phase4.
+- Real Core/lifecycle integration can proceed on an authorized disposable
+  Ubuntu22.04/24.04 amd64/root/systemd environment. Current ARM64/non-root L1
+  execution does not establish that environment. Do not provision, run faults
+  on the development host, push or start Phase4 automatically.
 
 ## Current environment
 
@@ -56,7 +59,7 @@ provisioning, production access and deployment remain outside scope.
 | G-05 dependency preflight | Declared prerequisite checks and historical Debian guest19-tool refusal records | Remaining acquisition/DNS/PKI/timeout/archive cases and other distributions |
 | G-06 HY2 TLS/account access | Ownership/mode/effective-read checks, historical managed-account and TLS fault records | Root/platform/NSS variations, changed TLS paths on supported amd64, external handshake/traffic |
 | T-04/T-20/T-26 | Historical configured-port conflict, real lock contention, stale-binding refusal and same-disk reboot slices | Other topology/scheduling combinations and external-client routing |
-| Platform/L3 | Debian13 amd64 is the first L2 baseline; Ubuntu22.04/24.04 amd64 L1 CI passed at39312aa | Root/service/reboot acceptance on the remaining supported platforms and controlled external Xray/HY2 clients |
+| Platform/L3 | Ubuntu development validation is prioritized; Ubuntu22.04/24.04 amd64 L1 CI passed at39312aa | Fresh Ubuntu root/service/reboot and controlled external client acceptance; Debian12/13 acceptance is deferred |
 
 These are source observations and explicitly historical results, not fresh cloud
 L2 passes. The [dated T-01–T-27 reconciliation](history/PHASE3_EXECUTION_2026-10-22_26.md#matrix-reconciliation--2026-10-25)
@@ -345,18 +348,54 @@ configuration identity or new supported-platform/L2/client acceptance result.
 security/release scans. Root-only skips remain the same; the focused45/45 run
 and its full-gate repeat are not counted as independent acceptance coverage.
 
+## Stage 9: Ubuntu-first development main-flow validation
+
+The latest user instruction prioritizes Ubuntu development/main-flow checks and
+defers Debian acceptance. Debian is no longer a prerequisite for this stage.
+Validation source is71e4c2b; this increment changes documentation only. The fresh
+run used Ubuntu22.04.5 ARM64, UID1001 and PID1 codex. A read-only Docker probe
+confirmed an ARM64 server with no prepared Ubuntu test image; no container,
+package, account, service or deployment was created or changed.
+
+`make release-check` exits0:32 suites,419 passed,0 failed. This fresh run includes
+the following development main-flow segments:
+
+| Segment | Existing suites / passed wrappers |
+|---|---|
+| CLI, node initialization/validation/reporting/links | CLI11; node30 |
+| Fresh sandbox install, credentials/TLS, failed-install retry | sandbox install12 |
+| Applied binding, config apply, restart, update and rollback | Core operations15; Core evidence45 |
+| Backup/archive validation and restore/compensation | backup archive9; backup flow9; restore flow17; restore recovery12 |
+| Shared deployment compensation and receipt inspection | deployment transaction24; transaction28 |
+| Shared real-certificate/tool-failure checks | TLS10 |
+
+These suites use private real files, crypto, metadata and transactions with fixed
+Core/service/account/platform observations where needed. They are L1 development
+segments, not one real host installation or official-Core traffic. Root-only
+update CLI, access/readability, TLS access, low-mode recovery and numeric ownership
+branches retain their existing explicit skips; the TLS-access suite has0 executed
+passes. Table entries are part of419, not additional independent passes.
+
+Standard ShellCheck exits0. Offline guest guards exit0:33 total,25 executed and8
+root-only skipped; real-Core refusal guard exits0:1 passed. Neither boots a guest
+or executes an official Core. Private full-gate logs:
+`/tmp/pnm-stage9-ubuntu.MwuaZn23/`. Current Ubuntu amd64 CI evidence remains at
+39312aa until these local commits are pushed and new jobs actually succeed.
+
 ## Next priorities
 
-1. Integration prerequisite: provide/authorize a disposable Debian13 x86_64 root/systemd
-   fixture for changed TLS, acquisition and permission paths. The environment
-   question is pending; no approved fixture/asset cache has been supplied here.
-   Replay changed paths only after those prerequisites are established.
-2. Replay changed TLS and permission paths as root in an approved disposable
-   Debian13 x86_64 fixture; prepare assets/identity/cleanup prerequisites first.
-3. Continue the remaining L2 commit/storage/interruption positions from the
-   reconciliation. Do not reuse old private paths or run fault injection on the
-   development host.
+1. Continue Ubuntu development/main-flow validation and fix reproducible local
+   failures without waiting for Debian. Preserve the L1/mock versus real Core
+   boundary and the supported amd64 deployment guard.
+2. Refresh existing Ubuntu22.04/24.04 amd64 CI for the latest source after push
+   authorization. Run real Core/lifecycle validation on an explicitly authorized disposable
+   Ubuntu22.04/24.04 amd64/root/systemd fixture when available. Prepare verified
+   assets, identity and cleanup prerequisites first; an installed Docker client
+   does not establish a suitable fixture.
+3. Continue applicable L2 commit/storage/interruption positions on the approved
+   Ubuntu fixture. Do not reuse old private paths or fault the development host.
 4. Obtain an authorized deployed target for G-01 and controlled external clients
    for T-27; record source identity and each protocol's handshake/traffic separately.
-5. Execute other supported amd64 platform acceptance, then reassess Phase3 closure.
+5. Perform deferred Debian12/13 and remaining supported-platform acceptance,
+   then reassess Phase3 closure.
    Do not start Profiles, production changes or release work automatically.

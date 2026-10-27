@@ -43,4 +43,4 @@ First define and test how PNM proves a firewall rule is its own. Until that exis
 
 ## Phase 7 — Regression and release readiness
 
-Extend the existing `tests/unit/` suite and run repository gates (`make check`, `make shellcheck`, `make release-check`) where available. Run disposable Debian 13/systemd validation for unit, permission, reboot, and rollback behavior. Record external Xray/HY2 client results separately. Release/version/tag actions require explicit authorization and the release checklist in `RELEASING.md`.
+Extend the existing `tests/unit/` suite and run repository gates (`make check`, `make shellcheck`, `make release-check`) where available. Run disposable supported Ubuntu/Debian amd64/systemd validation for unit, permission, reboot, and rollback behavior, following the current priority in `TASKS.md`. Record external Xray/HY2 client results separately. Release/version/tag actions require explicit authorization and the release checklist in `RELEASING.md`.

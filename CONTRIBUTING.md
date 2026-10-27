@@ -82,8 +82,8 @@ Core traffic. Record their root-only skips too.
 | Layer | Environment | Boundary |
 |---|---|---|
 | L1 | Linux workspace, including ARM64/non-root | Real temporary files/crypto with mocked service, account and network observations; skips remain visible |
-| L2 | Approved disposable Debian 13 x86_64/systemd environment | Real accounts, pinned Core programs, units, listeners, fault recovery and same-disk reboot |
-| Other supported platforms | Separate amd64 Debian 12/Ubuntu 22.04/24.04 execution | Their own acceptance; os-release fixtures are L1 only |
+| L2 | Approved disposable supported Ubuntu/Debian amd64/systemd environment | Real accounts, pinned Core programs, units, listeners, fault recovery and same-disk reboot |
+| Other supported platforms | Separate execution for each remaining supported amd64 release | Their own acceptance; os-release fixtures are L1 only |
 | L3 | Authorized targets and controlled external clients | Separate Xray REALITY and HY2 handshakes and traffic |
 
 The `test-systemd`, `test-real-cores`, `test-guest-mainflow` and
