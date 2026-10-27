@@ -2,18 +2,18 @@
 
 **Updated:** 2026-10-27. **Phase 3 remains incomplete; Phase 4 and release work have not started.**
 
-**Published baseline:** branch `dev`, commit `b3e223d`, VERSION
+**Published baseline:** branch `dev`, commit `c4e906c`, VERSION
 `0.16.0-rc.1`, including TLS/test repairs, cloud-development cleanup and
-Ubuntu22.04/24.04 CI/regressions plus stages11–12 integration below. Earlier preparation checks
+Ubuntu22.04/24.04 CI/regressions plus stages11–17 below. Earlier preparation checks
 used their recorded parents; do not attribute earlier39312aa CI to this baseline.
 
 ## Continuation checkpoint
 
 - Ubuntu development validation remains first; Debian acceptance is deferred.
-- Latest published/validated source:b3e223d730c773b61da8512e4574b29ece9083fb,
-  [run40460290093](https://github.com/mrshyi/pnm/actions/runs/40460290093), success
-  on both Ubuntu22.04/24.04 amd64. See stages14–15 for exact jobs and limits.
-- Per Ubuntu job: normal check/release425 each; privileged suites48; loopback
+- Latest published/validated source:c4e906ccade0fca843405daa6480f14655fde1cf,
+  [run40465705895](https://github.com/mrshyi/pnm/actions/runs/40465705895), success
+  on both Ubuntu22.04/24.04 amd64. See stages16–17 for exact jobs and limits.
+- Per Ubuntu job: normal check/release438 each; privileged suites48; loopback
   asset transport7; real systemd8; official-Core private-network10; ShellCheck
   success. These are separate execution layers, not an independent total.
 - The five ordinary non-root skips remain intentional; their corresponding
@@ -30,6 +30,9 @@ used their recorded parents; do not attribute earlier39312aa CI to this baseline
 - Stage15 candidateb3e223d730c773b61da8512e4574b29ece9083fb is published;
   [run40460290093](https://github.com/mrshyi/pnm/actions/runs/40460290093)
   passed the TLS leaf/mode fixes and all existing gates on both Ubuntu versions.
+- Stages16–17 add no-replace publication for TLS pairs and Hysteria2 binaries;
+  both commits pass their own Ubuntu22.04/24.04 CI runs. No installation,
+  production service, account or release/version changes were performed.
 
 ## Current environment
 
@@ -630,7 +633,15 @@ input without publication. Sandbox install passes12/12. Standard and targeted
 ShellCheck pass. Protected staging parents are assumed; these tests do not prove
 arbitrary privileged concurrent writes or physical storage failure recovery.
 Local `make release-check` exits0:32 suites/434 passed/0 failed. The five
-ordinary root-only skips remain explicit. Ubuntu amd64 integration is pending.
+ordinary root-only skips remain explicit.
+
+Source dfb561f4eae75574536c5c59b4ff694f4c3ab471 passes
+[run40465124191](https://github.com/mrshyi/pnm/actions/runs/40465124191),
+push/attempt1. Jobs122058554836 (Ubuntu22.04) and122058554499 (Ubuntu24.04)
+each pass normal check/release32 suites/434 per gate, ShellCheck, privileged48,
+loopback acquisition7, real systemd8 and official-Core10. No failed summaries;
+this remains isolated integration rather than full managed installation,
+persisted reboot or external-client acceptance.
 
 ## Stage 17: Hysteria2 binary staging publication
 
@@ -648,7 +659,17 @@ failure after writing bytes. Standard and targeted ShellCheck pass. Caller
 version/configuration checks and managed transaction boundaries remain intact;
 no Core binary is executed by these synthetic staging tests. Local
 `make release-check` exits0:32 suites/438 passed/0 failed, retaining the five
-ordinary root-only skips. Ubuntu amd64 integration is pending.
+ordinary root-only skips. Ubuntu integration was pending during local preparation.
+
+Source c4e906ccade0fca843405daa6480f14655fde1cf passes
+[run40465705895](https://github.com/mrshyi/pnm/actions/runs/40465705895),
+push/attempt1. Jobs122060468649 (Ubuntu22.04) and122060468868 (Ubuntu24.04)
+each pass normal check/release32 suites/438 per gate, ShellCheck, privileged48
+without skips, loopback acquisition7, real systemd8 and official-Core10.
+All70 shell-suite summaries per job report zero failures; repeated gates and
+execution layers are not added together as unique cases. Remaining installation,
+managed-account/NSS, physical storage, reboot, external-client and deferred
+Debian acceptance are unchanged. Phase3 remains open.
 
 ## Next priorities
 
