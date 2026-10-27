@@ -52,10 +52,10 @@ used their recorded parents; do not attribute earlier39312aa CI to this baseline
 
 For development setup and gate commands, use [CONTRIBUTING](../CONTRIBUTING.md).
 For test IDs and closure rules, use [ACCEPTANCE_PLAN](ACCEPTANCE_PLAN.md).
-The latest continuation follows the proposed push/Ubuntu CI stage: d7919a2 is
-published and its existing checks are running. Continue validated stage commits
-and record exact source identity before moving on. This does not authorize
-production access, deployment or package installation on the development host.
+Continue Ubuntu validation in stages, committing validated work and recording
+exact source identity before moving on. CI uses disposable hosted runners;
+production access, deployment and package installation on the development host
+remain outside scope.
 
 ## Current implementation and remaining acceptance
 
@@ -70,8 +70,9 @@ production access, deployment or package installation on the development host.
 | T-04/T-20/T-26 | Historical configured-port conflict, real lock contention, stale-binding refusal and same-disk reboot slices | Other topology/scheduling combinations and external-client routing |
 | Platform/L3 | Ubuntu22.04/24.04 amd64 ordinary/root gates, selected real systemd and isolated official-Core tests passed ated2b3b1 | Full CLI install/account/reboot and external client acceptance remain open; Debian12/13 acceptance is deferred |
 
-These are source observations and explicitly historical results, not fresh cloud
-L2 passes. The [dated T-01–T-27 reconciliation](history/PHASE3_EXECUTION_2026-10-22_26.md#matrix-reconciliation--2026-10-25)
+Current source, historical observations and fresh Ubuntu checks have separate
+evidence below; selected CI integration does not establish the full L2 matrix.
+The [dated T-01–T-27 reconciliation](history/PHASE3_EXECUTION_2026-10-22_26.md#matrix-reconciliation--2026-10-25)
 retains exact prior coverage and limits. Earlier A-01–A-05 reports are pre-repair
 findings; do not reopen them solely because the archived text describes old code.
 
@@ -509,6 +510,30 @@ user section intentionally retains all five root-only labels. This closes their
 Ubuntu execution gap, not the remaining real account-install/NSS variants or
 physical storage/reboot/external-client matrix. The protected-checkout failure
 was a test-fixture bootstrap defect; no production permission expectation changed.
+
+## Stage 13: real loopback asset-acquisition candidate
+
+Validation parent78c528c. Add a separate non-root test-asset-network target and
+Ubuntu CI step using the existing AssetServer from guest_update_cases, without
+changing its VM guards or server implementation. Both production asset URLs,
+curl transport, hash/mode checks and candidate publication execute against a
+private loopback CONNECT/TLS fixture with synthetic bytes. No Core executes.
+
+Five local cases pass on Ubuntu22.04 ARM64/curl7.81/OpenSSL3.0.2, each covering
+both Cores: verified private publication, checksum refusal78, partial HTTP18→69,
+untrusted CA60→69 and controlled TLS-handshake timeout28→69. Assertions cover
+receipt statuses, mode0600/current ownership, absent refused destinations,
+candidate cleanup, retained unrelated data and bounded owned-thread cleanup.
+The first local pilot exposed a fixture CA-subject collision; distinct issuer
+subjects give the intended unknown-CA refusal. No production behavior changed.
+
+The client wrapper disables curlrc/retries and imposes test-only bounds. This
+does not verify default production retries/overall deadlines, upstream DNS/PKI
+outages, full install compensation or archive/Core execution safety. Python AST,
+embedded Bash syntax/ShellCheck, repository syntax/security scans, standard
+ShellCheck and workflow entry-point/matrix checks pass. Socket creation needs the
+approved local loopback execution context outside the restrictive sandbox.
+Ubuntu amd64 CI execution is pending the candidate's publication.
 
 ## Next priorities
 

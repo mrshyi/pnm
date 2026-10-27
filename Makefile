@@ -1,10 +1,14 @@
 SHELL := /usr/bin/env bash
 PNM_GUEST_SCENARIO ?= lifecycle
 
-.PHONY: test test-systemd test-real-cores test-guest-mainflow test-commit-storage syntax security-scan shellcheck release-check check
+.PHONY: test test-asset-network test-systemd test-real-cores test-guest-mainflow test-commit-storage syntax security-scan shellcheck release-check check
 
 test:
 	./tests/run.sh
+
+# Loopback-only real curl/TLS with synthetic assets; no root or Core execution.
+test-asset-network:
+	python3 -B tests/integration/test_asset_acquisition.py
 
 # Explicit opt-in: at most64KiB tmpfs, only in owned child mount namespaces.
 test-commit-storage:

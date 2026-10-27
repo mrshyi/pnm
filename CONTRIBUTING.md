@@ -85,6 +85,15 @@ python3 -B tests/integration/test_real_core_refusal_guard.py
 These test harness refusal behavior; they do not boot a guest or validate actual
 Core traffic. Record their root-only skips too.
 
+`make test-asset-network` runs non-root, loopback-only real curl/TLS acquisition
+checks against synthetic assets, reusing the existing HTTPS fixture. It covers
+successful private publication, checksum refusal, truncated HTTP bodies,
+untrusted certificates and a controlled TLS-handshake timeout for both Cores.
+It needs permission to bind a local socket; it does not install or execute Cores.
+The test curl wrapper disables curlrc, retries and uses short test-only deadlines;
+it does not establish the production downloader's retry/deadline policy or test
+upstream DNS outages. Ubuntu CI runs this target separately from the L1 suites.
+
 ## Integration and acceptance boundaries
 
 | Layer | Environment | Boundary |

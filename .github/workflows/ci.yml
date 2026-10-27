@@ -48,6 +48,9 @@ jobs:
           sudo bash tests/unit/test_tls_access.sh
           sudo bash tests/unit/test_transaction.sh
 
+      - name: Run loopback asset acquisition checks
+        run: make test-asset-network
+
       - name: Run release checks
         run: make release-check
 
