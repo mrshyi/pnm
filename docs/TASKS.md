@@ -2,22 +2,22 @@
 
 **Updated:** 2026-10-27. **Phase 3 repair scope is frozen; bounded Ubuntu acceptance is pending. Phase 4 and release work have not started.**
 
-**Published baseline:** branch `dev`, commit `0ff5762`, VERSION
+**Published baseline:** branch `dev`, commit `d976f57`, VERSION
 `0.16.0-rc.1`, including TLS/test repairs, cloud-development cleanup and
-Ubuntu22.04/24.04 CI/regressions plus stages11–17 and U-02 preparation below. Earlier preparation checks
+Ubuntu22.04/24.04 CI/regressions plus stages11–17 and bounded main-flow preparation below. Earlier preparation checks
 used their recorded parents; do not attribute earlier39312aa CI to this baseline.
 
 ## Continuation checkpoint
 
 - Ubuntu development validation remains first; Debian acceptance is deferred.
-- Latest published/validated source:0ff5762bad677511d86e5d20cdbbe6947f08b09e,
-  [run40477522467](https://github.com/mrshyi/pnm/actions/runs/40477522467), success
+- Latest published/validated source:d976f57202764aa2d1aac20a17c15f20c5743e44,
+  [run40482079293](https://github.com/mrshyi/pnm/actions/runs/40482079293), success
   on both Ubuntu22.04/24.04 amd64. Product runtime files remain identical to
-  c4e906c; the new increment prepares U-02, not a deployed-mainflow pass.
+  c4e906c; these increments prepare U-02/U-03/U-06, not a deployed-mainflow pass.
 - Per Ubuntu job: normal check/release438 each; privileged suites48; loopback
   asset transport7; real systemd8; official-Core private-network10; ShellCheck
   success. These are separate execution layers, not an independent total.
-- Main-flow preparation per Ubuntu job:35 total,27 executed/8 root-only skipped;
+- Main-flow preparation per Ubuntu job:36 total,28 executed/8 root-only skipped;
   no guest installation or reboot runs in that step.
 - The five ordinary non-root skips remain intentional; their corresponding
   privileged suites actually execute without skips. Current ARM64 transport
@@ -92,7 +92,7 @@ failures remain required below, not deferred.
 
 The finite execution contract is [U-01–U-08](ACCEPTANCE_PLAN.md#ubuntu-closeout).
 All eight must have evidence on Ubuntu22.04 and24.04 before Ubuntu closeout is
-declared. The recorded0ff5762 CI satisfies only the U-01 layer for that
+declared. The recordedd976f57 CI satisfies only the U-01 layer for that
 source; U-02–U-08 remain pending. No target, assets or installation/reboot
 authorization is inferred from this checklist. Phase3 remains acceptance-pending;
 closure requires the bounded results and an explicit disposition of residuals,
@@ -100,7 +100,7 @@ not merely this document edit. Phase4 still requires separate authorization.
 
 | Closeout ID | Ubuntu22.04 | Ubuntu24.04 |
 |---|---|---|
-| U-01 | PASS at0ff5762, run40477522467 | PASS at0ff5762, same run |
+| U-01 | PASS atd976f57, run40482079293 | PASS atd976f57, same run |
 | U-02 | BLOCKED | BLOCKED |
 | U-03 | BLOCKED | BLOCKED |
 | U-04 | BLOCKED | BLOCKED |
@@ -755,8 +755,18 @@ no product runtime or command format changes and no expanded fault matrix.
 Local preparation suite:36 total,28 executed/8 root-only skipped, exit0, including
 actual OpenSSL chain/hostname validation and PNM pair validation of correct/wrong
 keys. L1 suites pass: archive9, backup9, restore17, restore recovery12 and sandbox
-install12. Four changed Python sources parse. Full guest execution of these new
+install12. Standard ShellCheck passes and four changed Python sources parse. Full guest execution of these new
 paths remains pending; U-03/U-06 are still BLOCKED in the closeout table.
+
+Actual sourced976f57202764aa2d1aac20a17c15f20c5743e44 passes
+[run40482079293](https://github.com/mrshyi/pnm/actions/runs/40482079293),
+push/attempt1. Jobs122114610802 (Ubuntu22.04) and122114610278 (Ubuntu24.04)
+each pass preparation36 total/28 executed/8 skipped, normal check/release32
+suites/438 per gate, ShellCheck, privileged48, transport7, real systemd8 and
+official-Core10. All70 shell summaries per job report zero failures. This runs
+the CA fixture validation and existing selected integration; the newly scripted
+external-ca CLI installation/compensation and damaged-restore guest paths were
+not executed by CI and remain unaccepted. No U-02–U-08 PASS is inferred.
 
 1. Freeze runtime baseline c4e906c and the finite U-01–U-08 checklist. This
    documentation closeout adds no runtime changes or new dynamic-test claims.
