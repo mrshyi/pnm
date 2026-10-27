@@ -33,6 +33,7 @@ jobs:
           bash --version | head -n 1
           python3 --version
           openssl version
+          curl --version | head -n 1
           systemd-analyze --version | head -n 1
 
       - name: Run test and security checks

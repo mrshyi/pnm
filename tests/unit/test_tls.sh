@@ -77,6 +77,53 @@ test_key_publication_failure_refuses_pair_without_caller_pipefail() (
     done
 )
 
+tls_dangling_destination_is_preserved() (
+    local operation="$1" leaf="$2" temp_dir target other
+    temp_dir="$(mktemp -d)"
+    trap 'rm -rf -- "$temp_dir"' EXIT
+    mkdir -m 0700 -- "$temp_dir/seed" "$temp_dir/target"
+    pnm_tls_generate_selfsigned "$temp_dir/seed/cert" "$temp_dir/seed/key" example.com || return 1
+    target="$temp_dir/target/$leaf"
+    if [[ "$leaf" == server.crt ]]; then other=server.key; else other=server.crt; fi
+    ln -s -- "$temp_dir/foreign-missing" "$target" || return 1
+    if [[ "$operation" == generate ]]; then
+        run_capture pnm_tls_generate_selfsigned "$temp_dir/target/server.crt" "$temp_dir/target/server.key" example.com
+    else
+        run_capture pnm_tls_stage_external_pair "$temp_dir/seed/cert" "$temp_dir/seed/key" "$temp_dir/target"
+    fi
+    assert_eq "$PNM_EXIT_CANTCREAT" "$RUN_RC" || return 1
+    assert_eq '' "$RUN_OUTPUT" || return 1
+    [[ -L "$target" && "$(readlink -- "$target")" == "$temp_dir/foreign-missing" ]] || return 1
+    [[ ! -e "$temp_dir/foreign-missing" && ! -L "$temp_dir/foreign-missing" ]] || return 1
+    [[ ! -e "$temp_dir/target/$other" && ! -L "$temp_dir/target/$other" ]] || return 1
+    [[ -z "$(find "$temp_dir/target" -maxdepth 1 -name '.pnm-*' -print -quit)" ]]
+)
+
+test_generated_certificate_keeps_foreign_dangling_link() { tls_dangling_destination_is_preserved generate server.crt; }
+test_generated_key_keeps_foreign_dangling_link() { tls_dangling_destination_is_preserved generate server.key; }
+test_external_certificate_keeps_foreign_dangling_link() { tls_dangling_destination_is_preserved external server.crt; }
+test_external_key_keeps_foreign_dangling_link() { tls_dangling_destination_is_preserved external server.key; }
+
+tls_mode_failure_refuses_publication() (
+    local failed_mode="$1" temp_dir
+    temp_dir="$(mktemp -d)"
+    trap 'rm -rf -- "$temp_dir"' EXIT
+    printf 'unrelated data' >"$temp_dir/sentinel"
+    chmod() {
+        if [[ "$1" == "$failed_mode" && "${!#}" == "$temp_dir"/.pnm-* ]]; then return 1; fi
+        command chmod "$@"
+    }
+    run_capture pnm_tls_generate_selfsigned "$temp_dir/cert" "$temp_dir/key" example.com
+    assert_eq "$PNM_EXIT_NOPERM" "$RUN_RC" || return 1
+    assert_eq '' "$RUN_OUTPUT" || return 1
+    [[ ! -e "$temp_dir/cert" && ! -e "$temp_dir/key" ]] || return 1
+    [[ -z "$(find "$temp_dir" -maxdepth 1 -name '.pnm-*' -print -quit)" ]] || return 1
+    assert_eq 'unrelated data' "$(<"$temp_dir/sentinel")"
+)
+
+test_certificate_mode_failure_refuses_publication() { tls_mode_failure_refuses_publication 0644; }
+test_key_mode_failure_refuses_publication() { tls_mode_failure_refuses_publication 0600; }
+
 test_mismatched_pair_is_rejected() {
     local temp_dir cert1 key1 cert2 key2 rc
     temp_dir="$(mktemp -d)"
@@ -196,6 +243,12 @@ run_test 'DNS matching rejects mismatches and unknown tool results while preserv
 run_test 'client fingerprint hashes full certificate DER and changes on same-key renewal' test_client_fingerprint_hashes_certificate_der_not_spki
 run_test 'client fingerprint rejects invalid input and tool failure or malformed output' test_client_fingerprint_rejects_invalid_inputs_and_tool_output
 run_test 'self-signed certificate pair is valid and produces Base64 pin' test_selfsigned_pair_is_valid_and_pinned
+run_test 'self-signed staging preserves an existing dangling certificate link' test_generated_certificate_keeps_foreign_dangling_link
+run_test 'self-signed staging preserves an existing dangling key link' test_generated_key_keeps_foreign_dangling_link
+run_test 'external TLS staging preserves an existing dangling certificate link' test_external_certificate_keeps_foreign_dangling_link
+run_test 'external TLS staging preserves an existing dangling key link' test_external_key_keeps_foreign_dangling_link
+run_test 'certificate mode failure refuses self-signed publication' test_certificate_mode_failure_refuses_publication
+run_test 'key mode failure refuses self-signed publication' test_key_mode_failure_refuses_publication
 run_test 'SPKI DER conversion failure refuses a pin without leaking pipeline output' test_spki_der_failure_refuses_pin
 run_test 'SPKI digest failure refuses a pin without leaking pipeline output' test_spki_digest_failure_refuses_pin
 run_test 'SPKI encoding failure refuses a pin without leaking pipeline output' test_spki_base64_failure_refuses_pin

@@ -567,8 +567,34 @@ push/attempt1, both Ubuntu jobs successful:122038127649 (22.04) and122038127435
 (24.04). Each runs7 acquisition cases with no skips and also passes normal
 check/release32 suites/419 per gate, ShellCheck, privileged48, real systemd8
 and official-Core10. This verifies the declared503 retry count with actual
-curl7.81/OpenSSL3.0.2 and curl8.5/OpenSSL3.0.13 paths on Ubuntu; other retry
+the actual curl/OpenSSL stacks on both Ubuntu versions; other retry
 statuses, Retry-After and default overall deadlines remain open.
+
+## Stage 15: TLS staging destination and mode failures
+
+Runtime validation baseee132a7; stage14 result record221f987 is documentation
+only. Source/caller inspection and private reproductions found that self-signed
+generation deleted an existing dangling certificate link after failed validation,
+while external staging replaced it and returned0. Both destination checks now
+reject leaf links as occupied, including an absent target, and return73 before
+file publication. Existing regular files retain the same refusal behavior.
+
+Four real-crypto/file regressions initially fail (10 existing passed/4 failed);
+the link-only repair passes TLS14/14, sandbox install12/12, ShellCheck and local
+release-check32 suites/423 wrappers/0 failures. A second injected-mode regression
+reproduces ignored certificate/key chmod errors (14 passed/2 failed). Check both
+chmod calls and remove only the newly generated temporary pair on failure77.
+The final focused TLS suite passes16/16 and sandbox12/12; standard and targeted
+ShellCheck pass. Final full-gate execution is pending for this increment.
+
+Tests cover both certificate/key destinations in self-signed and external modes,
+retained foreign links/absent targets, no counterpart publication or leaked
+temporary pair, and unrelated sentinel preservation. No CLI, configuration, pin,
+URI or VERSION changes. Existing outer transaction/caller cleanup remains in use;
+these pre-existing-leaf checks do not coordinate arbitrary privileged writers.
+Private logs: `/tmp/pnm-stage15-tls-links.0cfiMChK/`. CI additionally records curl
+version for future transport evidence; the stage14 record does not infer an
+unrecorded curl build version from the runner label.
 
 ## Next priorities
 

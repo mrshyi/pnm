@@ -170,7 +170,7 @@ pnm_tls_generate_selfsigned() {
     certificate_parent="$(dirname -- "$certificate")"
     key_parent="$(dirname -- "$private_key")"
     [[ -d "$certificate_parent" && -d "$key_parent" ]] || return "$PNM_EXIT_CANTCREAT"
-    [[ ! -e "$certificate" && ! -e "$private_key" ]] || return "$PNM_EXIT_CANTCREAT"
+    [[ ! -e "$certificate" && ! -L "$certificate" && ! -e "$private_key" && ! -L "$private_key" ]] || return "$PNM_EXIT_CANTCREAT"
     temp_certificate="$(mktemp "$certificate_parent/.pnm-cert.XXXXXXXX")" || return "$PNM_EXIT_CANTCREAT"
     temp_key="$(mktemp "$key_parent/.pnm-key.XXXXXXXX")" || {
         rm -f -- "$temp_certificate"
@@ -183,8 +183,10 @@ pnm_tls_generate_selfsigned() {
         rm -f -- "$temp_certificate" "$temp_key"
         return "$PNM_EXIT_SOFTWARE"
     fi
-    chmod 0644 -- "$temp_certificate"
-    chmod 0600 -- "$temp_key"
+    if ! chmod 0644 -- "$temp_certificate" || ! chmod 0600 -- "$temp_key"; then
+        rm -f -- "$temp_certificate" "$temp_key"
+        return "$PNM_EXIT_NOPERM"
+    fi
     mv -n -- "$temp_certificate" "$certificate" || {
         rm -f -- "$temp_certificate" "$temp_key"
         return "$PNM_EXIT_CANTCREAT"
@@ -209,7 +211,7 @@ pnm_tls_stage_external_pair() {
     [[ -f "$source_certificate" && ! -L "$source_certificate" ]] || return "$PNM_EXIT_CONFIG"
     [[ -f "$source_key" && ! -L "$source_key" ]] || return "$PNM_EXIT_CONFIG"
     pnm_mkdir_mode 0700 "$destination_dir" || return "$PNM_EXIT_CANTCREAT"
-    [[ ! -e "$certificate" && ! -e "$private_key" ]] || return "$PNM_EXIT_CANTCREAT"
+    [[ ! -e "$certificate" && ! -L "$certificate" && ! -e "$private_key" && ! -L "$private_key" ]] || return "$PNM_EXIT_CANTCREAT"
     install -m 0644 -- "$source_certificate" "$certificate" || return "$PNM_EXIT_CANTCREAT"
     if ! install -m 0600 -- "$source_key" "$private_key"; then
         rm -f -- "$certificate" "$private_key"

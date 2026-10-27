@@ -29,6 +29,13 @@ uses default OpenSSL date output and C-locale date conversion for compatibility
 with Ubuntu22.04's OpenSSL3.0.2. Unknown tool output remains a refusal or diagnostic
 warning rather than readiness.
 
+Self-signed generation and external TLS staging both reject existing certificate
+or key destinations, including dangling symlinks, with73 before publishing either
+file. A link to an absent target is an occupied destination and remains intact.
+Self-signed staging checks both permission changes before publication; a failed
+chmod removes its own temporary pair and returns77 without publishing either file.
+Managed-file publication and compensation still belong to the outer transaction.
+
 Config apply shares the guarded Core file writer with archive restore. Runtime
 configuration metadata is required at publication, checked before ownership
 normalization and re-enrolled only against the fixed intended tuple. External
