@@ -162,7 +162,7 @@ pnm_tx_load_for_inspect() {
     local current_label='' current_path='' current_state='' current_mode='' current_hash='' current_stage=''
     local -A metadata_values=() core_values=()
     local -a change_labels=() change_states=() change_paths=() change_original_states=() change_modes=() change_hashes=()
-    local index snapshot_root snapshot_owner directory_changes=0 marker_committed=0 commit_uncertain=0
+    local index snapshot_root snapshot_owner snapshot_digest directory_changes=0 marker_committed=0 commit_uncertain=0
     local -A seen_labels=() change_records=() change_indexes=()
 
     PNM_TX_ACCOUNT_KEYS=()
@@ -352,7 +352,8 @@ pnm_tx_load_for_inspect() {
         if [[ "${change_original_states[index]}" == PRESENT ]]; then
             owner_mode="$(stat -c '%a|%u' -- "$snapshot_root/${change_labels[index]}" 2>/dev/null || printf '000|x')"
             [[ "$owner_mode" == "600|$EUID" ]] || return "$PNM_EXIT_CONFIG"
-            [[ "$(pnm_tx_file_sha256 "$snapshot_root/${change_labels[index]}")" != UNSAFE ]] || return "$PNM_EXIT_CONFIG"
+            snapshot_digest="$(pnm_tx_file_sha256 "$snapshot_root/${change_labels[index]}")" || return "$PNM_EXIT_CONFIG"
+            [[ "$snapshot_digest" =~ ^[a-f0-9]{64}$ ]] || return "$PNM_EXIT_CONFIG"
         fi
         owner_mode="$(stat -c '%a|%u' -- "$snapshot_root/${change_labels[index]}.state" 2>/dev/null || printf '000|x')"
         [[ "$owner_mode" == "600|$EUID" ]] || return "$PNM_EXIT_CONFIG"
@@ -491,8 +492,8 @@ pnm_tx_file_sha256() {
         printf 'UNSAFE\n'
         return "$PNM_EXIT_CONFIG"
     }
-    digest="$(sha256sum -- "$path" 2>/dev/null | awk '{print $1}')" || return "$PNM_EXIT_SOFTWARE"
-    printf '%s\n' "$digest"
+    digest="$(sha256sum 2>/dev/null <"$path")" || return "$PNM_EXIT_SOFTWARE"
+    printf '%s\n' "${digest%% *}"
 }
 
 pnm_tx_require_filesystem_schema() {

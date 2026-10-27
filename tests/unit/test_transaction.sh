@@ -42,6 +42,74 @@ tx_fail_rollback() {
     return 23
 }
 
+test_backslash_path_write_and_recovery_remain_inspectable() (
+    local temp_dir target attributes
+    temp_dir="$(mktemp -d)"
+    trap 'pnm_tx_close >/dev/null 2>&1 || true; rm -rf -- "$temp_dir"' EXIT
+    PNM_STATE_DIR="$temp_dir/state" PNM_LOCK_FILE="$temp_dir/lock"
+    PNM_TX_ID_OVERRIDE=unit-backslash PNM_DRY_RUN=0
+    mkdir -m 0700 -- "$temp_dir/managed\\area" || return 1
+    target="$temp_dir/managed\\area/config"
+    printf 'original configuration' >"$target"
+    chmod 0640 -- "$target" || return 1
+    attributes="$(stat -c '%a|%u|%g' -- "$target")"
+    printf 'candidate configuration' >"$temp_dir/candidate"
+    pnm_tx_begin install || return 1
+    pnm_tx_add_rollback pnm_tx_restore_written_files || return 1
+    pnm_tx_write_file "$temp_dir/candidate" "$target" fixture 0600 required || return 1
+    assert_eq 'candidate configuration' "$(<"$target")" || return 1
+    [[ "${PNM_TX_WRITTEN_HASHES[0]}" =~ ^[a-f0-9]{64}$ ]] || return 1
+    pnm_tx_verify_written_resources || return 1
+    pnm_tx_rollback || return 1
+    pnm_tx_close || return 1
+    assert_eq 'original configuration' "$(<"$target")" || return 1
+    assert_eq "$attributes" "$(stat -c '%a|%u|%g' -- "$target")" || return 1
+    pnm_tx_load_for_inspect unit-backslash || return 1
+    assert_eq ROLLED_BACK "$PNM_TX_INSPECT_STATE" || return 1
+    assert_eq 0 "$PNM_TX_INSPECT_CHANGES"
+)
+
+test_transaction_hash_tool_failure_has_no_digest() (
+    local temp_dir
+    temp_dir="$(mktemp -d)"
+    trap 'rm -rf -- "$temp_dir"' EXIT
+    printf 'configuration' >"$temp_dir/config"
+    sha256sum() { command sha256sum "$@" || return $?; return 23; }
+    set +o pipefail
+    run_capture pnm_tx_file_sha256 "$temp_dir/config"
+    assert_eq "$PNM_EXIT_SOFTWARE" "$RUN_RC" || return 1
+    assert_eq '' "$RUN_OUTPUT"
+)
+
+test_inspect_refuses_failed_snapshot_hash_observation() (
+    local temp_dir emit_digest
+    temp_dir="$(mktemp -d)"
+    trap 'pnm_tx_close >/dev/null 2>&1 || true; rm -rf -- "$temp_dir"' EXIT
+    PNM_STATE_DIR="$temp_dir/state" PNM_LOCK_FILE="$temp_dir/lock"
+    PNM_TX_ID_OVERRIDE=unit-hash-observation PNM_DRY_RUN=0
+    printf 'original configuration' >"$temp_dir/config"
+    printf 'candidate configuration' >"$temp_dir/candidate"
+    pnm_tx_begin install || return 1
+    pnm_tx_write_file "$temp_dir/candidate" "$temp_dir/config" fixture 0600 required || return 1
+    pnm_tx_commit || return 1
+    pnm_tx_close || return 1
+    pnm_tx_load_for_inspect unit-hash-observation || return 1
+    assert_eq COMMITTED "$PNM_TX_INSPECT_STATE" || return 1
+    pnm_tx_assert_no_pending_deployment || return 1
+    sha256sum() {
+        if [[ "$emit_digest" == yes ]]; then command sha256sum "$@" || return $?; fi
+        return 23
+    }
+    for emit_digest in yes no; do
+        run_capture pnm_tx_load_for_inspect unit-hash-observation
+        assert_eq "$PNM_EXIT_CONFIG" "$RUN_RC" || return 1
+        assert_eq '' "$RUN_OUTPUT$RUN_ERROR" || return 1
+        run_capture pnm_tx_assert_no_pending_deployment
+        assert_eq "$PNM_EXIT_SOFTWARE" "$RUN_RC" || return 1
+        assert_eq 'candidate configuration' "$(<"$temp_dir/config")" || return 1
+    done
+)
+
 test_transaction_journal_lifecycle() {
     local temp_dir journal metadata
     temp_dir="$(mktemp -d)"
@@ -573,6 +641,9 @@ test_inspect_handles_multiple_file_restores() (
     assert_eq 0 "$PNM_TX_INSPECT_CHANGES"
 )
 
+run_test 'backslash paths retain valid write, rollback and inspect receipts' test_backslash_path_write_and_recovery_remain_inspectable
+run_test 'failed transaction hash queries emit no digest independently of pipefail' test_transaction_hash_tool_failure_has_no_digest
+run_test 'transaction inspect refuses failed snapshot hash observations' test_inspect_refuses_failed_snapshot_hash_observation
 run_test 'recovery remains inspectable when APPLIED receipt writes fail' test_inspect_handles_missing_applied_receipts
 run_test 'low permission modes survive recovery and inspection' test_low_mode_metadata_survives_recovery
 run_test 'transaction writes reject symlink ancestors' test_transaction_rejects_symlink_ancestor_writes

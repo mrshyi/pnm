@@ -85,6 +85,12 @@ Restart, configuration apply, uninstall and standalone lifecycle now share the s
 
 The existing unresolved-deployment guard also inspects standalone Core, node-init, install-state and sandbox-install transactions. Writers and protected reads refuse interrupted, abandoned-after-attempt, invalid or recovery-required evidence. Valid committed/rolled-back receipts allow progress. A narrow schema-2 retry exception accepts protected empty receipts with only BEGIN, private SNAPSHOT and ABANDONED events, without any service/restore/commit baseline or attempted step. It does not replay recovery across processes or infer service safety from an empty file manifest.
 
+Transaction file hashing uses standard input to keep filename escaping out of
+digests and checks hash-tool status directly. Inspect requires a successful
+64-character SHA-256 observation of every PRESENT snapshot; an unreadable or
+failed observation cannot establish terminal state or clear the existing write
+guard. This does not authenticate snapshot content against an original digest.
+
 Catchable EXIT/INT/TERM during an active standalone transaction uses the existing registered rollback callbacks and then closes its lock level. Persisted valid COMMIT/rollback receipts take precedence over an interrupted memory-flag update. Completed callbacks finish a missing completion receipt without repeating file/service recovery. Invalid or already uncertain journal evidence is retained for manual inspection; invalid evidence closes without appending to the rejected journal. Original failures/signals retain their exit status, and an unclosed uncommitted success becomes an error. Recovery defers subsequent INT/TERM for that attempt. This does not catch SIGKILL, perform cross-process replay or establish real systemd recovery.
 
 Restore binds its initial root/mode check to a device/inode pair. The parser opens with `O_NOFOLLOW|O_NONBLOCK`, checks the descriptor is the same regular file with protected ownership/mode, and reads tar data from that descriptor. Replacement with another file, symlink or FIFO is refused before candidate validation. This does not prevent a privileged writer changing bytes in place, authenticate the archive or replace the trusted-provenance requirement.

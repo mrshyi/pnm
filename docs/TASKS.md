@@ -11,10 +11,12 @@ Ubuntu22.04/24.04 CI/regressions. Local preparation checks below used parent
 
 - Local stage commits:166e828 (CI evidence),6ec55cc (asset publication),5eb8be9
   (ZIP observation/mode errors),ae838f5 (version-query refusal tests),9dda49f
-  (filename-independent asset checksums). They have not been pushed.
-- Stage6 repairs error propagation in TLS SPKI/private-key pin pipelines, with
-  caller shell options preserved. Validation parent:9dda49f; resolve the final
-  stage commit with Git. Logs: `/tmp/pnm-stage6-tls.L98Uhzxk/`.
+  (filename-independent asset checksums),fd3710c (TLS pin pipeline failures).
+  They have not been pushed.
+- Stage7 repairs transaction hashing of literal-backslash paths and rejects
+  failed snapshot digest observations during inspect. Validation parent:fd3710c;
+  resolve the final stage commit with Git. Logs:
+  `/tmp/pnm-stage7-transaction.FEq7vMyo/`.
 - Actual Ubuntu amd64 CI evidence remains at39312aa; unpublished increments
   have local ARM64 L1 evidence only.
 - Next integration work needs an explicitly authorized disposable Debian13
@@ -291,6 +293,31 @@ not actual Core TLS handshakes or root/service permission acceptance.
 `make release-check` exits0:32 suites,412 passed,0 failed, including syntax and
 security/release scans. Existing root-only skips remain unchanged. No second
 independent full test run or new Ubuntu amd64 CI execution is claimed.
+
+## Stage 7: transaction checksum and inspect observation failures
+
+Validation parentfd3710c. Transaction hashing had the same GNU filename-escape
+issue as asset verification, causing write intent refusal for a legal parent
+path containing a backslash. It now hashes content through stdin and propagates
+tool failure without relying on caller pipefail. Missing/unsafe sentinels remain.
+Inspect previously accepted an empty failed hash query because it only compared
+output against UNSAFE; it now checks status and a canonical digest before using
+the transaction's terminal state. Existing write guards retain the refusal.
+
+Three regressions first failed (25 passed/3 failed), then the focused suite
+passed28/28. Actual private files, snapshots, writes, rollback, numeric metadata
+and receipt parsing execute. Backslash-path recovery preserves original content
+and metadata and remains inspectable. A controlled hash wrapper emits valid
+output before exit23, or no output; failed observations refuse inspect78 and the
+pending-transaction guard70 while preserving candidate bytes. The direct hash
+failure case runs with caller pipefail disabled. Standard and supplemental
+transaction-test ShellCheck pass. Private logs:
+`/tmp/pnm-stage7-transaction.FEq7vMyo/`. This does not prove physical EIO or
+authenticate snapshot bytes against a separately retained original digest.
+
+`make release-check` exits0:32 suites,415 passed,0 failed. The existing root-only
+skips remain. The final focused28/28 run additionally verifies downstream write
+guard refusal; the full run also includes those assertions. No L2 result is added.
 
 ## Next priorities
 
