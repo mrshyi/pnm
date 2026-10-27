@@ -107,6 +107,82 @@ pnm_hysteria_config_validate_candidate() { return 0; }
 pnm_tls_validate_pair() { return 0; }
 pnm_core_runtime_listener_ready() { return 0; }
 
+test_applied_status_accepts_backslash_config_paths() (
+    local core config
+    for core in xray hysteria2; do
+        prepare_evidence_fixture
+        if [[ "$core" == xray ]]; then config="$PNM_XRAY_CONFIG"; else config="$PNM_HY2_CONFIG"; fi
+        mv -- "$config" "$fixture_root/runtime\\config"
+        assert_eq confirmed "$(pnm_test_real_applied_status "$core" "$fixture_root/runtime\\config")" || return 1
+    done
+)
+
+test_applied_publication_accepts_backslash_config_paths() (
+    local core config stage peer peer_digest
+    for core in xray hysteria2; do
+        prepare_evidence_fixture
+        if [[ "$core" == xray ]]; then config="$PNM_XRAY_CONFIG"; peer=hysteria2; else config="$PNM_HY2_CONFIG"; peer=xray; fi
+        mv -- "$config" "$fixture_root/runtime\\config"
+        config="$fixture_root/runtime\\config"
+        peer_digest="$(pnm_tx_file_sha256 "$PNM_STATE_DIR/cores/$peer/applied.env")"
+        stage="$(mktemp -d "$fixture_root/stage.XXXXXXXX")"
+        PNM_TX_ID_OVERRIDE="unit-binding-$core" PNM_DRY_RUN=0
+        pnm_test_real_tx_begin "core-config-$core" || return 1
+        pnm_test_real_record_applied_config "$core" "$config" "$stage" || return 1
+        pnm_tx_verify_written_resources || return 1
+        pnm_test_real_tx_commit || return 1
+        pnm_test_real_tx_close || return 1
+        assert_eq confirmed "$(pnm_test_real_applied_status "$core" "$config")" || return 1
+        assert_eq "$peer_digest" "$(pnm_tx_file_sha256 "$PNM_STATE_DIR/cores/$peer/applied.env")" || return 1
+        assert_eq 0 "${fixture_restarts[xray.service]}" || return 1
+        assert_eq 0 "${fixture_restarts[hysteria-server.service]}" || return 1
+        pnm_tx_load_for_inspect "unit-binding-$core" || return 1
+        assert_eq COMMITTED "$PNM_TX_INSPECT_STATE" || return 1
+    done
+)
+
+test_failed_applied_hash_query_cannot_confirm_a_binding() (
+    local core config
+    for core in xray hysteria2; do
+        prepare_evidence_fixture
+        if [[ "$core" == xray ]]; then config="$PNM_XRAY_CONFIG"; else config="$PNM_HY2_CONFIG"; fi
+        sha256sum() { command sha256sum "$@" || return $?; return 23; }
+        set +o pipefail
+        run_capture pnm_test_real_applied_status "$core" "$config"
+        unset -f sha256sum
+        assert_eq 0 "$RUN_RC" || return 1
+        assert_eq unknown "$RUN_OUTPUT" || return 1
+    done
+)
+
+test_failed_applied_hash_query_cannot_publish_a_binding() (
+    local core config stage record original
+    for core in xray hysteria2; do
+        prepare_evidence_fixture
+        if [[ "$core" == xray ]]; then config="$PNM_XRAY_CONFIG"; else config="$PNM_HY2_CONFIG"; fi
+        record="$PNM_STATE_DIR/cores/$core/applied.env"
+        original="$(<"$record")"
+        stage="$(mktemp -d "$fixture_root/stage.XXXXXXXX")"
+        PNM_TX_ID_OVERRIDE="unit-failed-binding-$core" PNM_DRY_RUN=0
+        pnm_test_real_tx_begin "core-config-$core" || return 1
+        sha256sum() {
+            command sha256sum "$@" || return $?
+            if [[ ! -e "$fixture_root/hash-observed" ]]; then
+                : >"$fixture_root/hash-observed"
+                return 23
+            fi
+        }
+        set +o pipefail
+        run_capture pnm_test_real_record_applied_config "$core" "$config" "$stage"
+        unset -f sha256sum
+        assert_eq "$PNM_EXIT_SOFTWARE" "$RUN_RC" || return 1
+        assert_eq "$original" "$(<"$record")" || return 1
+        assert_eq 0 "${#PNM_TX_WRITTEN_PATHS[@]}" || return 1
+        [[ ! -e "$stage/applied-$core.env" ]] || return 1
+        pnm_test_real_tx_close || return 1
+    done
+)
+
 test_restart_forward_listener_failure_compensates() {
     local core listener_rc listener_calls rc
     local -a journals=()
@@ -1007,6 +1083,10 @@ test_config_apply_keeps_ownership_error_and_safe_receipts() {
     done
 }
 
+run_test 'applied status confirms unchanged configurations with literal-backslash paths' test_applied_status_accepts_backslash_config_paths
+run_test 'applied publication preserves valid receipts for literal-backslash config paths' test_applied_publication_accepts_backslash_config_paths
+run_test 'failed hash observations cannot confirm applied bindings without caller pipefail' test_failed_applied_hash_query_cannot_confirm_a_binding
+run_test 'failed hash observations cannot publish applied bindings without caller pipefail' test_failed_applied_hash_query_cannot_publish_a_binding
 run_test 'restart forward listener absence and observer errors compensate without success' test_restart_forward_listener_failure_compensates
 run_test 'recovery rejects absent or unknown listener without confirming an invocation' test_recovery_does_not_confirm_an_unready_listener
 run_test 'recovery rechecks configuration after waiting for a listener' test_recovery_rechecks_baseline_after_listener_wait

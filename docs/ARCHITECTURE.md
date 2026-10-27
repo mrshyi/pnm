@@ -146,6 +146,11 @@ The implementation distinguishes several state sources:
 
 Configuration parsing and schema checks are in `lib/config.sh`; node initialization and reporting are in `lib/node.sh`. Secrets are not part of the ordinary node configuration. Client link generation checks per-Core service/config/applied state and can omit an unsafe Core link without changing the other Core's configuration (`lib/render.sh`, `lib/node.sh`).
 
+Applied-record publication reuses transaction file hashing. Status hashes runtime
+content through stdin and checks the tool's status before comparing evidence.
+Literal backslashes in paths do not change the digest; failed hash observations
+cannot publish or confirm a binding. Read failures remain `unknown`.
+
 Xray and HY2 have distinct TLS/SNI semantics. `XRAY_SERVER_NAME` and `XRAY_TARGET` configure REALITY; `HY2_TLS_SERVER_NAME` is validated against the configured HY2 certificate and is used for HY2 link/config behavior. Existing valid credentials are reused rather than silently rotated.
 
 `HY2_TLS_PIN_SHA256` retains its existing internal SPKI/base64 representation.

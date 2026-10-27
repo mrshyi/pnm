@@ -190,7 +190,7 @@ pnm_core_record_applied_config() {
     local digest rc unit invocation metadata_policy="${expected_digest:+required}"
 
     [[ "$core" == xray || "$core" == hysteria2 ]] || return "$PNM_EXIT_CONFIG"
-    digest="$(sha256sum -- "$config" 2>/dev/null | awk '{print $1}')" || return "$PNM_EXIT_SOFTWARE"
+    digest="$(pnm_tx_file_sha256 "$config")" || return "$PNM_EXIT_SOFTWARE"
     [[ "$digest" =~ ^[a-f0-9]{64}$ ]] || return "$PNM_EXIT_SOFTWARE"
     # Lifecycle operations may only carry forward the pre-restart digest.
     [[ -z "$expected_digest" || "$digest" == "$expected_digest" ]] || return "$PNM_EXIT_SOFTWARE"

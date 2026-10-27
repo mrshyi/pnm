@@ -11,12 +11,11 @@ Ubuntu22.04/24.04 CI/regressions. Local preparation checks below used parent
 
 - Local stage commits:166e828 (CI evidence),6ec55cc (asset publication),5eb8be9
   (ZIP observation/mode errors),ae838f5 (version-query refusal tests),9dda49f
-  (filename-independent asset checksums),fd3710c (TLS pin pipeline failures).
-  They have not been pushed.
-- Stage7 repairs transaction hashing of literal-backslash paths and rejects
-  failed snapshot digest observations during inspect. Validation parent:fd3710c;
-  resolve the final stage commit with Git. Logs:
-  `/tmp/pnm-stage7-transaction.FEq7vMyo/`.
+  (filename-independent asset checksums),fd3710c (TLS pin pipeline failures),
+  e4999df (transaction hash/inspect refusals). They have not been pushed.
+- Stage8 repairs the remaining runtime-config checksum parsing in applied
+  publication/status. Validation parent:e4999df; resolve the final stage commit
+  with Git. Logs: `/tmp/pnm-stage8-binding.qk3v4VNg/`.
 - Actual Ubuntu amd64 CI evidence remains at39312aa; unpublished increments
   have local ARM64 L1 evidence only.
 - Next integration work needs an explicitly authorized disposable Debian13
@@ -318,6 +317,33 @@ authenticate snapshot bytes against a separately retained original digest.
 `make release-check` exits0:32 suites,415 passed,0 failed. The existing root-only
 skips remain. The final focused28/28 run additionally verifies downstream write
 guard refusal; the full run also includes those assertions. No L2 result is added.
+
+## Stage 8: applied binding hash observation consistency
+
+Validation parente4999df. Applied publication and status retained filename-based
+checksum pipelines: a literal backslash could prevent publication or label
+unchanged runtime content as changed. With caller pipefail disabled, a hash tool
+printing a valid digest before exit23 could still publish/confirm a binding.
+Publication now reuses the transaction hash helper; standalone status retains
+its module boundary and hashes through stdin with direct status checking.
+Publication refuses70 and observation returns unknown on hash failure. Existing
+digest/InvocationID matching, CLI and record formats are unchanged.
+
+Four regressions first failed (41 passed/4 failed), then the focused suite
+passed45/45. Each exercises both Cores:
+backslash-path observation, real transaction-backed evidence publication and
+receipt inspection, failed observation and failed publication. Actual private
+files/hashes/transactions execute; systemd InvocationIDs are controlled fixtures.
+Peer receipts and restart counters remain unchanged, and a failed hash leaves
+original applied bytes with no written resource or staged binding. The error
+cases disable caller pipefail and inject valid hash output followed by exit23.
+Standard and supplemental Core-evidence-test ShellCheck pass. Private logs:
+`/tmp/pnm-stage8-binding.qk3v4VNg/`. This is L1 evidence, not a real running
+configuration identity or new supported-platform/L2/client acceptance result.
+
+`make release-check` exits0:32 suites,419 passed,0 failed, including syntax and
+security/release scans. Root-only skips remain the same; the focused45/45 run
+and its full-gate repeat are not counted as independent acceptance coverage.
 
 ## Next priorities
 

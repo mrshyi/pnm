@@ -446,10 +446,11 @@ pnm_core_applied_config_status() {
         printf 'unknown\n'
         return 0
     }
-    digest="$(sha256sum -- "$config" 2>/dev/null | awk '{print $1}')" || {
+    digest="$(sha256sum 2>/dev/null <"$config")" || {
         printf 'unknown\n'
         return 0
     }
+    digest="${digest%% *}"
     case "$core" in
         xray) unit=xray.service ;;
         hysteria2) unit='hysteria-server.service' ;;
