@@ -2,7 +2,7 @@
 
 **Updated:** 2026-10-26. **Phase 3 remains incomplete; Phase 4 and release work have not started.**
 
-**Published baseline:** branch `dev`, commit `ee132a7`, VERSION
+**Published baseline:** branch `dev`, commit `b3e223d`, VERSION
 `0.16.0-rc.1`, including TLS/test repairs, cloud-development cleanup and
 Ubuntu22.04/24.04 CI/regressions plus stages11–12 integration below. Earlier preparation checks
 used their recorded parents; do not attribute earlier39312aa CI to this baseline.
@@ -10,16 +10,16 @@ used their recorded parents; do not attribute earlier39312aa CI to this baseline
 ## Continuation checkpoint
 
 - Ubuntu development validation remains first; Debian acceptance is deferred.
-- Latest published/validated source:a2f12d6ced683801967c2fe20ff22589925f614f,
-  [run40455459999](https://github.com/mrshyi/pnm/actions/runs/40455459999), success
-  on both Ubuntu22.04/24.04 amd64. See stage13 for exact jobs and limits.
-- Per Ubuntu job: normal check/release419 each; privileged suites48; loopback
-  asset transport5; real systemd8; official-Core private-network10; ShellCheck
+- Latest published/validated source:b3e223d730c773b61da8512e4574b29ece9083fb,
+  [run40460290093](https://github.com/mrshyi/pnm/actions/runs/40460290093), success
+  on both Ubuntu22.04/24.04 amd64. See stages14–15 for exact jobs and limits.
+- Per Ubuntu job: normal check/release425 each; privileged suites48; loopback
+  asset transport7; real systemd8; official-Core private-network10; ShellCheck
   success. These are separate execution layers, not an independent total.
 - The five ordinary non-root skips remain intentional; their corresponding
   privileged suites actually execute without skips. Current ARM64 transport
   self-checks use synthetic assets and do not execute amd64 binaries.
-- Stages1–12 and the corrected protected-checkout failure remain below as dated,
+- Earlier stages and the corrected protected-checkout failure remain below as dated,
   source-specific evidence; earlier CI is not substituted for latest-source runs.
 - Root service/Core integration now uses disposable Ubuntu22.04/24.04 amd64
   GitHub-hosted runners. The ARM64/non-root development host remains L1 only;
@@ -27,6 +27,9 @@ used their recorded parents; do not attribute earlier39312aa CI to this baseline
 - Stage14 candidateee132a757b15da84b488f04b6e285acb206e5ddb is published;
   [run40458759515](https://github.com/mrshyi/pnm/actions/runs/40458759515)
   passed the expanded7-case transport suite on both Ubuntu versions.
+- Stage15 candidateb3e223d730c773b61da8512e4574b29ece9083fb is published;
+  [run40460290093](https://github.com/mrshyi/pnm/actions/runs/40460290093)
+  passed the TLS leaf/mode fixes and all existing gates on both Ubuntu versions.
 
 ## Current environment
 
@@ -58,7 +61,7 @@ remain outside scope.
 | G-02 deployment recovery | Shared deployment transaction, metadata/directory/account receipts, uncertainty guards; selected native/VM fault and reboot records | Remaining commit/storage/corruption windows and concurrent schedules; physical media behavior is not established |
 | G-03 Core update/rollback | Paired current/previous binaries and version metadata; selected distinct-version, fault and reboot records | Remaining commit/storage and abrupt-VM update/rollback positions |
 | G-04 backup/restore | Trusted archive validation, bounded parsing, metadata compensation; selected real restore/fault/reboot records | Remaining storage and abrupt-VM restore positions; arbitrary untrusted executables remain outside the trusted-input contract |
-| G-05 dependency preflight | Declared preflight; fresh Ubuntu loopback curl/TLS acquisition5/5; historical Debian guest19-tool refusals | Upstream DNS/PKI outages, default retry/deadline policy, full install compensation and remaining platforms |
+| G-05 dependency preflight | Declared preflight; fresh Ubuntu loopback curl/TLS acquisition7/7 with actual503 retry counts; historical Debian guest19-tool refusals | Upstream DNS/PKI outages, other retry statuses/Retry-After, default overall deadlines, full install compensation and remaining platforms |
 | G-06 HY2 TLS/account access | Ownership/mode/effective-read checks; fresh Ubuntu root access8/8 and isolated real-Core TLS/traffic; historical managed-account records | Real managed-account provisioning/NSS variants and public-client/deployment acceptance |
 | T-04/T-20/T-26 | Historical configured-port conflict, real lock contention, stale-binding refusal and same-disk reboot slices | Other topology/scheduling combinations and external-client routing |
 | Platform/L3 | Ubuntu22.04/24.04 amd64 ordinary/root gates, selected real systemd and isolated official-Core tests passed ated2b3b1 | Full CLI install/account/reboot and external client acceptance remain open; Debian12/13 acceptance is deferred |
@@ -585,7 +588,9 @@ release-check32 suites/423 wrappers/0 failures. A second injected-mode regressio
 reproduces ignored certificate/key chmod errors (14 passed/2 failed). Check both
 chmod calls and remove only the newly generated temporary pair on failure77.
 The final focused TLS suite passes16/16 and sandbox12/12; standard and targeted
-ShellCheck pass. Final full-gate execution is pending for this increment.
+ShellCheck pass. Final local release-check exits0:32 suites/425 passed/0 failed.
+Its source includes both the leaf checks and permission-failure repair; Ubuntu
+amd64 integration execution was still pending at that local validation point.
 
 Tests cover both certificate/key destinations in self-signed and external modes,
 retained foreign links/absent targets, no counterpart publication or leaked
@@ -595,6 +600,17 @@ these pre-existing-leaf checks do not coordinate arbitrary privileged writers.
 Private logs: `/tmp/pnm-stage15-tls-links.0cfiMChK/`. CI additionally records curl
 version for future transport evidence; the stage14 record does not infer an
 unrecorded curl build version from the runner label.
+
+Published sourceb3e223d730c773b61da8512e4574b29ece9083fb passes
+[run40460290093](https://github.com/mrshyi/pnm/actions/runs/40460290093),
+push/attempt1, completed success. Jobs122042999846 (Ubuntu22.04) and122042999546
+(Ubuntu24.04) each pass normal check/release32 suites/425 wrappers per gate,
+ShellCheck, privileged48, acquisition7, real systemd8 and official-Core10.
+TLS contributes16 wrappers within425; layers/repeated gates are not summed as
+unique cases. The ordinary five root-only labels remain intentional, with their
+separate privileged suites actually executing. Recorded curl versions are7.81.0
+on22.04 and8.5.0 on24.04. Remaining full installation, account, storage, reboot,
+external-client and deferred Debian boundaries are unchanged.
 
 ## Next priorities
 
