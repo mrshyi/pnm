@@ -19,7 +19,7 @@ account_deletions=('account-deletion-userdel','account-deletion-groupdel')
 parser.add_argument('--baseline',type=Path,required=True,help='private verified boot fixture parent')
 parser.add_argument('--nspawn',type=Path,required=True,help='trusted native systemd-nspawn executable')
 parser.add_argument('--asset-cache',type=Path,required=True,help='verified pinned Core asset cache')
-parser.add_argument('--scenario',choices=('lifecycle','deployment-failure','core-update','core-update-failure',
+parser.add_argument('--scenario',choices=('lifecycle','external-ca','external-ca-mismatch','deployment-failure','core-update','core-update-failure',
     'configured-ports','runtime-evidence','restore-failure','restore-publication','startup-readiness',
     'core-recovery-failure-xray','core-recovery-failure-hysteria2','restore-recovery-failure','tls-access',
     'account-reuse','account-creation-failure','core-interruption','core-interruption-hysteria2','restart-readiness',

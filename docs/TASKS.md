@@ -742,6 +742,22 @@ failures. Root-only preparation skips remain explicit. No new U-02–U-08 execut
 is claimed; the next actual operation is authorized disposable-guest installation,
 not another speculative hardening increment.
 
+U-03/U-06 main-flow implementation update (2026-10-27): the existing clone/VM
+driver now accepts `external-ca` and `external-ca-mismatch`. The first follows
+the normal lifecycle with a private CA-signed SAN certificate; the second checks
+one wrong-key installation refusal and complete rollback before retrying the
+matching pair. External source bytes/metadata and normal CA URI verification
+must be preserved. The normal backup/restore path now also refuses one damaged
+archive without changing managed resources or live Core state before the trusted
+round trip. Existing CLI/environment inputs and transaction facilities are reused;
+no product runtime or command format changes and no expanded fault matrix.
+
+Local preparation suite:36 total,28 executed/8 root-only skipped, exit0, including
+actual OpenSSL chain/hostname validation and PNM pair validation of correct/wrong
+keys. L1 suites pass: archive9, backup9, restore17, restore recovery12 and sandbox
+install12. Four changed Python sources parse. Full guest execution of these new
+paths remains pending; U-03/U-06 are still BLOCKED in the closeout table.
+
 1. Freeze runtime baseline c4e906c and the finite U-01–U-08 checklist. This
    documentation closeout adds no runtime changes or new dynamic-test claims.
 2. Obtain explicitly authorized disposable Ubuntu22.04/24.04 amd64/systemd boot

@@ -20,6 +20,26 @@ DRIVER=Path(__file__).with_name('test_guest_mainflow.py')
 
 
 class GuestGuardTests(unittest.TestCase):
+    def test_external_ca_fixture_has_trusted_san_pair_and_independent_wrong_key(self):
+        tree=ast.parse(DRIVER.with_name('guest_mainflow_cases.py').read_text())
+        function=next(n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name=='prepare_external_tls')
+        namespace={'Path':Path,'subprocess':subprocess}
+        exec(compile(ast.Module(body=[function],type_ignores=[]),'<external TLS fixture>','exec'),namespace)
+        with tempfile.TemporaryDirectory(prefix='pnm-mainflow-external-tls.') as directory:
+            paths=namespace['prepare_external_tls'](Path(directory)/'inputs')
+            result=subprocess.run(['openssl','verify','-CAfile',str(paths['ca']),
+                '-verify_hostname','guest.invalid',str(paths['certificate'])],capture_output=True,timeout=5)
+            self.assertEqual(result.returncode,0)
+            for key,expected in (('key',0),('mismatched_key',1)):
+                with self.subTest(key=key):
+                    result=subprocess.run(['bash','-c',
+                        'source "$1/lib/common.sh"; source "$1/lib/config.sh"; source "$1/lib/tls.sh"; '
+                        'pnm_tls_validate_pair "$2" "$3" && pnm_tls_certificate_matches_dns_name "$2" guest.invalid',
+                        '--',str(DRIVER.parents[2]),str(paths['certificate']),str(paths[key])],
+                        capture_output=True,timeout=5)
+                    self.assertEqual(result.returncode,expected)
+                    self.assertEqual(stat.S_IMODE(paths[key].stat().st_mode),0o600)
+
     def test_mainflow_source_identity_detects_changed_missing_and_extra_files(self):
         tree=ast.parse(DRIVER.with_name('guest_mainflow_cases.py').read_text())
         function=next(n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name=='verify_source_snapshot')

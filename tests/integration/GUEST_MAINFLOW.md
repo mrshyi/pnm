@@ -1,6 +1,23 @@
 # Private guest main-flow checks
 
 Current Ubuntu work is limited to [U-01–U-08](../../docs/ACCEPTANCE_PLAN.md#ubuntu-closeout).
+For U-03, `PNM_GUEST_SCENARIO=external-ca` selects the normal lifecycle using a
+private test-CA-signed DNS-SAN certificate. `external-ca-mismatch` starts in a
+separate fresh clone, first imports that certificate with an independent wrong
+key and requires CLI78, full authority/NSS rollback and no commit, then retries
+with the matching key through the normal lifecycle. Both use the existing
+external-input environment variables; no product CLI arguments are added.
+The source certificate/key must remain unchanged, and the external-ca URI must
+retain SNI without insecure/pin bypass. Local certificate checks prove the fixture
+chain and pair only, not guest installation or public client trust.
+
+For U-06, the shared normal lifecycle now rejects one synthetic damaged backup
+with CLI78 and unchanged managed files/Core processes before the existing trusted
+backup→change→restore round trip. Its result includes `damaged_backup_refused`;
+the external scenarios also identify the TLS mode and whether the mismatch was
+actually checked. These remain opt-in guest operations requiring the existing
+approved environment/assets. They do not enlarge U-01–U-08 or run in default CI.
+
 The independent VM boot worker recognizes the managed platform policy, including
 Ubuntu22.04/24.04, and reports the actual OS identity in its handshake. Platform
 policy fixtures do not prove that a Ubuntu VM was prepared or booted. Existing

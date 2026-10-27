@@ -82,7 +82,7 @@ def lifecycle() -> dict:
                               stdout=output,stderr=subprocess.STDOUT,timeout=600)
     detail=json.loads(Path('/var/tmp/pnm-install-result.json').read_text())
     scenario=Path('/opt/pnm-test-scenario').read_text().strip()
-    need(scenario in ('lifecycle','runtime-evidence','configured-ports','core-update','deployment-progress-readonly','deployment-rename-readonly',
+    need(scenario in ('lifecycle','external-ca','external-ca-mismatch','runtime-evidence','configured-ports','core-update','deployment-progress-readonly','deployment-rename-readonly',
                      'deployment-marker-failures','deployment-space-full','deployment-inode-full','deployment-acquisition-failures',
                      'deployment-version-failures'),
          'unknown VM lifecycle scenario')

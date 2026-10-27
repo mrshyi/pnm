@@ -120,6 +120,30 @@ def verify_source_snapshot(root: Path,manifest: Path) -> dict:
         raise RuntimeError('guest source differs from the copied worktree snapshot')
     return {'files':len(actual),'manifest_sha256':hashlib.sha256(manifest.read_bytes()).hexdigest()}
 
+def prepare_external_tls(directory: Path) -> dict:
+    directory.mkdir(mode=0o700)
+    ca=directory/'ca.crt'
+    ca_key=directory/'ca.key'
+    certificate=directory/'server.crt'
+    key=directory/'server.key'
+    request=directory/'server.csr'
+    extensions=directory/'extensions.conf'
+    extensions.write_text('subjectAltName=DNS:guest.invalid\nbasicConstraints=critical,CA:FALSE\nextendedKeyUsage=serverAuth\n')
+    commands=(
+        ['req','-x509','-newkey','ec','-pkeyopt','ec_paramgen_curve:prime256v1','-nodes',
+         '-days','2','-subj','/CN=PNM isolated test CA','-addext','basicConstraints=critical,CA:TRUE',
+         '-keyout',str(ca_key),'-out',str(ca)],
+        ['req','-new','-newkey','ec','-pkeyopt','ec_paramgen_curve:prime256v1','-nodes',
+         '-subj','/CN=guest.invalid','-keyout',str(key),'-out',str(request)],
+        ['x509','-req','-in',str(request),'-CA',str(ca),'-CAkey',str(ca_key),
+         '-set_serial','1','-days','2','-extfile',str(extensions),'-out',str(certificate)],
+    )
+    for arguments in commands:
+        subprocess.run(['openssl',*arguments],check=True,capture_output=True,timeout=15)
+    ca_key.chmod(0o600)
+    key.chmod(0o600)
+    return {'ca':ca,'certificate':certificate,'key':key,'mismatched_key':ca_key}
+
 def deployment_failure_cases() -> None:
     # Filter command discovery only within this guest process. No package or
     # system executable is removed, replaced or mocked.
@@ -376,7 +400,7 @@ try:
     restore_interruptions=('restore-term','restore-sigkill-xray','restore-sigkill-hysteria2')
     publication_cases=('core-publication-previous','core-publication-metadata','core-publication-applied')
     account_deletions=('account-deletion-userdel','account-deletion-groupdel')
-    check(scenario in ('lifecycle','deployment-failure','core-update','core-update-failure','configured-ports','restore-publication',
+    check(scenario in ('lifecycle','external-ca','external-ca-mismatch','deployment-failure','core-update','core-update-failure','configured-ports','restore-publication',
           'runtime-evidence','restore-failure','startup-readiness','core-recovery-failure-xray',
           'core-recovery-failure-hysteria2','restore-recovery-failure','tls-access','account-reuse',
           'core-interruption','core-interruption-hysteria2','restart-readiness','dependency-refusal',
@@ -399,12 +423,18 @@ try:
             if kind==socket.SOCK_STREAM:
                 fixture.listen(1)
     stage='node init and validate'
+    external_tls=prepare_external_tls(logs/'external-tls') if scenario in ('external-ca','external-ca-mismatch') else None
+    external_baseline={str(p):fingerprint(p) for p in external_tls.values()} if external_tls else {}
+    if external_tls:
+        env['PNM_SANDBOX_EXTERNAL_CERT']=str(external_tls['certificate'])
+        env['PNM_SANDBOX_EXTERNAL_KEY']=str(external_tls['key'])
     pins=json.loads(Path('/opt/pnm-test-versions.json').read_text())
     call('node-init',['node','init','--region','test','--address','203.0.113.10','--timezone','UTC',
         '--server-name','www.cloudflare.com','--target','www.cloudflare.com:443','--hy2-server-name','guest.invalid',
         '--xray-version',pins['xray']['version'],'--xray-sha256',pins['xray']['sha256'],
         '--hy2-version',pins['hysteria2']['version'],'--hy2-sha256',pins['hysteria2']['sha256'],
-        '--xray-port',str(ports['xray']),'--hy2-port',str(ports['hysteria2'])])
+        '--xray-port',str(ports['xray']),'--hy2-port',str(ports['hysteria2']),
+        '--tls-mode','external-ca' if external_tls else 'selfsigned-pin'])
     call('node-validate',['node','validate'])
     check(fields('/etc/pnm/node.conf')['PNM_CONFIGURED']=='no','node configured before apply')
     passed.append('actual CLI initializes and validates an uncommitted node')
@@ -413,6 +443,27 @@ try:
     absent()
     check(fields('/etc/pnm/node.conf')['PNM_CONFIGURED']=='no','preview committed node state')
     passed.append('installation preview preserves original accounts and leaves runtime resources absent')
+    if scenario=='external-ca-mismatch':
+        stage='external certificate/key mismatch compensation'
+        baseline_paths=('/etc/pnm/node.conf','/etc/pnm/versions.conf','/etc/passwd','/etc/group','/etc/shadow','/etc/gshadow')
+        baseline={p:fingerprint(p) for p in baseline_paths}
+        transactions=Path('/var/lib/pnm/transactions')
+        before_transactions=set(transactions.iterdir())
+        env['PNM_SANDBOX_EXTERNAL_KEY']=str(external_tls['mismatched_key'])
+        try:
+            call('external-ca-mismatch',['install','--apply','--yes'],accepted=(78,))
+        finally:
+            env['PNM_SANDBOX_EXTERNAL_KEY']=str(external_tls['key'])
+        absent()
+        check(baseline=={p:fingerprint(p) for p in baseline_paths},'TLS refusal changed node configuration or account baseline')
+        check(external_baseline=={p:fingerprint(p) for p in external_baseline},'TLS refusal changed external source files')
+        created=set(transactions.iterdir())-before_transactions
+        check(len(created)==1,'TLS mismatch did not exercise one installation transaction')
+        transaction=created.pop()
+        events=[line.split('\t')[1] for line in (transaction/'journal.tsv').read_text().splitlines()]
+        check(not (transaction/'commit.env').exists() and events[-1]=='ROLLED_BACK'
+              and 'ROLLBACK_COMPLETE' in events and 'RECOVERY_REQUIRED' not in events
+              and 'COMMIT' not in events,'TLS mismatch did not fully compensate')
     if scenario=='configured-ports':
         stage='configured-port conflict refusal'
         baseline_paths=('/etc/pnm/node.conf','/etc/pnm/versions.conf','/etc/passwd','/etc/group','/etc/shadow','/etc/gshadow')
@@ -518,11 +569,18 @@ try:
     check(links['xray_status']=='ready' and links['hysteria2_status']=='ready','real link readiness gate failed')
     check(links['xray_vless_reality'].startswith('vless://'),'REALITY link missing')
     check(urlsplit(links['xray_vless_reality']).port==ports['xray'] and urlsplit(links['hysteria2']).port==ports['hysteria2'],'client URI port differs from configured listener')
-    pin=parse_qs(urlsplit(links['hysteria2']).query)['pinSHA256'][0]
+    query=parse_qs(urlsplit(links['hysteria2']).query)
     secret=fields('/etc/pnm/secrets/hysteria.env')
-    der=subprocess.check_output(['openssl','x509','-in',secret['HY2_TLS_CERT_PATH'],'-outform','DER'],timeout=10)
-    check(re.fullmatch('[0-9a-f]{64}',pin) is not None and pin==hashlib.sha256(der).hexdigest(),'actual installed HY2 URI fingerprint mismatch')
-    passed.append('production readiness gates emit both URIs and the installed certificate DER pin')
+    if external_tls:
+        check(query.get('sni')==['guest.invalid'] and 'pinSHA256' not in query and 'insecure' not in query,'external CA link bypasses normal certificate verification')
+        check(Path(secret['HY2_TLS_CERT_PATH']).read_bytes()==external_tls['certificate'].read_bytes()
+              and Path(secret['HY2_TLS_KEY_PATH']).read_bytes()==external_tls['key'].read_bytes(),'external TLS import changed certificate/key bytes')
+        check(external_baseline=={p:fingerprint(p) for p in external_baseline},'installation changed external source files')
+    else:
+        pin=query['pinSHA256'][0]
+        der=subprocess.check_output(['openssl','x509','-in',secret['HY2_TLS_CERT_PATH'],'-outform','DER'],timeout=10)
+        check(re.fullmatch('[0-9a-f]{64}',pin) is not None and pin==hashlib.sha256(der).hexdigest(),'actual installed HY2 URI fingerprint mismatch')
+    passed.append('readiness gates emit both URIs with the configured TLS verification policy')
     stage='Core health diagnostics'
     report=json.loads(call('check',['--json','check'],accepted=(0,1,2)).stdout)
     checks={item['id']:item['status'] for item in report['checks']}
@@ -618,6 +676,12 @@ try:
     check(archive.stat().st_uid==0 and archive.stat().st_mode&0o777==0o600,'backup is not protected')
     trusted_digest=hashlib.sha256(archive.read_bytes()).hexdigest()
     (logs/'trusted-backup.sha256').write_text(trusted_digest)
+    damaged_archive=logs/'damaged-backup.tar.gz'
+    damaged_archive.write_bytes(b'not a PNM backup archive\n')
+    before={c:core_state(c) for c in units}
+    call('restore-damaged',['restore',str(damaged_archive)],accepted=(78,))
+    check(backup_resources=={p:fingerprint(p) for p in all_paths}
+          and before=={c:core_state(c) for c in units},'damaged backup refusal changed managed files or running Cores')
     p=Path('/etc/pnm/node.conf')
     p.write_text(p.read_text().replace('XRAY_TARGET=edge.example.net:443','XRAY_TARGET=second.example.net:443'))
     call('apply-after-backup',['apply','xray'])
@@ -699,6 +763,9 @@ try:
     verify_source_snapshot(Path('/opt/pnm'),Path('/opt/pnm-source-hashes.json'))
     result={'passed':True,'checks':passed,'clock_diagnostic':checks.get('time_sync'),'uids_distinct':True,
             'mainflow_completed':True,
+            'tls_mode':'external-ca' if external_tls else 'selfsigned-pin',
+            'external_ca_mismatch_checked':scenario=='external-ca-mismatch',
+            'damaged_backup_refused':True,
             'update_matrix_completed':not update_interrupted if scenario in update_interruptions else None,
             'restore_matrix_completed':not restore_interrupted if scenario in restore_interruptions else None,
             'expected_recovery_required':update_interrupted or restore_interrupted or scenario.startswith('core-recovery-failure-')
