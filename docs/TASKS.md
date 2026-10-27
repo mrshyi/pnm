@@ -2,20 +2,23 @@
 
 **Updated:** 2026-10-27. **Phase 3 repair scope is frozen; bounded Ubuntu acceptance is pending. Phase 4 and release work have not started.**
 
-**Published baseline:** branch `dev`, commit `c4e906c`, VERSION
+**Published baseline:** branch `dev`, commit `0ff5762`, VERSION
 `0.16.0-rc.1`, including TLS/test repairs, cloud-development cleanup and
-Ubuntu22.04/24.04 CI/regressions plus stages11–17 below. Earlier preparation checks
+Ubuntu22.04/24.04 CI/regressions plus stages11–17 and U-02 preparation below. Earlier preparation checks
 used their recorded parents; do not attribute earlier39312aa CI to this baseline.
 
 ## Continuation checkpoint
 
 - Ubuntu development validation remains first; Debian acceptance is deferred.
-- Latest published/validated source:c4e906ccade0fca843405daa6480f14655fde1cf,
-  [run40465705895](https://github.com/mrshyi/pnm/actions/runs/40465705895), success
-  on both Ubuntu22.04/24.04 amd64. See stages16–17 for exact jobs and limits.
+- Latest published/validated source:0ff5762bad677511d86e5d20cdbbe6947f08b09e,
+  [run40477522467](https://github.com/mrshyi/pnm/actions/runs/40477522467), success
+  on both Ubuntu22.04/24.04 amd64. Product runtime files remain identical to
+  c4e906c; the new increment prepares U-02, not a deployed-mainflow pass.
 - Per Ubuntu job: normal check/release438 each; privileged suites48; loopback
   asset transport7; real systemd8; official-Core private-network10; ShellCheck
   success. These are separate execution layers, not an independent total.
+- Main-flow preparation per Ubuntu job:35 total,27 executed/8 root-only skipped;
+  no guest installation or reboot runs in that step.
 - The five ordinary non-root skips remain intentional; their corresponding
   privileged suites actually execute without skips. Current ARM64 transport
   self-checks use synthetic assets and do not execute amd64 binaries.
@@ -89,15 +92,15 @@ failures remain required below, not deferred.
 
 The finite execution contract is [U-01–U-08](ACCEPTANCE_PLAN.md#ubuntu-closeout).
 All eight must have evidence on Ubuntu22.04 and24.04 before Ubuntu closeout is
-declared. The existing c4e906c CI satisfies only the recorded U-01 layer for that
-runtime source; U-02–U-08 remain pending. No target, assets or installation/reboot
+declared. The recorded0ff5762 CI satisfies only the U-01 layer for that
+source; U-02–U-08 remain pending. No target, assets or installation/reboot
 authorization is inferred from this checklist. Phase3 remains acceptance-pending;
 closure requires the bounded results and an explicit disposition of residuals,
 not merely this document edit. Phase4 still requires separate authorization.
 
 | Closeout ID | Ubuntu22.04 | Ubuntu24.04 |
 |---|---|---|
-| U-01 | PASS recorded for runtimec4e906c, run40465705895; not rerun here | PASS recorded for runtimec4e906c, same run; not rerun here |
+| U-01 | PASS at0ff5762, run40477522467 | PASS at0ff5762, same run |
 | U-02 | BLOCKED | BLOCKED |
 | U-03 | BLOCKED | BLOCKED |
 | U-04 | BLOCKED | BLOCKED |
@@ -728,6 +731,16 @@ Existing L1 main-flow suites also pass: sandbox install12/12, Core operations15/
 host apply14/14. Four changed Python sources parse successfully; workflow YAML
 retains both Ubuntu versions and adds the non-deploying preparation suite.
 These are local fixture/L1 results, not full CLI deployment or reboot acceptance.
+
+Actual source0ff5762bad677511d86e5d20cdbbe6947f08b09e passes
+[run40477522467](https://github.com/mrshyi/pnm/actions/runs/40477522467),
+push/attempt1. Jobs122099309741 (Ubuntu22.04) and122099309921 (Ubuntu24.04)
+each pass the new preparation suite35 total/27 executed/8 skipped and existing
+normal check/release32 suites/438 per gate, ShellCheck, privileged48, transport7,
+real systemd8 and official-Core10. All70 shell summaries per job have zero
+failures. Root-only preparation skips remain explicit. No new U-02–U-08 execution
+is claimed; the next actual operation is authorized disposable-guest installation,
+not another speculative hardening increment.
 
 1. Freeze runtime baseline c4e906c and the finite U-01–U-08 checklist. This
    documentation closeout adds no runtime changes or new dynamic-test claims.
