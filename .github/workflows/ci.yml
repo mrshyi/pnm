@@ -44,6 +44,13 @@ jobs:
       - name: Run release checks
         run: make release-check
 
+      - name: Run privileged CLI access and recovery checks
+        run: |
+          sudo bash tests/unit/test_cli.sh
+          sudo bash tests/unit/test_read_access.sh
+          sudo bash tests/unit/test_tls_access.sh
+          sudo bash tests/unit/test_transaction.sh
+
       - name: Run isolated systemd lifecycle checks
         run: sudo make test-systemd
 

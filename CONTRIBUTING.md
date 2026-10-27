@@ -59,7 +59,10 @@ the real `systemd-analyze verify` against generated units with temporary Core
 paths and isolated target fixtures; it starts no service. Platform tests accept
 only approved release/architecture pairs and reject derivatives and other versions.
 The check/ShellCheck/release-check steps are L1 checks. On the disposable
-GitHub-hosted Ubuntu runners, CI then explicitly runs `sudo make test-systemd`
+GitHub-hosted Ubuntu runners, CI first runs the existing CLI/read-access/TLS-access/
+transaction suites as root to exercise their privileged branches. Access probes
+use nobody with private files; NSS names remain test mappings and no accounts are
+created. It then runs `sudo make test-systemd`
 against owned temporary units with unprivileged Python TCP/UDP listeners, followed
 by `make test-real-cores` with root-private, hash-verified pinned test assets and
 private network namespaces. These integration steps do not install managed PNM,

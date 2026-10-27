@@ -56,10 +56,10 @@ getent() {
     esac
 }
 stat() {
-    local mode uid gid owner group target="${!#}"
-    if [[ "$1" == -c && "$2" == '%a|%U|%G' && ( "$target" == "$cert" || "$target" == "$key" ) ]]; then
+    local mode uid gid owner group stat_target="${!#}"
+    if [[ "$1" == -c && "$2" == '%a|%U|%G' && ( "$stat_target" == "$cert" || "$stat_target" == "$key" ) ]]; then
         ((fixture_stat_failure == 0)) || return 1
-        IFS='|' read -r mode uid gid < <(command stat -c '%a|%u|%g' -- "$target")
+        IFS='|' read -r mode uid gid < <(command stat -c '%a|%u|%g' -- "$stat_target")
         owner="$uid" group="$gid"
         [[ "$uid" != 0 ]] || owner=root
         [[ "$uid" != "$service_uid" ]] || owner=hysteria

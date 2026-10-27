@@ -449,6 +449,23 @@ transfers. Both harnesses report success only after owned-unit/resource cleanup.
 These are actual Ubuntu service and private-network protocol results, not full
 managed-account CLI installation, persisted reboot or public L3 connectivity.
 
+## Stage 12: privileged access and recovery CI candidate
+
+Validation parentf46775a. Add the existing CLI, read-access, TLS-access and
+transaction suites as explicit sudo invocations on the same disposable Ubuntu
+runners. This targets all five previously reported root-only skips: actual CLI
+approval refusal, real UID access boundaries, eight TLS-access cases, low-mode
+recovery and numeric ownership restoration. TLS access uses private
+synthetic files with actual UID/GID/modes, ancestor traversal and runuser/nobody
+read probes; NSS/service names are test mappings and no account is created or
+changed. Rename only the stat adapter's local scalar from target to stat_target
+to remove source-aware ShellCheck array-name collisions, without changing
+permission checks or expectations. Ordinary non-root L1 behavior remains a skip.
+
+Local Bash syntax, supplemental ShellCheck and the workflow matrix/entry-point
+assertions pass. Actual privileged execution remains pending the new CI source;
+the previous stage11 Core/service results do not count as this suite's run.
+
 ## Next priorities
 
 1. Continue Ubuntu development/main-flow validation and fix reproducible local
