@@ -34,6 +34,11 @@ or key destinations, including dangling symlinks, with73 before publishing eithe
 file. A link to an absent target is an occupied destination and remains intact.
 Self-signed staging checks both permission changes before publication; a failed
 chmod removes its own temporary pair and returns77 without publishing either file.
+Both paths validate private candidates before publishing them with no-replace
+hard links, so a late file, directory or symlink cannot be overwritten or receive
+a nested candidate. Partial publication is compensated only while the destination
+still names the candidate inode; a foreign replacement is preserved and returns73.
+This assumes protected staging parents, as does backup publication.
 Managed-file publication and compensation still belong to the outer transaction.
 
 Config apply shares the guarded Core file writer with archive restore. Runtime

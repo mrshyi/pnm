@@ -124,6 +124,105 @@ tls_mode_failure_refuses_publication() (
 test_certificate_mode_failure_refuses_publication() { tls_mode_failure_refuses_publication 0644; }
 test_key_mode_failure_refuses_publication() { tls_mode_failure_refuses_publication 0600; }
 
+tls_raced_destination_is_preserved() (
+    local operation="$1" kind="$2" leaf temp_dir other raced target
+    temp_dir="$(mktemp -d)"
+    trap 'rm -rf -- "$temp_dir"' EXIT
+    mkdir -m 0700 "$temp_dir/seed"
+    pnm_tls_generate_selfsigned "$temp_dir/seed/cert" "$temp_dir/seed/key" example.com || return 1
+    for leaf in server.crt server.key; do
+        target="$temp_dir/$leaf"
+        mkdir -m 0700 "$target"
+        if [[ "$leaf" == server.crt ]]; then other=server.key; else other=server.crt; fi
+        raced="$target/$leaf"
+        printf 'foreign target' >"$target/sentinel"
+        occupy_destination() {
+            case "$kind" in
+                file) printf 'foreign destination' >"$raced" ;;
+                directory) mkdir "$raced"; printf 'foreign contents' >"$raced/marker" ;;
+                link) command ln -s -- "$target/sentinel" "$raced" ;;
+            esac
+        }
+        if [[ "$operation" == generate ]]; then
+            openssl() {
+                command openssl "$@" || return $?
+                if [[ "$1" == req ]]; then occupy_destination; fi
+            }
+            run_capture pnm_tls_generate_selfsigned "$target/server.crt" "$target/server.key" example.com
+            unset -f openssl
+        else
+            install() {
+                if [[ ! -e "$target/injected" ]]; then
+                    occupy_destination || return 1
+                    : >"$target/injected"
+                fi
+                command install "$@"
+            }
+            run_capture pnm_tls_stage_external_pair "$temp_dir/seed/cert" "$temp_dir/seed/key" "$target"
+            unset -f install
+        fi
+        assert_eq "$PNM_EXIT_CANTCREAT" "$RUN_RC" || return 1
+        assert_eq '' "$RUN_OUTPUT" || return 1
+        case "$kind" in
+            file) assert_eq 'foreign destination' "$(<"$raced")" || return 1 ;;
+            directory)
+                assert_eq 'foreign contents' "$(<"$raced/marker")" || return 1
+                assert_eq 1 "$(find "$raced" -mindepth 1 -maxdepth 1 | wc -l)" || return 1 ;;
+            link) [[ -L "$raced" && "$(readlink -- "$raced")" == "$target/sentinel" ]] || return 1 ;;
+        esac
+        assert_eq 'foreign target' "$(<"$target/sentinel")" || return 1
+        [[ ! -e "$target/$other" && ! -L "$target/$other" ]] || return 1
+        [[ -z "$(find "$target" -maxdepth 1 -name '.pnm-*' -print -quit)" ]] || return 1
+    done
+)
+
+test_generated_pair_refuses_raced_files() { tls_raced_destination_is_preserved generate file; }
+test_generated_pair_refuses_raced_directories() { tls_raced_destination_is_preserved generate directory; }
+test_generated_pair_refuses_raced_links() { tls_raced_destination_is_preserved generate link; }
+test_external_pair_refuses_raced_files() { tls_raced_destination_is_preserved external file; }
+test_external_pair_refuses_raced_directories() { tls_raced_destination_is_preserved external directory; }
+test_external_pair_refuses_raced_links() { tls_raced_destination_is_preserved external link; }
+
+tls_publication_failure_cleans_only_owned_files() (
+    local fault="$1" operation temp_dir target
+    temp_dir="$(mktemp -d)"
+    trap 'rm -rf -- "$temp_dir"' EXIT
+    mkdir -m 0700 "$temp_dir/seed"
+    pnm_tls_generate_selfsigned "$temp_dir/seed/cert" "$temp_dir/seed/key" example.com || return 1
+    for operation in generate external; do
+        target="$temp_dir/$operation"
+        mkdir -m 0700 "$target"
+        ln() {
+            if [[ "${!#}" == "$target/server.key" && "$fault" == replace* ]]; then
+                command rm -- "$target/server.crt" || return 1
+                printf 'foreign replacement' >"$target/server.crt"
+                if [[ "$fault" == replace ]]; then return 23; fi
+            fi
+            command ln "$@" || return $?
+            [[ "$fault" != after-link ]]
+        }
+        if [[ "$operation" == generate ]]; then
+            run_capture pnm_tls_generate_selfsigned "$target/server.crt" "$target/server.key" example.com
+        else
+            run_capture pnm_tls_stage_external_pair "$temp_dir/seed/cert" "$temp_dir/seed/key" "$target"
+        fi
+        unset -f ln
+        assert_eq "$PNM_EXIT_CANTCREAT" "$RUN_RC" || return 1
+        assert_eq '' "$RUN_OUTPUT" || return 1
+        if [[ "$fault" == replace* ]]; then
+            assert_eq 'foreign replacement' "$(<"$target/server.crt")" || return 1
+        else
+            [[ ! -e "$target/server.crt" ]] || return 1
+        fi
+        [[ ! -e "$target/server.key" && ! -L "$target/server.key" ]] || return 1
+        [[ -z "$(find "$target" -maxdepth 1 -name '.pnm-*' -print -quit)" ]] || return 1
+    done
+)
+
+test_tls_publication_preserves_replacement() { tls_publication_failure_cleans_only_owned_files replace; }
+test_tls_publication_detects_replacement() { tls_publication_failure_cleans_only_owned_files replace-success; }
+test_tls_failed_link_cleans_its_side_effect() { tls_publication_failure_cleans_only_owned_files after-link; }
+
 test_mismatched_pair_is_rejected() {
     local temp_dir cert1 key1 cert2 key2 rc
     temp_dir="$(mktemp -d)"
@@ -133,6 +232,9 @@ test_mismatched_pair_is_rejected() {
     pnm_tls_generate_selfsigned "$cert1" "$key1" example.com || { rm -rf -- "$temp_dir"; return 1; }
     pnm_tls_generate_selfsigned "$cert2" "$key2" example.net || { rm -rf -- "$temp_dir"; return 1; }
     if pnm_tls_validate_pair "$cert1" "$key2"; then rc=0; else rc=$?; fi
+    run_capture pnm_tls_stage_external_pair "$cert1" "$key2" "$temp_dir/rejected"
+    assert_eq "$PNM_EXIT_CONFIG" "$RUN_RC" || { rm -rf -- "$temp_dir"; return 1; }
+    [[ -z "$(find "$temp_dir/rejected" -mindepth 1 -print -quit)" ]] || { rm -rf -- "$temp_dir"; return 1; }
     rm -rf -- "$temp_dir"
     [[ "$rc" != 0 ]]
 }
@@ -249,6 +351,15 @@ run_test 'external TLS staging preserves an existing dangling certificate link' 
 run_test 'external TLS staging preserves an existing dangling key link' test_external_key_keeps_foreign_dangling_link
 run_test 'certificate mode failure refuses self-signed publication' test_certificate_mode_failure_refuses_publication
 run_test 'key mode failure refuses self-signed publication' test_key_mode_failure_refuses_publication
+run_test 'self-signed staging refuses raced files without replacing them' test_generated_pair_refuses_raced_files
+run_test 'self-signed staging refuses raced directories without moving into them' test_generated_pair_refuses_raced_directories
+run_test 'self-signed staging preserves raced links and their target' test_generated_pair_refuses_raced_links
+run_test 'external staging refuses raced files without replacing them' test_external_pair_refuses_raced_files
+run_test 'external staging refuses raced directories without copying into them' test_external_pair_refuses_raced_directories
+run_test 'external staging preserves raced links and their target' test_external_pair_refuses_raced_links
+run_test 'TLS publication compensation preserves a foreign replacement' test_tls_publication_preserves_replacement
+run_test 'TLS publication detects a replaced certificate after successful linking' test_tls_publication_detects_replacement
+run_test 'TLS publication cleans a link even when its command returns failure' test_tls_failed_link_cleans_its_side_effect
 run_test 'SPKI DER conversion failure refuses a pin without leaking pipeline output' test_spki_der_failure_refuses_pin
 run_test 'SPKI digest failure refuses a pin without leaking pipeline output' test_spki_digest_failure_refuses_pin
 run_test 'SPKI encoding failure refuses a pin without leaking pipeline output' test_spki_base64_failure_refuses_pin

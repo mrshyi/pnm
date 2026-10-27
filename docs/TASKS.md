@@ -1,6 +1,6 @@
 # PNM Current Tasks
 
-**Updated:** 2026-10-26. **Phase 3 remains incomplete; Phase 4 and release work have not started.**
+**Updated:** 2026-10-27. **Phase 3 remains incomplete; Phase 4 and release work have not started.**
 
 **Published baseline:** branch `dev`, commit `b3e223d`, VERSION
 `0.16.0-rc.1`, including TLS/test repairs, cloud-development cleanup and
@@ -611,6 +611,26 @@ unique cases. The ordinary five root-only labels remain intentional, with their
 separate privileged suites actually executing. Recorded curl versions are7.81.0
 on22.04 and8.5.0 on24.04. Remaining full installation, account, storage, reboot,
 external-client and deferred Debian boundaries are unchanged.
+
+## Stage 16: no-replace TLS pair publication
+
+Validation base4819a79 (stage15 result record, runtimeb3e223d). Controlled
+interleavings reproduce six failures: a destination appearing after precheck
+could be overwritten by external import, receive a nested candidate, or be
+removed after self-signed validation failed. The initial TLS run reports16
+passed/6 failed. Both staging paths now validate private candidates first and
+reuse backup publication's `ln -T` no-replace pattern. Candidate inode anchors
+allow compensation to remove only owned links while preserving foreign changes.
+External import copies to private candidates instead of final destinations.
+
+Focused TLS passes25/25, including both leaves/modes across raced files,
+directories and links, foreign replacement with either successful or failed
+second publication, a failed command after link creation, and mismatched external
+input without publication. Sandbox install passes12/12. Standard and targeted
+ShellCheck pass. Protected staging parents are assumed; these tests do not prove
+arbitrary privileged concurrent writes or physical storage failure recovery.
+Local `make release-check` exits0:32 suites/434 passed/0 failed. The five
+ordinary root-only skips remain explicit. Ubuntu amd64 integration is pending.
 
 ## Next priorities
 

@@ -159,6 +159,32 @@ pnm_tls_certificate_check() {
     fi
 }
 
+# Protected staging parents are assumed; keep inode anchors for compensation.
+pnm_tls_publish_staged_pair() {
+    local temp_certificate="$1" temp_key="$2" certificate="$3" private_key="$4"
+    local rc=0
+
+    if ! pnm_tls_validate_pair "$temp_certificate" "$temp_key"; then
+        rc="$PNM_EXIT_CONFIG"
+    elif ! ln -T -- "$temp_certificate" "$certificate" ||
+        ! ln -T -- "$temp_key" "$private_key"; then
+        rc="$PNM_EXIT_CANTCREAT"
+    elif [[ -L "$certificate" || -L "$private_key" ||
+        ! "$certificate" -ef "$temp_certificate" || ! "$private_key" -ef "$temp_key" ]]; then
+        rc="$PNM_EXIT_CANTCREAT"
+    fi
+    if ((rc != 0)); then
+        if [[ ! -L "$certificate" && "$certificate" -ef "$temp_certificate" ]]; then
+            rm -f -- "$certificate" || :
+        fi
+        if [[ ! -L "$private_key" && "$private_key" -ef "$temp_key" ]]; then
+            rm -f -- "$private_key" || :
+        fi
+    fi
+    rm -f -- "$temp_certificate" "$temp_key" || { ((rc != 0)) || rc="$PNM_EXIT_CANTCREAT"; }
+    return "$rc"
+}
+
 pnm_tls_generate_selfsigned() {
     local certificate="${1:?certificate destination required}"
     local private_key="${2:?private key destination required}"
@@ -187,18 +213,7 @@ pnm_tls_generate_selfsigned() {
         rm -f -- "$temp_certificate" "$temp_key"
         return "$PNM_EXIT_NOPERM"
     fi
-    mv -n -- "$temp_certificate" "$certificate" || {
-        rm -f -- "$temp_certificate" "$temp_key"
-        return "$PNM_EXIT_CANTCREAT"
-    }
-    mv -n -- "$temp_key" "$private_key" || {
-        rm -f -- "$certificate" "$temp_key"
-        return "$PNM_EXIT_CANTCREAT"
-    }
-    if ! pnm_tls_validate_pair "$certificate" "$private_key"; then
-        rm -f -- "$certificate" "$private_key"
-        return "$PNM_EXIT_CONFIG"
-    fi
+    pnm_tls_publish_staged_pair "$temp_certificate" "$temp_key" "$certificate" "$private_key"
 }
 
 pnm_tls_stage_external_pair() {
@@ -207,18 +222,21 @@ pnm_tls_stage_external_pair() {
     local destination_dir="${3:?destination directory required}"
     local certificate="$destination_dir/server.crt"
     local private_key="$destination_dir/server.key"
+    local temp_certificate temp_key
 
     [[ -f "$source_certificate" && ! -L "$source_certificate" ]] || return "$PNM_EXIT_CONFIG"
     [[ -f "$source_key" && ! -L "$source_key" ]] || return "$PNM_EXIT_CONFIG"
     pnm_mkdir_mode 0700 "$destination_dir" || return "$PNM_EXIT_CANTCREAT"
     [[ ! -e "$certificate" && ! -L "$certificate" && ! -e "$private_key" && ! -L "$private_key" ]] || return "$PNM_EXIT_CANTCREAT"
-    install -m 0644 -- "$source_certificate" "$certificate" || return "$PNM_EXIT_CANTCREAT"
-    if ! install -m 0600 -- "$source_key" "$private_key"; then
-        rm -f -- "$certificate" "$private_key"
+    temp_certificate="$(mktemp "$destination_dir/.pnm-cert.XXXXXXXX")" || return "$PNM_EXIT_CANTCREAT"
+    temp_key="$(mktemp "$destination_dir/.pnm-key.XXXXXXXX")" || {
+        rm -f -- "$temp_certificate"
+        return "$PNM_EXIT_CANTCREAT"
+    }
+    if ! install -m 0644 -- "$source_certificate" "$temp_certificate" ||
+        ! install -m 0600 -- "$source_key" "$temp_key"; then
+        rm -f -- "$temp_certificate" "$temp_key"
         return "$PNM_EXIT_CANTCREAT"
     fi
-    if ! pnm_tls_validate_pair "$certificate" "$private_key"; then
-        rm -f -- "$certificate" "$private_key"
-        return "$PNM_EXIT_CONFIG"
-    fi
+    pnm_tls_publish_staged_pair "$temp_certificate" "$temp_key" "$certificate" "$private_key"
 }
