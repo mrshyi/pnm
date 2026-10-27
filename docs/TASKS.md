@@ -2,24 +2,22 @@
 
 **Updated:** 2026-10-26. **Phase 3 remains incomplete; Phase 4 and release work have not started.**
 
-**Published baseline:** branch `dev`, commit `39312aa`, VERSION
+**Published baseline:** branch `dev`, commit `d7919a2`, VERSION
 `0.16.0-rc.1`, including TLS/test repairs, cloud-development cleanup and
-Ubuntu22.04/24.04 CI/regressions. Local preparation checks below used parent
-`65c8109` plus that increment; the remote CI checks used exactly `39312aa`.
+Ubuntu22.04/24.04 CI/regressions plus stages1–9 below. Earlier preparation checks
+used their recorded parents; do not attribute earlier39312aa CI to this baseline.
 
 ## Continuation checkpoint
 
-- Local stage commits:166e828 (CI evidence),6ec55cc (asset publication),5eb8be9
-  (ZIP observation/mode errors),ae838f5 (version-query refusal tests),9dda49f
-  (filename-independent asset checksums),fd3710c (TLS pin pipeline failures),
-  e4999df (transaction hash/inspect refusals),71e4c2b (applied binding hashes).
-  They have not been pushed.
+- Stages1–9 are published throughd7919a2. The nine-commit fast-forward from
+  39312aa was checked against the remote before push; no force push was used.
 - Current priority: validate development/main-flow behavior on Ubuntu first;
   Debian acceptance is deferred by the latest user instruction and is not a
   prerequisite for Ubuntu development. Stage9 validation parent:71e4c2b;
   logs: `/tmp/pnm-stage9-ubuntu.MwuaZn23/`.
-- Actual Ubuntu amd64 CI evidence remains at39312aa; unpublished increments
-  have local ARM64 L1 evidence only.
+- Current CI targets exactlyd7919a2:
+  [run40444662565](https://github.com/mrshyi/pnm/actions/runs/40444662565).
+  Both Ubuntu22.04/24.04 amd64 jobs passed; see stage10 below.
 - Real Core/lifecycle integration can proceed on an authorized disposable
   Ubuntu22.04/24.04 amd64/root/systemd environment. Current ARM64/non-root L1
   execution does not establish that environment. Do not provision, run faults
@@ -42,11 +40,10 @@ Ubuntu22.04/24.04 CI/regressions. Local preparation checks below used parent
 
 For development setup and gate commands, use [CONTRIBUTING](../CONTRIBUTING.md).
 For test IDs and closure rules, use [ACCEPTANCE_PLAN](ACCEPTANCE_PLAN.md).
-The latest user instruction authorizes continuing unfinished development,
-committing each validated local stage, recording a compact continuation summary
-and proceeding to the next stage. The earlier push of `39312aa` is complete;
-there is no standing authorization to push subsequent stages. Package installation,
-provisioning, production access and deployment remain outside scope.
+The latest continuation follows the proposed push/Ubuntu CI stage: d7919a2 is
+published and its existing checks are running. Continue validated stage commits
+and record exact source identity before moving on. This does not authorize
+production access, deployment or package installation on the development host.
 
 ## Current implementation and remaining acceptance
 
@@ -382,16 +379,36 @@ or executes an official Core. Private full-gate logs:
 `/tmp/pnm-stage9-ubuntu.MwuaZn23/`. Current Ubuntu amd64 CI evidence remains at
 39312aa until these local commits are pushed and new jobs actually succeed.
 
+## Stage 10: refreshed Ubuntu amd64 CI
+
+Published source:d7919a2e95f4f172d935a326d24c637165165a9f, push event,
+[CI run40444662565](https://github.com/mrshyi/pnm/actions/runs/40444662565),
+attempt1, completed success. Both jobs checked out this exact source, including
+all published asset/TLS/transaction/applied-binding fixes.
+
+| Job | Actual platform/tools | Result |
+|---|---|---|
+| 121992956951 | Ubuntu22.04.5 x86_64; Bash5.1.16, Python3.10.12, OpenSSL3.0.2, systemd249.11-0ubuntu3.23 | check32/419/0 failures; ShellCheck success; release-check32/419/0 failures |
+| 121992957259 | Ubuntu24.04.5 x86_64; Bash5.2.21, Python3.12.3, OpenSSL3.0.13, systemd255.4-1ubuntu8.18 | check32/419/0 failures; ShellCheck success; release-check32/419/0 failures |
+
+Each log contains64 suite summaries because release-check repeats check. This
+is419 passed wrappers per gate, not838 independent cases. Both jobs retain the
+same five root-only skip labels (real update CLI, access, TLS access, low-mode
+recovery, numeric ownership). These actual Ubuntu amd64 L1 results close the
+latest-source CI gap, not root/Core lifecycle, reboot or external acceptance.
+The follow-up CI preparation reuses existing isolated integration targets; it
+must retain their ownership/cleanup guards and needs actual run results before
+any stronger acceptance claim.
+
 ## Next priorities
 
 1. Continue Ubuntu development/main-flow validation and fix reproducible local
    failures without waiting for Debian. Preserve the L1/mock versus real Core
    boundary and the supported amd64 deployment guard.
-2. Refresh existing Ubuntu22.04/24.04 amd64 CI for the latest source after push
-   authorization. Run real Core/lifecycle validation on an explicitly authorized disposable
-   Ubuntu22.04/24.04 amd64/root/systemd fixture when available. Prepare verified
-   assets, identity and cleanup prerequisites first; an installed Docker client
-   does not establish a suitable fixture.
+2. Run the existing isolated systemd and pinned real-Core checks on disposable
+   Ubuntu22.04/24.04 amd64 GitHub-hosted runners, after fixing the stale sleep-only
+   systemd fixture to satisfy current runtime-listener gates. Keep development
+   host services untouched and record those jobs separately from L1 checks.
 3. Continue applicable L2 commit/storage/interruption positions on the approved
    Ubuntu fixture. Do not reuse old private paths or fault the development host.
 4. Obtain an authorized deployed target for G-01 and controlled external clients
