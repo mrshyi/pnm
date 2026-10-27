@@ -2,7 +2,7 @@
 
 **Updated:** 2026-10-26. **Phase 3 remains incomplete; Phase 4 and release work have not started.**
 
-**Published baseline:** branch `dev`, commit `a2f12d6`, VERSION
+**Published baseline:** branch `dev`, commit `ee132a7`, VERSION
 `0.16.0-rc.1`, including TLS/test repairs, cloud-development cleanup and
 Ubuntu22.04/24.04 CI/regressions plus stages11–12 integration below. Earlier preparation checks
 used their recorded parents; do not attribute earlier39312aa CI to this baseline.
@@ -24,6 +24,9 @@ used their recorded parents; do not attribute earlier39312aa CI to this baseline
 - Root service/Core integration now uses disposable Ubuntu22.04/24.04 amd64
   GitHub-hosted runners. The ARM64/non-root development host remains L1 only;
   do not provision it, run service/storage faults on it or start Phase4 automatically.
+- Stage14 candidateee132a757b15da84b488f04b6e285acb206e5ddb is published;
+  [run40458759515](https://github.com/mrshyi/pnm/actions/runs/40458759515)
+  passed the expanded7-case transport suite on both Ubuntu versions.
 
 ## Current environment
 
@@ -556,7 +559,16 @@ outside this evidence.
 Python parsing, embedded Bash syntax/ShellCheck, repository syntax/security,
 standard ShellCheck and the existing guest guard suite pass. Guest guards report
 33 total,25 executed and8 root-only skipped. Ubuntu amd64 CI execution remains
-pending publication of this candidate.
+pending during local preparation.
+
+Actual sourceee132a757b15da84b488f04b6e285acb206e5ddb passes
+[run40458759515](https://github.com/mrshyi/pnm/actions/runs/40458759515),
+push/attempt1, both Ubuntu jobs successful:122038127649 (22.04) and122038127435
+(24.04). Each runs7 acquisition cases with no skips and also passes normal
+check/release32 suites/419 per gate, ShellCheck, privileged48, real systemd8
+and official-Core10. This verifies the declared503 retry count with actual
+curl7.81/OpenSSL3.0.2 and curl8.5/OpenSSL3.0.13 paths on Ubuntu; other retry
+statuses, Retry-After and default overall deadlines remain open.
 
 ## Next priorities
 
