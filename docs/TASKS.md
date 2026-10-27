@@ -2,7 +2,7 @@
 
 **Updated:** 2026-10-27. **Phase 3 repair scope is frozen; bounded Ubuntu acceptance is pending. Phase 4 and release work have not started.**
 
-**Published baseline:** branch `dev`, commit `61c5a86`, VERSION
+**Published baseline:** branch `dev`, commit `ce0faf7`, VERSION
 `0.16.0-rc.1`, including TLS/test repairs, cloud-development cleanup and
 Ubuntu22.04/24.04 CI/regressions plus stages11–17 and bounded main-flow preparation below. Earlier preparation checks
 used their recorded parents; do not attribute earlier39312aa CI to this baseline.
@@ -10,11 +10,11 @@ used their recorded parents; do not attribute earlier39312aa CI to this baseline
 ## Continuation checkpoint
 
 - Ubuntu development validation remains first; Debian acceptance is deferred.
-- Latest published/validated source:61c5a86b7b35fd91496f692cd1c763b427c6070c,
-  [run40485517751](https://github.com/mrshyi/pnm/actions/runs/40485517751), success
-  on both Ubuntu22.04/24.04 amd64. This runtime increment adds the public
-  external-ca install inputs; it does not establish a full guest-install pass.
-- Per Ubuntu job: normal check/release444 each; privileged suites49; loopback
+- Latest published/validated source:ce0faf7efedd86f8d4516e605220e3cc7a4a8f4d,
+  [run40526987902](https://github.com/mrshyi/pnm/actions/runs/40526987902), success
+  on both Ubuntu22.04/24.04 amd64. Public external-ca inputs now reach the menu
+  installation action too; this does not establish a full guest-install pass.
+- Per Ubuntu job: normal check/release447 each; privileged suites52; loopback
   asset transport7; real systemd8; official-Core private-network10; ShellCheck
   success. These are separate execution layers, not an independent total.
 - Main-flow preparation per Ubuntu job:36 total,28 executed/8 root-only skipped;
@@ -92,7 +92,7 @@ failures remain required below, not deferred.
 
 The finite execution contract is [U-01–U-08](ACCEPTANCE_PLAN.md#ubuntu-closeout).
 All eight must have evidence on Ubuntu22.04 and24.04 before Ubuntu closeout is
-declared. The recorded61c5a86 CI satisfies only the U-01 layer for that
+declared. The recordedce0faf7 CI satisfies only the U-01 layer for that
 source; U-02–U-08 remain pending. No target, assets or installation/reboot
 authorization is inferred from this checklist. Phase3 remains acceptance-pending;
 closure requires the bounded results and an explicit disposition of residuals,
@@ -100,7 +100,7 @@ not merely this document edit. Phase4 still requires separate authorization.
 
 | Closeout ID | Ubuntu22.04 | Ubuntu24.04 |
 |---|---|---|
-| U-01 | PASS at61c5a86, run40485517751 | PASS at61c5a86, same run |
+| U-01 | PASS atce0faf7, run40526987902 | PASS atce0faf7, same run |
 | U-02 | BLOCKED | BLOCKED |
 | U-03 | BLOCKED | BLOCKED |
 | U-04 | BLOCKED | BLOCKED |
@@ -809,8 +809,18 @@ new protocol or expanded acceptance scope was added.
 Local CLI/menu tests pass15/15 with the ordinary real-update root-only skip.
 Standard ShellCheck and targeted test ShellCheck pass. Local `make release-check`
 exits0:32 suites/447 passed/0 failed, with the five ordinary non-root skips.
-Native Ubuntu validation of this menu change is pending; the prior61c5a86 CI
-record above applies only to that committed source.
+The prior61c5a86 CI record above applies only to that committed source.
+
+Actual sourcece0faf7efedd86f8d4516e605220e3cc7a4a8f4d passes
+[run40526987902](https://github.com/mrshyi/pnm/actions/runs/40526987902),
+push/attempt1. Jobs122269120758 (Ubuntu22.04) and122269121398 (Ubuntu24.04)
+each pass normal check/release32 suites/447 per gate, ShellCheck, privileged52
+(CLI15/read1/TLS8/transaction28), preparation36 total/28 executed/8 skipped,
+transport7, real systemd8 and official-Core10. All70 shell summaries per job
+report zero failures. Menu cases run against temporary config fixtures and a
+recording installer stub; they prove prompting/argument/cancellation behavior,
+not full guest deployment. U-02–U-08 stay BLOCKED. The earlier Git approval
+quota failure was resolved through the normal approval path; no bypass was used.
 
 1. Pin the latest validated runtime baseline above and the finite U-01–U-08
    checklist. Change it only for reproduced in-scope main-flow defects.
