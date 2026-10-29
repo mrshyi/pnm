@@ -8,11 +8,11 @@ This is a planning document, not an implementation claim or authorization. Curre
 |---|---|---|
 | Phase 1 | Targeted HY2 configuration/link consistency and TLS/SNI fixes | Source changes exist in current history; production/client verification is environment-specific and must not be inferred from unit tests |
 | Phase 2 | Gap classification and minimal implementation plan | Completed as a read-only report in the historical archive; it records its own HEAD and findings |
-| Phase 3 | Repair and accept existing defects G-01–G-06 | Repair scope frozen; bounded Ubuntu acceptance pending; see `TASKS.md` |
+| Phase 3 | Repair and accept existing defects G-01–G-06 | Repair scope frozen; bounded Debian/Ubuntu acceptance pending; see `TASKS.md` |
 | Phase 4 | Desired-state deployment Profiles (`dual`, `reality`, `hy2`) | Installed-node main flow basically complete; real systemd acceptance pending |
 | Phase 5 | Profile-aware health reporting, lightweight resource diagnostics, optional external checks | Local status/resources main flow basically complete; local gates pass; external checks deferred |
 | Phase 6 | Verifiable firewall-rule ownership and additional recovery/secret protections | User-scoped recovery diagnostics developed; local gates pass; firewall remains manual and broader capabilities deferred |
-| Phase 7 | Regression coverage, supported Linux VM acceptance, documentation and release readiness | Local preparation and current-runtime Ubuntu CI pass; full real acceptance pending; release separately authorized |
+| Phase 7 | Regression coverage, supported Linux VM acceptance, documentation and release readiness | Local preparation and native amd64/arm64 CI pass; full Debian/Ubuntu acceptance pending; release separately authorized |
 
 ## Phase 3 — Existing defect closure
 
@@ -27,12 +27,13 @@ This is a planning document, not an implementation claim or authorization. Curre
 
 Do not use production nodes for fault injection. The acceptance evidence must state which tests are mocks, Linux/systemd integration, or real host observations.
 
-The 2026-10-27 closeout freezes Ubuntu work to
-[U-01–U-08](ACCEPTANCE_PLAN.md#ubuntu-closeout). Development dispositions and
-explicit deferrals are recorded once in TASKS. Missing environments or speculative
-failure combinations do not create new hardening stages by default. Debian is
-deferred; bounded Ubuntu acceptance and the residual dispositions must be recorded
-before Phase3 closure. Closure does not authorize Phase4, deployment or release.
+The finite [U-01–U-08](ACCEPTANCE_PLAN.md#platform-closeout) contract is retained.
+On2026-10-29 the user aligned Debian12/13 and Ubuntu22.04/24.04 across native
+amd64/arm64: eight independent deployment/acceptance records, with no new fault
+combinations. Debian full deployment is in scope rather than automatically
+deferred; missing targets/assets remain BLOCKED. Development dispositions and
+evidence stay in TASKS. Missing environments do not create new hardening stages.
+Closure does not authorize deployment, release or unrelated features.
 
 ## Phase 4 — Deployment Profiles
 
@@ -77,11 +78,14 @@ the Profile and recovery suites, records Unreleased changes, and aligns release
 instructions with configured ports/Profiles and separate CLI/Core installation.
 The runtime implementation and regression cases are unchanged in this increment.
 
-Current runtime source32423be passes its committed Ubuntu22.04/24.04 CI; the
-authorized disposable Ubuntu U-02–U-08 acceptance remains pending. Reuse existing cases rather than extending the fault
-matrix. Record real Profile/service and external Xray/HY2 client results
-separately. Native amd64/arm64 Ubuntu and Debian12/13 userspace container CI is configured;
-ARM64 runs and full Debian
-service/reboot acceptance remains deferred. Missing targets/assets do not trigger more
-hardening or establish readiness. Release/version/tag/publishing/deployment
-actions remain separately authorized under `RELEASING.md`.
+Current runtime source3d6ac5b passes eight native Ubuntu/Debian CI jobs.
+Ubuntu includes selected temporary systemd/Core integration; Debian containers
+establish userspace and fixture permissions only. The user has aligned full
+Debian deployment acceptance with Ubuntu: reuse the same finite U-01–U-08 and
+release checklist for each of the eight OS/architecture combinations. Debian
+also needs the existing native systemd/Core integration on an authorized target;
+container success is not that evidence. Full deployment, real Profiles, reboot
+and external client acceptance remain pending, not automatically deferred for
+Debian. Missing targets/assets do not trigger additional hardening or establish
+readiness. Release/version/tag/publishing/deployment actions remain separately
+authorized under `RELEASING.md`.

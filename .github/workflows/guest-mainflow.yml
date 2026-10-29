@@ -1,0 +1,116 @@
+name: Isolated managed installation
+
+on:
+  push:
+    paths:
+      - '.github/workflows/guest-mainflow.yml'
+      - 'tests/integration/**'
+      - 'lib/**'
+      - 'adapters/**'
+      - 'bin/pnm'
+      - 'VERSION'
+      - 'install.sh'
+  workflow_dispatch:
+    inputs:
+      os:
+        description: Native guest OS
+        type: choice
+        options: [debian13, debian12, ubuntu24, ubuntu22]
+        default: debian13
+      arch:
+        description: Native runner and guest architecture
+        type: choice
+        options: [amd64, arm64]
+        default: amd64
+      scenario:
+        description: Existing bounded mainflow scenario
+        type: choice
+        options: [lifecycle, external-ca, external-ca-mismatch, core-update, dependency-refusal, deployment-startup-failure, core-update-failure, restore-failure]
+        default: lifecycle
+
+permissions:
+  contents: read
+
+jobs:
+  managed-installation:
+    # Start with one automatic pilot; dispatch reuses it for the other native pairs.
+    runs-on: ${{ inputs.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    timeout-minutes: 45
+    env:
+      PNM_CI_OS: ${{ inputs.os || 'debian13' }}
+      PNM_CI_ARCH: ${{ inputs.arch || 'amd64' }}
+      PNM_CI_SCENARIO: ${{ inputs.scenario || 'lifecycle' }}
+    steps:
+      - name: Check out candidate
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install disposable runner prerequisites
+        run: sudo apt-get update && sudo apt-get install --yes systemd-container python3 jq curl unzip
+
+      - name: Prepare and verify native boot fixture, then run existing mainflow
+        run: |
+          sudo --preserve-env=GITHUB_ACTIONS,RUNNER_ENVIRONMENT,PNM_CI_OS,PNM_CI_ARCH,PNM_CI_SCENARIO,GITHUB_SHA bash -Eeuo pipefail <<'BASH'
+          umask 077
+          source lib/common.sh
+          source lib/config.sh
+          source adapters/assets.sh
+          [[ "$(pnm_arch)" == "$PNM_CI_ARCH" ]]
+          work="$(mktemp -d /var/tmp/pnm-ci-mainflow.XXXXXXXX)"
+          public="$PWD/ci-evidence"
+          mkdir -m 0755 -- "$public"
+          python3 - "$public/identity.json" <<'PY'
+          import json,os,pathlib,platform,sys
+          path=pathlib.Path(sys.argv[1])
+          path.write_text(json.dumps({'source':os.environ['GITHUB_SHA'],'guest':os.environ['PNM_CI_OS'],
+              'architecture':platform.machine(),'scenario':os.environ['PNM_CI_SCENARIO']},indent=2)+'\n')
+          path.chmod(0o644)
+          PY
+          case "$(pnm_arch)" in
+              amd64) suffix='' ;;
+              arm64) suffix=_arm64 ;;
+              *) exit 78 ;;
+          esac
+          for generation in real previous; do
+              if [[ "$generation" == previous && "$PNM_CI_SCENARIO" != core-update && "$PNM_CI_SCENARIO" != core-update-failure ]]; then
+                  continue
+              fi
+              manifest="tests/integration/${generation}_core_versions${suffix}.json"
+              mkdir -m 0700 -- "$work/$generation"
+              for core in xray hysteria2; do
+                  version="$(jq -er --arg core "$core" '.[$core].version' "$manifest")"
+                  hash="$(jq -er --arg core "$core" '.[$core].sha256' "$manifest")"
+                  filename="$(jq -er --arg core "$core" '.[$core].filename' "$manifest")"
+                  pnm_asset_download_verified "$core" "$version" "$hash" "$work/$generation/$filename"
+              done
+          done
+          PNM_RUN_GUEST_PREPARE=1 bash tests/integration/prepare_guest_baseline.sh "$PNM_CI_OS" "$work/baseline"
+          install -m 0644 -- "$work/baseline/template.json" "$public/template.json"
+          install -m 0644 -- "$work/baseline/rootfs/opt/pnm-template-packages.txt" "$public/packages.txt"
+          nspawn="$(realpath "$(command -v systemd-nspawn)")"
+          PNM_RUN_GUEST_TESTS=1 python3 -B tests/integration/test_guest_mainflow.py \
+              --baseline "$work/baseline" --nspawn "$nspawn" --asset-cache "$work/real" \
+              --boot-only --work-dir "$work"
+          previous=()
+          if [[ -d "$work/previous" ]]; then previous=(--previous-asset-cache "$work/previous"); fi
+          PNM_RUN_GUEST_TESTS=1 python3 -B tests/integration/test_guest_mainflow.py \
+              --baseline "$work/baseline" --nspawn "$nspawn" --asset-cache "$work/real" \
+              --scenario "$PNM_CI_SCENARIO" --work-dir "$work" "${previous[@]}"
+          # Publish only fixed metadata; journals, snapshots and guest logs stay private.
+          printf '{"boot_verified":true,"mainflow_passed":true}\n' > "$public/result.json"
+          chmod 0644 -- "$public/result.json"
+          BASH
+
+      - name: Retain sanitized fixture identity and result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: managed-installation-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ci-evidence/identity.json
+            ci-evidence/template.json
+            ci-evidence/result.json
+            ci-evidence/packages.txt
+          if-no-files-found: ignore
+          retention-days: 7

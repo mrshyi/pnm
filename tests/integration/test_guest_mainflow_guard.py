@@ -20,6 +20,32 @@ DRIVER=Path(__file__).with_name('test_guest_mainflow.py')
 
 
 class GuestGuardTests(unittest.TestCase):
+    def test_cgroup_view_is_confined_to_owned_scope_on_both_layouts(self):
+        tree=ast.parse(DRIVER.read_text())
+        function=next(n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name=='verify_cgroup_mounts')
+        namespace={}
+        exec(compile(ast.Module(body=[function],type_ignores=[]),'<cgroup boundary>','exec'),namespace)
+        verify=namespace['verify_cgroup_mounts']
+        scope='pnm-fixture.scope'
+        unified=['1 0 0:1 /machine.slice/'+scope+'/payload /sys/fs/cgroup rw - cgroup2 cgroup rw']
+        hybrid=['1 0 0:1 / /sys/fs/cgroup ro - tmpfs tmpfs ro']+[
+            '2 1 0:2 /machine.slice/'+scope+'/payload /sys/fs/cgroup/'+name+' rw - cgroup2 cgroup rw'
+            for name in ('systemd','unified')]
+        verify(unified,scope)
+        verify(hybrid,scope)
+        for mounts in ([unified[0].replace('/machine.slice/'+scope+'/payload','/')],
+                       [unified[0].replace(scope,'other.scope')],unified+unified,
+                       [hybrid[0],hybrid[1]]):
+            with self.subTest(mounts=mounts), self.assertRaises(AssertionError):
+                verify(mounts,scope)
+
+    def test_template_preparation_refuses_without_ci_opt_in(self):
+        env=dict(os.environ,PNM_RUN_GUEST_PREPARE='0')
+        result=subprocess.run(['bash',str(DRIVER.with_name('prepare_guest_baseline.sh'))],
+                              env=env,capture_output=True,timeout=5)
+        self.assertEqual(result.returncode,77)
+        self.assertEqual(result.stdout,b'')
+
     def test_external_ca_fixture_has_trusted_san_pair_and_independent_wrong_key(self):
         tree=ast.parse(DRIVER.with_name('guest_mainflow_cases.py').read_text())
         function=next(n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name=='prepare_external_tls')

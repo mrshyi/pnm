@@ -19,6 +19,7 @@ account_deletions=('account-deletion-userdel','account-deletion-groupdel')
 parser.add_argument('--baseline',type=Path,required=True,help='private verified boot fixture parent')
 parser.add_argument('--nspawn',type=Path,required=True,help='trusted native systemd-nspawn executable')
 parser.add_argument('--asset-cache',type=Path,required=True,help='verified pinned Core asset cache')
+parser.add_argument('--boot-only',action='store_true',help='verify a fresh template clone without running PNM operations')
 parser.add_argument('--scenario',choices=('lifecycle','external-ca','external-ca-mismatch','deployment-failure','core-update','core-update-failure',
     'configured-ports','runtime-evidence','restore-failure','restore-publication','startup-readiness',
     'core-recovery-failure-xray','core-recovery-failure-hysteria2','restore-recovery-failure','tls-access',
@@ -46,6 +47,21 @@ assert options.baseline.is_dir() and options.nspawn.is_file() and os.access(opti
 assert options.baseline.stat().st_mode & 0o777 == 0o700, 'private baseline required'
 os.umask(0o077)
 
+def verify_cgroup_mounts(mounts: list[str], scope: str) -> None:
+    """Allow only a guest cgroup view rooted in this owned container scope."""
+    entries=[line.split() for line in mounts]
+    unified=[row for row in entries if row[4]=='/sys/fs/cgroup' and row[row.index('-')+1]=='cgroup2']
+    if unified:
+        controllers=[row for row in entries if row[row.index('-')+1] in ('cgroup','cgroup2')]
+        assert len(unified)==len(controllers)==1
+        assert unified[0][3]=='/machine.slice/'+scope+'/payload'
+    else:
+        for path in ('/sys/fs/cgroup/systemd','/sys/fs/cgroup/unified'):
+            rows=[row for row in entries if row[4]==path]
+            assert len(rows)==1 and rows[0][3]=='/machine.slice/'+scope+'/payload'
+        assert any(' /sys/fs/cgroup ' in line and ' - tmpfs ' in line for line in mounts)
+
+
 def write_clone_file(path: Path, data: str) -> None:
     """Write a protected clone file without following an existing guest link."""
     fd=os.open(path,os.O_WRONLY|os.O_CREAT|os.O_NOFOLLOW|os.O_NONBLOCK,0o600)
@@ -72,7 +88,10 @@ if is_update:
     manifest=load_core_manifest(previous_manifest)
 source=options.baseline/'rootfs'
 assert source.is_dir() and source==source.resolve(), 'canonical rootfs required'
-assert json.loads((options.baseline/'boot-result.json').read_text())['guest']['passed'] is True
+if options.boot_only:
+    assert not (options.baseline/'boot-result.json').exists(), 'baseline already verified'
+else:
+    assert json.loads((options.baseline/'boot-result.json').read_text())['guest']['passed'] is True
 base=Path(tempfile.mkdtemp(prefix='pnm-install-guest.',dir=work_dir))
 root=base/'rootfs'
 subprocess.run(['cp','-a','--reflink=auto',str(source),str(root)],check=True,timeout=120)
@@ -275,14 +294,16 @@ assert (root.stat().st_dev,root.stat().st_ino)==(identity['dev'],identity['ino']
 assert not (root/'etc/pnm').exists()
 policy=root/'usr/sbin/policy-rc.d'
 if policy.exists() or policy.is_symlink():
-    assert not policy.is_symlink() and hashlib.sha256(policy.read_bytes()).hexdigest()==(base/'policy-sha256').read_text()
+    original_policy=options.baseline/'rootfs/usr/sbin/policy-rc.d'
+    assert original_policy.is_file() and not original_policy.is_symlink()
+    assert not policy.is_symlink() and hashlib.sha256(policy.read_bytes()).digest()==hashlib.sha256(original_policy.read_bytes()).digest()
     policy.unlink()
 guest_result=root/'var/tmp/pnm-integration-ready.json'
 final_result=root/'var/tmp/pnm-integration-result.json'
 approval=root/'var/tmp/pnm-integration-approved'
 assert not final_result.exists() and not approval.exists()
 assert not guest_result.exists()
-expected={'host_namespaces':{n:os.stat('/proc/self/ns/'+n).st_ino for n in ('mnt','pid','net','user','cgroup','uts','ipc')},'host_machine_id_digest':hashlib.sha256(Path('/etc/machine-id').read_bytes()).hexdigest(),'root_identity':[root.stat().st_dev,root.stat().st_ino],'approval_nonce':uuid.uuid4().hex}
+expected={'host_namespaces':{n:os.stat('/proc/self/ns/'+n).st_ino for n in ('mnt','pid','net','user','cgroup','uts','ipc')},'host_machine_id_digest':hashlib.sha256(Path('/etc/machine-id').read_bytes()).hexdigest(),'root_identity':[root.stat().st_dev,root.stat().st_ino],'approval_nonce':uuid.uuid4().hex,'boot_only':options.boot_only}
 write_clone_file(root/'opt/pnm-boot-expected.json',json.dumps(expected))
 names=['/etc/passwd','/etc/group','/etc/shadow','/etc/gshadow','/var/lib/dpkg/status']
 before={n:hashlib.sha256(Path(n).read_bytes()).hexdigest() for n in names}
@@ -322,10 +343,7 @@ with (base/'boot.log').open('wb') as log:
                                 continue
                             assert os.stat('/proc/'+str(pid)+'/ns/pid').st_ino!=os.stat('/proc/self/ns/pid').st_ino
                             mounts=Path('/proc/'+str(pid)+'/mountinfo').read_text().splitlines()
-                            for path in ('/sys/fs/cgroup/systemd','/sys/fs/cgroup/unified'):
-                                lines=[x.split() for x in mounts if x.split()[4]==path]
-                                assert len(lines)==1 and lines[0][3]=='/machine.slice/'+scope+'/payload'
-                            assert any(' /sys/fs/cgroup ' in x and ' - tmpfs ' in x for x in mounts)
+                            verify_cgroup_mounts(mounts,scope)
                             outcome['live_cgroup_boundary']=True
                             (base/'boot-live-mounts.json').write_text(json.dumps(mounts))
                             break
@@ -372,3 +390,9 @@ assert outcome['host_databases_unchanged'] and outcome['scope_after']=='not-foun
 assert interrupted_signal==0, 'guest test interrupted; owned resources retired'
 
 assert outcome['guest'].get('passed') is True and outcome.get('live_cgroup_boundary') is True and outcome['nspawn_exit']==0, 'guest boot was not confirmed'
+
+if options.boot_only:
+    # Persist success only after live host/guest isolation and exit checks above.
+    record=options.baseline/'boot-result.json'
+    with record.open('x') as stream:
+        json.dump(outcome,stream)

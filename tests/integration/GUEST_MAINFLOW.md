@@ -1,5 +1,48 @@
 # Private guest main-flow checks
 
+## Automated disposable CI preparation
+
+`.github/workflows/guest-mainflow.yml` adds a separate managed-installation job.
+Pushes touching the workflow/runtime/integration harness automatically select one
+Debian13 amd64 lifecycle pilot on an Ubuntu24.04 runner. This intentionally starts
+with one combination; it is not eight completed deployment acceptance records.
+`workflow_dispatch` declares OS choices debian12/debian13/ubuntu22/ubuntu24,
+native amd64/arm64 runner selection and the eight existing bounded scenarios:
+lifecycle, external-ca, external-ca-mismatch, core-update, dependency-refusal,
+deployment-startup-failure, core-update-failure and restore-failure. Dispatch
+availability and job success must be checked in GitHub, not inferred from YAML.
+
+Only the disposable runner installs systemd-container prerequisites. The guarded
+`prepare_guest_baseline.sh` requires explicit PNM_RUN_GUEST_PREPARE=1,
+GitHub-hosted environment markers, root, real systemd PID1 and native Docker
+architecture. It pulls an allowlisted official Debian/Ubuntu image, records its
+registry digest and immutable local image ID, and installs guest prerequisites
+using default signed APT metadata in a normal build container. It uses no
+privileged Docker mode, host namespace/network options, bind mounts or host
+sockets inside that container. An immutable image ID is used after tag resolution;
+this is source/digest recording, not independent publisher-signature verification.
+The script exports only that owned container to a root-private template directory
+and removes the exact container after checking its nonce label and image ID.
+
+The new `--boot-only` mode reuses the existing nspawn driver and guest identity/
+UID/network/cgroup/host-database checks. It does not run PNM operations. Only after
+a real verified clone boot, safe shutdown and clean host observations does it
+write the original template's boot-result.json. It never fabricates boot success.
+The next invocation clones that verified template and executes the unchanged
+selected CLI scenario with approved native, checksum-verified Core test assets.
+Both hybrid cgroup mounts and cgroup v2 are accepted only when host mountinfo
+confirms this guest's owned scope/payload boundary; no host cgroup root is accepted.
+Failure is nonzero and retained as failure, not silently skipped.
+
+Artifacts are restricted to source/OS/architecture/scenario, image provenance,
+public package versions and success metadata. Guest logs, account databases,
+configurations, snapshots, credentials and share links are never uploaded.
+The job does not establish VM/kernel reboot, public connectivity, actual Profile
+switching, or the user-facing install.sh wrapper. It must first run successfully
+before any current-source managed-installation PASS is recorded. Development-host
+package installation, Docker preparation or deployment is not enabled by this path.
+
+
 Current Ubuntu work is limited to [U-01–U-08](../../docs/ACCEPTANCE_PLAN.md#ubuntu-closeout).
 For U-03, `PNM_GUEST_SCENARIO=external-ca` selects the normal lifecycle using a
 private test-CA-signed DNS-SAN certificate. `external-ca-mismatch` starts in a
@@ -110,8 +153,9 @@ The existing7-case acquisition scenario remains available unchanged.
 This explicit opt-in test clones a separately prepared trusted Debian 13 boot
 fixture. It never bootstraps packages, downloads assets, installs host packages,
 binds host directories or changes host accounts/network/firewall configuration.
-Default `make check` does not run it. It currently targets the verified hybrid
-WSL cgroup layout; another layout fails closed.
+Default `make check` does not run it. It retains the verified hybrid cgroup guard and adds a unified cgroup v2
+guard confined to the owned payload. An unrecognized layout still fails closed;
+new CI execution must establish actual runtime evidence.
 
 `PNM_GUEST_SCENARIO=deployment-progress-readonly` runs the install CLI in its
 own private mount namespace. A guarded trace observes the unchanged publisher's

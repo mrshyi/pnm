@@ -42,6 +42,21 @@ Report missing tools. If an approved tool was unpacked outside the checkout,
 prepend its actual `bin` directory to `PATH` for that check and record its version.
 Do not hardcode a previous session's `/tmp` path or change the host automatically.
 
+## Automated managed-installation fixture
+
+The separate [managed-installation workflow](.github/workflows/guest-mainflow.yml)
+prepares an official-image native rootfs inside a normal disposable build
+container, then boots a mapped-user, private-network systemd-nspawn clone through
+the existing harness. The first automatic pilot is Debian13 amd64/lifecycle;
+manual workflow inputs select the remaining native OS/architecture combinations
+and existing bounded scenarios. Rootfs metadata is never treated as boot success:
+a verified boot-only invocation precedes any managed operation. See
+[guest mainflow](tests/integration/GUEST_MAINFLOW.md#automated-disposable-ci-preparation).
+Only disposable GitHub-hosted runners prepare dependencies/images; ordinary L1
+and the development host do not. Missing or unsafe runner capabilities fail the
+job rather than weakening guards. This adds installation automation, not VM
+reboot, actual Profile switching or public-client acceptance.
+
 ## Repository gates
 
 Run from the project root as the normal workspace user:

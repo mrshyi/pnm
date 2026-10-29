@@ -32,10 +32,15 @@ try:
         state=subprocess.run(['systemctl','is-system-running'],capture_output=True,text=True,timeout=5).stdout.strip()
         if state in ('running','degraded'):
             stage='boot cgroup write scope'
-            paths=[Path('/sys/fs/cgroup')]+[p for p in Path('/sys/fs/cgroup').iterdir() if p.is_dir() and not p.is_symlink()]
+            unified=Path('/sys/fs/cgroup/cgroup.controllers').exists()
+            paths=[Path('/sys/fs/cgroup')]
+            if not unified:
+                paths += [p for p in Path('/sys/fs/cgroup').iterdir() if p.is_dir() and not p.is_symlink()]
             writable=sorted(str(p) for p in paths if os.access(p,os.W_OK))
             result['writable_cgroups']=writable
-            assert set(writable)=={'/sys/fs/cgroup/systemd','/sys/fs/cgroup/unified'}
+            allowed=({'/sys/fs/cgroup'} if unified
+                     else {'/sys/fs/cgroup/systemd','/sys/fs/cgroup/unified'})
+            assert set(writable)==allowed
             result={'passed':True,'writable_cgroups':writable,'controllers_checked':len(paths)-1,'manager_state':state,'identity_guards':True,'uid_base':mapping[1],'native_marker':'systemd-nspawn','detected_container':virtual.stdout.strip()}
             ready=Path('/var/tmp/pnm-integration-ready.json')
             with ready.open('x') as stream:
@@ -48,6 +53,9 @@ try:
                 time.sleep(0.2)
             else:
                 raise RuntimeError('host boundary approval was not received')
+            if expected.get('boot_only') is True:
+                result['boot_only']=True
+                break
             stage='PNM installation cases'
             with Path('/var/tmp/pnm-install-cases.log').open('xb') as output:
                 case=subprocess.run(['/usr/bin/python3','/opt/pnm-install-cases.py'],stdout=output,stderr=subprocess.STDOUT,timeout=600)

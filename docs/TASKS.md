@@ -1,37 +1,128 @@
 # PNM Current Tasks
 
-**Updated:** 2026-10-29. **Phase 3 bounded Ubuntu acceptance remains pending.
+**Updated:** 2026-10-29. **Phase 3 bounded Debian/Ubuntu acceptance remains pending.
 Phase 4 installed-node Profile main flow is basically complete; real systemd
 acceptance is pending. Phase 5 local observability is implemented with passing
 local gates; optional external checks remain deferred.
 Phase 6's scoped recovery diagnostics are implemented with passing local gates;
 firewall management remains manual. Phase 7 local regression/release preparation
-is complete; the previously verified amd64 baseline passes Ubuntu and Debian userspace CI.
-Current ARM64 adaptation awaits native matrix execution; full real acceptance remains pending. No release
+is complete; current amd64/arm64 Ubuntu and Debian userspace CI pass; full real acceptance remains pending. No release
 has been published.**
 
-**Published runtime baseline:** branch `dev`, source commit `32423be`, VERSION
+**Published runtime baseline:** branch `dev`, source commit `3d6ac5b`, VERSION
 `0.16.0-rc.1`. Includes the dual-Core lifecycle, installed-node Profiles, optional
-resource/status observations, sanitized recovery diagnostics and Ubuntu CI.
+resource/status observations, sanitized recovery diagnostics, native architecture
+asset/digest selection and amd64/arm64 CI.
 Earlier records below remain specific to their own sources and execution layers.
 
 ## Continuation checkpoint
 
-- Dual-architecture delivery candidate (2026-10-29, based on050c9bb): user authorized amd64/arm64 compatibility. Linux x86_64/aarch64
-  are accepted on the existing four OS releases; other architectures remain
-  refused. Download URLs and initialization digest selection share native
-  asset names. Existing CLI/config/backup formats and transactions are retained;
-  restore rejects foreign ELF64 machine identity before candidate execution,
-  including on binfmt-enabled hosts. No cross-architecture migration is added.
-  Ubuntu22/24 native amd64/arm64 and Debian12/13 containers on matching native
-  runners define eight CI jobs; these modified jobs have not run yet. Old CI
-  results below apply only to their recorded commits, not this dual-architecture candidate.
-- Delivery review (2026-10-29): no blocking defect was confirmed in the runtime,
-  callers, architecture-specific manifests, CI or test changes. Existing local
-  results below apply to this implementation; they were not counted as newly
-  rerun business tests for submission. Release/security scans, manifest digest
-  format checks and diff whitespace checks pass again before commit. User
-  explicitly authorized commit/push; the native online CI result remains pending.
+- Automated environment preparation (2026-10-29, delivery candidate based on3d6ac5b):
+  the user authorized preparing disposable environments through existing CI/
+  harness facilities. A separate managed-installation workflow prepares an
+  allowlisted official native Debian/Ubuntu rootfs, retaining image IDs/digests
+  and public package versions; APT setup occurs only inside its normal owned
+  build container. Existing nspawn guards then verify a boot-only clone before
+  publishing the template's boot receipt and running the existing CLI scenario.
+  No parallel transaction framework or new fault scenarios were added. Hybrid
+  guards are retained; unified cgroup views must be confined to the same owned
+  scope/payload. Clone policy-rc.d is verified against the original template
+  before removal, replacing the missing clone-local receipt assumption.
+  The first automatic pilot is Debian13 amd64/lifecycle. Dispatch definitions
+  expose the other native OS/architecture choices and eight existing bounded
+  scenarios; none is claimed executed yet. This removes manual fixture supply
+  as the planned prerequisite for that pilot, but actual CI boot/install success
+  remains pending. VM reboot, real Profiles and public clients remain unverified.
+  No packages/images were installed/pulled, containers created or services
+  modified on the development host. Delivery review confirmed no blocking
+  defect and the user explicitly authorized commit/push. Fresh submission
+  checks repeat38 preparation guards (30 executed/8 skipped),2 Core guards,
+  workflow/Python structure, Bash syntax/ShellCheck0.8.0 and security/release/diff
+  scans successfully. No production business-suite rerun is claimed. The first
+  online pilot remains pending; source review is not boot/install verification.
+- Preparation checks: integration guards38 total/30 executed/8 root-only
+  skipped, exit0; real-Core refusal/native-manifest guards2/2, exit0. New
+  builder and extracted workflow Bash steps pass syntax and ShellCheck0.8.0;
+  BaseLoader validates four OS choices, two native architectures, eight existing
+  scenario choices and contents-read token scope. Changed Python parses cleanly;
+  make syntax/security-scan, release scan and git diff checks exit0. No475-case
+  production suite rerun is claimed for this harness-only change. Actual image
+  acquisition, boot-only confirmation and CLI lifecycle remain pending the
+  first online pilot. Preparation guard log: `/tmp/pnm-auto-guest-guards.log`.
+- Debian deployment/acceptance alignment (2026-10-29): the user added full
+  Debian12/13 deployment to the same finite contract as Ubuntu22.04/24.04,
+  for native amd64 and arm64 independently. U-01–U-08 and the release checklist
+  keep their IDs and fixed faults; there is no new implementation or failure
+  matrix. Full Debian acceptance is in scope, not automatically deferred.
+  Current source3d6ac5b has passing userspace CI on all eight combinations;
+  only Ubuntu has the selected real temporary systemd/Core CI evidence.
+
+  | OS | Architecture | Repository/userspace CI | Selected real systemd/Core | Full deployment/Profile/reboot/external client |
+  |---|---|---|---|---|
+  | Debian12 | amd64 | PASS | BLOCKED | BLOCKED |
+  | Debian12 | arm64 | PASS | BLOCKED | BLOCKED |
+  | Debian13 | amd64 | PASS | BLOCKED | BLOCKED |
+  | Debian13 | arm64 | PASS | BLOCKED | BLOCKED |
+  | Ubuntu22.04 | amd64 | PASS | PASS | BLOCKED |
+  | Ubuntu22.04 | arm64 | PASS | PASS | BLOCKED |
+  | Ubuntu24.04 | amd64 | PASS | PASS | BLOCKED |
+  | Ubuntu24.04 | arm64 | PASS | PASS | BLOCKED |
+
+  PASS applies only to source3d6ac5b and the recorded CI layer. Missing approved
+  disposable native root/systemd/reboot targets, verified fixture/asset setup
+  and external clients prevent full execution. Debian must also run the existing
+  systemd/Core integration on an approved target before complete U-01 PASS.
+  No installation, target provisioning, dependency installation or reboot was
+  executed for this documentation alignment. Earlier Debian deferral records
+  below describe prior scope, not the current contract.
+- Pre-release acceptance checklist (2026-10-29): consolidated the executable
+  release decision/checklist in [RELEASING](RELEASING.md), reusing U-01–U-08.
+  It separates candidate/CLI delivery, actual Profiles and diagnostics, external
+  protocol transfer and normal uninstall exit checks; no extra fault matrix is
+  introduced. All eight Debian/Ubuntu OS/architecture targets execute the same bounded
+  checklist independently after the Debian alignment above; full acceptance
+  cannot be claimed from container CI. No new acceptance run, deployment, version/tag,
+  commit/push or release is implied by the checklist.
+- Dual-architecture CI verification (2026-10-29): source
+  `3d6ac5b4e231363ad33da1b58034e64e9061fb7f`, push/attempt1,
+  [run40936099974](https://github.com/mrshyi/pnm/actions/runs/40936099974)
+  completed successfully on all eight jobs. Actual ARM64 logs report aarch64.
+  No runtime/test correction was required after delivery.
+
+  | Environment | amd64 job | arm64 job | Result |
+  |---|---|---|---|
+  | Ubuntu22.04 |123666935765|123666935488|PASS both|
+  | Ubuntu24.04 |123666935530|123666935481|PASS both|
+  | Debian12 container |123666935386|123666935617|PASS both|
+  | Debian13 container |123666935125|123666935554|PASS both|
+
+- All eight jobs pass check and release-check separately:35 suites/475 passed/
+  0 failed per gate. Privileged suites pass70/0 (CLI18/read1/TLS8/transaction28/
+  Profile9/recovery6), with no root-section skips. All pass ShellCheck,
+  preparation36 total/28 executed/8 skipped and loopback asset transport7.
+  Each Ubuntu job also passes real temporary systemd8 and real-Core10, plus
+  the2-test refusal/native-manifest guard. Ubuntu78 / Debian76 shell summaries
+  per job contain zero failures. Five ordinary root-only skips remain explicit;
+  repeated gates are not independent additional coverage.
+- ARM64 Ubuntu22/24 evidence now includes verified official Xray26.10.21 and
+  HY2 2.13.0 execution as nobody, production-rendered config/certificate
+  validation, actual unprivileged Core startup, separate local client transfers
+  for both protocols and the HY2 share-link pin. These are private network/
+  temporary-unit checks. Debian12/13 ARM64 is native userspace/container-root
+  evidence with PID1 tail, not real systemd boot acceptance. Profile service
+  controls in privileged unit suites remain simulated.
+- Full ARM64 deployment acceptance remains BLOCKED before execution: no
+  verified disposable supported root/systemd/reboot target or native boot fixture
+  was supplied. Rechecked workspace: UID1001/aarch64/PID1 codex, no QEMU,
+  nspawn or /dev/kvm. A reviewed read-only Docker query reports an aarch64
+  Ubuntu22.04 daemon, but no prepared supported test image; existing application
+  images are not adopted as acceptance fixtures. No image pull/container create,
+  dependency installation, managed deployment, host account/service/firewall
+  change or reboot was performed. Target/fixture information was requested.
+  U-02–U-08, actual Profile switching, two-version update/rollback, trusted full
+  restore, reboot persistence and public external-client acceptance remain
+  unverified. Reuse the existing finite checklist when prerequisites arrive;
+  passing CI does not establish production readiness.
 - Fresh compatibility validation: `make release-check` exits0, including
   release/syntax/security scans and35 suites/475 passed/0 failed. Five
   root-only skips remain update CLI, read access, TLS access, low-mode
@@ -48,7 +139,8 @@ Earlier records below remain specific to their own sources and execution layers.
   PyYAML validates eight native jobs;20 extracted Bash steps pass syntax and
   ShellCheck, and integration Python sources pass AST syntax checks. Logs:
   `/tmp/pnm-arm-{release-check,assets,node,backup,guard,network,shellcheck}.log`.
-  New online CI, actual Core execution and full managed acceptance remain pending.
+  These local results precede the online CI above; full managed acceptance
+  remains pending, while native temporary-unit/Core execution is now verified.
 - ARM64 test assets: current Xray26.10.21/HY2 2.13.0 and previous Xray26.9.30/
   HY2 2.12.3 manifests record official release API URLs, sizes and SHA-256
   digests. Test loaders select the host architecture and reject foreign pins.
