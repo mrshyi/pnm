@@ -16,6 +16,13 @@ Earlier records below remain specific to their own sources and execution layers.
 
 ## Continuation checkpoint
 
+- Debian CI first execution (36a2eaf, run40898184336): both Debian containers
+  reached the expected12/13 amd64 identity but the source-ID command refused128
+  because the root container and mounted checkout have different owners. Tests
+  had not started. The fix scopes `safe.directory` to the exact trusted
+  `$GITHUB_WORKSPACE` for that single read-only Git query; no global Git setting,
+  checkout ownership or PNM permission guard is changed. Subsequent results must
+  be recorded against the corrected commit, not attributed to this failed run.
 - Debian CI addition (2026-10-29, local edits based oneebd208): the user requested
   Debian12/13 CI. The existing Ubuntu job is retained unchanged; a separate
   `debian-checks` matrix uses official `debian:12-slim`/`debian:13-slim` images on
