@@ -26,10 +26,12 @@ test_nonroot_diagnostics_do_not_claim_deployment_ready() (
     mkdir -m 0700 "$root/config" "$root/state"
     touch "$root/lock"
     chmod 0600 "$root/lock"
+    # Isolate permission diagnostics from the host's systemd runtime presence.
     nonroot_pnm() (
         cd -- "$root/source" || return 1
         runuser -u nobody -- env PNM_CONFIG_DIR="$root/config" PNM_STATE_DIR="$root/state" \
             PNM_LOCK_FILE="$root/lock" PNM_OS_RELEASE_FILE="$root/os-release" \
+            PNM_TEST_SYSTEMD=1 \
             bash "$root/source/bin/pnm" "$@"
     )
     run_capture nonroot_pnm --json check

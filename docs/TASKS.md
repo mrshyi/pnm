@@ -16,6 +16,15 @@ Earlier records below remain specific to their own sources and execution layers.
 
 ## Continuation checkpoint
 
+- Follow-up run40899468868 (372b1da): Ubuntu22.04/24.04 completed
+  successfully. Both Debian releases passed their normal and release gates,
+  then the privileged read-access case exposed a second fixture assumption:
+  the absent systemd runtime correctly makes `check` FAIL2 instead of the
+  permission-only WARN1 under test. Set the existing `PNM_TEST_SYSTEMD=1`
+  hook only on that fixture's child CLI; keep the exit1 and protected-state
+  assertions unchanged. ShellCheck0.8.0 and diff checks exit0; the local
+  non-root run explicitly skips the root body, so execution of this fix
+  requires a new Debian CI run. No production guard or runtime code changes.
 - Debian CI rerun (8a8cec5, run40898436294): the Git identity fix passed;
   both Debian releases then exposed the same three deploy rollback fixture
   failures (expected original errors1/73, got recovery error70). The fixture
