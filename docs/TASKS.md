@@ -6,7 +6,7 @@ acceptance is pending. Phase 5 local observability is implemented with passing
 local gates; optional external checks remain deferred.
 Phase 6's scoped recovery diagnostics are implemented with passing local gates;
 firewall management remains manual. Phase 7 local regression/release preparation
-is complete; current-source Ubuntu CI passes and full real acceptance remains pending. No release
+is complete; current-source Ubuntu and Debian userspace CI pass, while full real acceptance remains pending. No release
 has been published.**
 
 **Published runtime baseline:** branch `dev`, source commit `32423be`, VERSION
@@ -16,74 +16,44 @@ Earlier records below remain specific to their own sources and execution layers.
 
 ## Continuation checkpoint
 
-- Follow-up run40899468868 (372b1da): Ubuntu22.04/24.04 completed
-  successfully. Both Debian releases passed their normal and release gates,
-  then the privileged read-access case exposed a second fixture assumption:
-  the absent systemd runtime correctly makes `check` FAIL2 instead of the
-  permission-only WARN1 under test. Set the existing `PNM_TEST_SYSTEMD=1`
-  hook only on that fixture's child CLI; keep the exit1 and protected-state
-  assertions unchanged. ShellCheck0.8.0 and diff checks exit0; the local
-  non-root run explicitly skips the root body, so execution of this fix
-  requires a new Debian CI run. No production guard or runtime code changes.
-- Debian CI rerun (8a8cec5, run40898436294): the Git identity fix passed;
-  both Debian releases then exposed the same three deploy rollback fixture
-  failures (expected original errors1/73, got recovery error70). The fixture
-  mocked service queries and commands but still depended on the host's
-  `/run/systemd/system` directory during daemon reload. Mock systemd availability
-  alongside the existing service stubs; production code and assertions are
-  unchanged. A private-copy probe forcing host availability false reproduces
-  all three failures before the fix (5 passed/3 failed, exit1) and passes after
-  it (8/0, exit0). Native focused suite8/0, ShellCheck0.8.0 and diff checks exit0.
-  Fresh four-platform CI results remain pending for this fixture correction.
-- Debian CI first execution (36a2eaf, run40898184336): both Debian containers
-  reached the expected12/13 amd64 identity but the source-ID command refused128
-  because the root container and mounted checkout have different owners. Tests
-  had not started. The fix scopes `safe.directory` to the exact trusted
-  `$GITHUB_WORKSPACE` for that single read-only Git query; no global Git setting,
-  checkout ownership or PNM permission guard is changed. Subsequent results must
-  be recorded against the corrected commit, not attributed to this failed run.
-- Debian CI addition (2026-10-29, local edits based oneebd208): the user requested
-  Debian12/13 CI. The existing Ubuntu job is retained unchanged; a separate
-  `debian-checks` matrix uses official `debian:12-slim`/`debian:13-slim` images on
-  the amd64 Ubuntu24.04 runner. Each job checks actual Debian release/architecture
-  and records source/PID1/tool identities, then runs check/ShellCheck/preparation/
-  loopback transport/release gates as nobody in a private source copy without
-  `.git`. Six existing privileged suites run as container root against private
-  fixtures. No PNM-managed accounts or service changes are introduced by these
-  tests. Containers have no privileged options and no systemd/real-Core/VM targets
-  are invoked. Debian userspace CI is now in scope; full Debian service/account,
-  network-namespace and reboot acceptance remains deferred. The new jobs have
-  not run for these uncommitted edits; no Debian PASS is claimed.
-- Debian CI configuration checks: PyYAML BaseLoader confirms the12/13 image
-  matrix, explicit Bash, actual-release checks, unchanged Ubuntu job/triggers/
-  token permissions, five non-root gates and the six existing root suites.
-  All10 run scripts pass `bash -n` and ShellCheck0.8.0 with the configured
-  Bash errexit/pipefail context; no rules were disabled. A synthetic private
-  copy probe confirms `.git` exclusion while retaining `.gitignore`, workflow
-  and runtime files. Release scan/security scan and `git diff --check` exit0.
-  Logs/scripts: `/tmp/pnm-debian-ci-config.Nb2Wpi4T/`. Runtime implementation is
-  unchanged, so the475-case business suite was not repeated. No images were
-  pulled, dependencies installed, containers started, Git changes committed or
-  pushed on the ARM64 development host. Actual Debian job exits/skips and tool
-  versions remain pending until this candidate is run in GitHub CI.
-- Delivery checkpoint (2026-10-29): reviewed and pushed runtime source
-  `32423becce020410774f040ee425fac62fc0b0b3`; no blocking review finding was
-  confirmed. [CI run40894062624](https://github.com/mrshyi/pnm/actions/runs/40894062624),
-  push/attempt1, completed successfully on Ubuntu22.04 and24.04 amd64.
-  Jobs123518257106 and123518257275 each pass normal check and release-check:
-  35 suites/475 passed/0 failed per gate. Privileged suites pass70/0
-  (CLI18/read1/TLS8/transaction28/Profile9/recovery6), with no root-section skips.
-  Each job also passes ShellCheck, preparation36 total/28 executed/8 skipped,
-  loopback asset transport7, isolated real systemd8 and pinned real-Core10.
-  All78 shell summaries per job have zero failures. Repeated gates and execution
-  layers are not summed as unique coverage. The five ordinary root-only skips
-  remain explicit and are exercised by the corresponding privileged suites.
-- This checkpoint changes evidence/documentation only after the runtime commit;
-  no version bump or runtime change accompanies the result record. CI's Profile
-  service controls remain simulated; recovery uses private root-owned receipts.
-  Existing temporary systemd/Core checks do not establish a full managed install,
-  actual Profile ownership admission, real accounts, reboot or public clients.
-  U-02–U-08 remain pending; firewall remains manual and Debian is deferred.
+- Delivery / CI verification (2026-10-29): reviewed, committed and pushed the
+  Debian12/13 CI addition and its fixture corrections. Source
+  `c6beab18aaf5039a5db434dab0af7e1f17034c3a`, branch `dev`, VERSION unchanged.
+  [CI run40901377916](https://github.com/mrshyi/pnm/actions/runs/40901377916),
+  push/attempt1, completed successfully on all four amd64 jobs:
+  Ubuntu22.04 (123544272296), Ubuntu24.04 (123544273042),
+  Debian12 (123544273032) and Debian13 (123544273308).
+- Every job passes check and release-check separately:35 suites/475 passed/
+  0 failed per gate. Six privileged suites pass70/0 (CLI18/read1/TLS8/
+  transaction28/Profile9/recovery6), with no privileged-section skips.
+  All jobs pass ShellCheck, preparation36 total/28 executed/8 skipped and
+  loopback asset transport7. Each Ubuntu job additionally passes isolated
+  systemd8 and pinned real-Core10. All78 Ubuntu /76 Debian shell summaries
+  per job have zero failures. Repeated gates are not extra unique coverage.
+  The five ordinary root-only skips remain explicit and their corresponding
+  privileged cases execute in the root section.
+- Debian jobs use official12-slim/13-slim containers without privileged options;
+  actual identities are Debian12/13, x86_64, root and PID1 tail. Normal gates
+  run as nobody in private copies excluding `.git`; root suites use private
+  fixtures. Debian12 records OpenSSL3.0.22/systemd252/ShellCheck0.9.0;
+  Debian13 records OpenSSL3.5.7/systemd257/ShellCheck0.10.0. No Debian real
+  systemd/Core/VM target runs. Profile service controls remain simulated;
+  these results do not establish full managed install, real managed accounts,
+  actual Profile ownership admission, reboot or public client connectivity.
+  U-02–U-08 and full Debian systemd acceptance remain pending; firewall is manual.
+- CI defects found and corrected: run40898184336 (36a2eaf) stopped before
+  tests on Git checkout ownership;8a8cec5 scopes safe.directory to the one
+  read-only source query. Run40898436294 exposed missing deploy fixture
+  systemd availability isolation;372b1da adds the existing service stub.
+  Run40899468868 exposed a read-access fixture expecting permission WARN1
+  while absent systemd correctly caused FAIL2;c6beab1 applies the existing
+  PNM_TEST_SYSTEMD hook only to that child CLI. Assertions and production
+  permission/recovery code remain unchanged. A private-copy unavailable-host
+  probe reproduces deploy5/3 before and8/0 after; focused native8/0 and
+  ShellCheck0.8.0 exit0. The local read-access body explicitly skips as non-root;
+  the final four-platform CI executes it as root successfully. No dependencies
+  installed or PNM deployed on the ARM64 development host for this work.
+
 - Phase6 assessment / Phase7 authorization (2026-10-29): source and the separately
   recorded35-suite/475-pass gate below support basic completion of the recovery
   diagnostic scope. Manual firewall management is retained. The user authorized
