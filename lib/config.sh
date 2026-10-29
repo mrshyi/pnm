@@ -125,6 +125,7 @@ pnm_validate_node_config() {
     local -n config="$target_name"
 
     [[ "${config[SCHEMA_VERSION]-}" == '1' ]] || return 1
+    pnm_validate_profile "${config[PNM_PROFILE]-dual}" || return 1
     [[ "${config[PNM_CONFIGURED]-}" == 'yes' || "${config[PNM_CONFIGURED]-}" == 'no' ]] || return 1
     [[ "${config[NODE_REGION]-}" =~ ^[a-z0-9][a-z0-9-]{0,62}$ ]] || return 1
     if [[ -n "${config[NODE_ADDRESS]-}" ]]; then
@@ -183,8 +184,30 @@ pnm_load_node_config() {
     local file="$PNM_CONFIG_DIR/node.conf"
 
     pnm_config_load "$file" "$target_name" \
-        SCHEMA_VERSION NODE_REGION NODE_ADDRESS TIMEZONE PNM_CONFIGURED \
+        SCHEMA_VERSION NODE_REGION NODE_ADDRESS TIMEZONE PNM_CONFIGURED PNM_PROFILE \
         XRAY_PORT XRAY_SERVER_NAME XRAY_TARGET HY2_PORT HY2_TLS_MODE HY2_TLS_SERVER_NAME
+}
+
+pnm_validate_profile() {
+    [[ "$1" == dual || "$1" == reality || "$1" == hy2 ]]
+}
+
+pnm_profile_includes() {
+    case "$1:$2" in
+        dual:xray | dual:hysteria2 | dual:hy2 | reality:xray | hy2:hysteria2 | hy2:hy2) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+# Call under the existing Core write lock, before observing mutable baselines.
+pnm_core_profile_allowed() {
+    local -A desired_profile=()
+    [[ -e "$PNM_CONFIG_DIR/node.conf" || -L "$PNM_CONFIG_DIR/node.conf" ]] || return 0
+    pnm_load_node_config desired_profile || return "$PNM_EXIT_CONFIG"
+    if ! pnm_profile_includes "${desired_profile[PNM_PROFILE]-dual}" "$1"; then
+        pnm_error 'Core is excluded by the desired profile; use pnm profile set to enable it.'
+        return "$PNM_EXIT_CONFIG"
+    fi
 }
 
 pnm_load_versions_config() {

@@ -118,6 +118,8 @@ pnm_preflight_configuration() {
     fi
     if ((rc != 0)) || ! pnm_validate_node_config PNM_PREFLIGHT_NODE_CONFIG; then
         pnm_preflight_add node_config FAIL 'Node desired state is missing or invalid' "$PNM_CONFIG_DIR/node.conf"
+    elif [[ "${PNM_PREFLIGHT_NODE_CONFIG[PNM_PROFILE]-dual}" != dual ]]; then
+        pnm_preflight_add node_config FAIL 'Initial installation requires the dual profile' 'select a profile with pnm profile set after installation'
     elif [[ "${PNM_PREFLIGHT_NODE_CONFIG[PNM_CONFIGURED]}" == 'yes' ]]; then
         pnm_preflight_add node_config FAIL 'Node is already marked configured' 'install refuses to overwrite an existing managed node'
     else

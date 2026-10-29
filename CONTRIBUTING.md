@@ -60,7 +60,9 @@ paths and isolated target fixtures; it starts no service. Platform tests accept
 only approved release/architecture pairs and reject derivatives and other versions.
 The check/ShellCheck/release-check steps are L1 checks. On the disposable
 GitHub-hosted Ubuntu runners, CI first runs the existing CLI/read-access/TLS-access/
-transaction suites as root to exercise their privileged branches. Access probes
+transaction/Profile/recovery-diagnostic suites as root to exercise their privileged
+branches and actual root ownership of private fixtures. Profile service controls
+remain simulated and recovery fixtures do not replay host operations. Access probes
 use nobody with private files; NSS names remain test mappings and no accounts are
 created. It then runs `sudo make test-systemd`
 against owned temporary units with unprivileged Python TCP/UDP listeners, followed

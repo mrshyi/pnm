@@ -2,6 +2,27 @@
 
 Notable changes are recorded here for each release.
 
+## Unreleased
+
+- Add installed-node `dual`, `reality` and `hy2` Profile switching through the
+  existing transaction model, retaining Core files/credentials and unchanged peers.
+  Initial provisioning continues to prepare both Cores.
+- Make Core operations, links, diagnostics and trusted restore follow the desired
+  Profile, with separate desired and actual service observations.
+- Add configured ports/Profile selection to status and optional memory, Swap,
+  load and cumulative system OOM observations through `check --resources`.
+- Add root-only, sanitized `recovery list|inspect` diagnostics while retaining
+  pending-transaction write guards and private recovery evidence.
+- Accept paired external TLS certificate/key inputs in the installation CLI/menu,
+  and remove unused legacy command/host-diagnostic helpers.
+- Extend the Ubuntu22.04/24.04 CI configuration to run existing Profile/recovery
+  fixtures as root. This configuration is not evidence of a completed CI run.
+
+These changes retain manual firewall management and do not add automatic recovery
+replay or encrypted-backup key management. Current tests and remaining real
+deployment/reboot/client acceptance are recorded in [TASKS](docs/TASKS.md).
+VERSION remains `0.16.0-rc.1`; this section is not a published release.
+
 ## 0.16.0-rc.1 - 2026-09-29
 
 - Focus the supported CLI on Xray and Hysteria2 lifecycle operations.

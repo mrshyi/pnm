@@ -23,6 +23,8 @@ source "$PNM_LIB_DIR/node.sh"
 source "$PNM_LIB_DIR/lock.sh"
 # shellcheck source=../lib/transaction.sh
 source "$PNM_LIB_DIR/transaction.sh"
+# shellcheck source=../lib/recovery.sh
+source "$PNM_LIB_DIR/recovery.sh"
 # shellcheck source=../lib/accounts.sh
 source "$PNM_LIB_DIR/accounts.sh"
 # shellcheck source=../lib/render.sh
@@ -41,6 +43,8 @@ source "$PNM_ADAPTER_DIR/systemd.sh"
 source "$PNM_LIB_DIR/lifecycle.sh"
 # shellcheck source=../adapters/network.sh
 source "$PNM_ADAPTER_DIR/network.sh"
+# shellcheck source=../adapters/resources.sh
+source "$PNM_ADAPTER_DIR/resources.sh"
 # shellcheck source=../adapters/assets.sh
 source "$PNM_ADAPTER_DIR/assets.sh"
 # shellcheck source=../lib/assets.sh
@@ -61,6 +65,8 @@ source "$PNM_LIB_DIR/status.sh"
 source "$PNM_LIB_DIR/check.sh"
 # shellcheck source=../lib/core-ops.sh
 source "$PNM_LIB_DIR/core-ops.sh"
+# shellcheck source=../lib/profile.sh
+source "$PNM_LIB_DIR/profile.sh"
 # shellcheck source=../lib/menu.sh
 source "$PNM_LIB_DIR/menu.sh"
 

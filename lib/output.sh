@@ -70,7 +70,10 @@ pnm_print_help() {
             return 0
             ;;
         check)
-            printf '%s\n' 'Usage: pnm [--json|--quiet] check' '' 'Run read-only policy and health checks. Exit: 0 PASS, 1 WARN, 2 FAIL.'
+            printf '%s\n' 'Usage: pnm [--json|--quiet] check [--resources]' '' \
+                'Run read-only policy and health checks. Exit: 0 PASS, 1 WARN, 2 FAIL.' \
+                '--resources adds memory, swap, load and cumulative system OOM observations.' \
+                'Resource counters do not establish public connectivity or attribute OOM to a Core.'
             return 0
             ;;
         node)
@@ -95,6 +98,22 @@ pnm_print_help() {
                 'Interactive init fetches latest stable versions and official SHA-256 values.' \
                 'If lookup fails, enter both pinned version/hash pairs manually.' \
                 'Non-interactive init requires explicit version/hash flags.'
+            return 0
+            ;;
+        recovery)
+            printf '%s\n' 'Usage: pnm [--json] recovery list' \
+                '       pnm [--json] recovery inspect TRANSACTION_ID' '' \
+                'Read sanitized transaction state even when pending evidence blocks ordinary commands.' \
+                'Exit: 0 transaction guard clear; 1 writes blocked; 69 not found; 78 invalid evidence.' \
+                'Requires root. Does not replay recovery or clear evidence; snapshots and journals remain private.'
+            return 0
+            ;;
+        profile)
+            printf '%s\n' 'Usage: pnm [--json] profile show' \
+                '       pnm profile set <dual|reality|hy2> --yes' '' \
+                'Select active Cores on an installed node; files and credentials are retained.' \
+                'dual: both Cores; reality: Xray only; hy2: Hysteria2 only.' \
+                'First install both Cores with pnm install. Profile switching does not install or uninstall.'
             return 0
             ;;
         install)
@@ -131,6 +150,8 @@ Implemented:
   node links           Print VLESS and Hysteria2 client import links
   node validate        Validate node.conf and versions.conf
   install              Install both approved proxy cores
+  profile show|set     Inspect or switch active Cores without deleting their files
+  recovery list|inspect Read sanitized transaction state and write-blocking status
   restart <core>       Restart xray or hy2
   log <core>           Read or follow one Core's systemd journal
   apply <core>         Render, validate, and transactionally apply one Core config
@@ -144,7 +165,7 @@ Global options:
   --json               Emit one JSON document
   --quiet              Suppress normal check output; use exit code only
   --dry-run            Render a no-write installation plan
-  --yes                Confirm install or uninstall
+  --yes                Confirm install, profile switch or uninstall
   --no-color           Disable ANSI colors
   --debug              Emit non-secret diagnostics to stderr
   -h, --help           Show help

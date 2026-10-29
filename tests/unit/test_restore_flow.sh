@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# Trusted function extraction keeps the archive fixture and real transaction helpers shared.
+# shellcheck disable=SC1090
 set -Eeuo pipefail
 
 TEST_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
@@ -145,7 +147,7 @@ pnm_core_record_applied_config() {
 }
 pnm_tx_commit() {
     [[ "$fixture_late_failure" != commit ]] || return 73
-    pnm_test_real_pnm_tx_commit "$@"
+    pnm_test_real_pnm_tx_commit
 }
 
 assert_original_resources() {
@@ -224,7 +226,7 @@ test_restore_detects_ineffective_service_recovery() {
     [[ "$RUN_RC" != 0 ]] || return 1
     assert_eq 1 "$PNM_TX_RECOVERY_REQUIRED" || return 1
     assert_contains "$RUN_ERROR" 'rollback failed' || return 1
-    assert_not_contains "$RUN_OUTPUT" 'Both Cores restored and healthy'
+    assert_not_contains "$RUN_OUTPUT" 'Node restored; desired profile service checks passed'
 }
 
 test_restore_recovers_originally_absent_and_inactive_services() {
@@ -295,7 +297,7 @@ test_restore_close_error_suppresses_success_and_releases_lock() {
     pnm_tx_close() { pnm_test_real_pnm_tx_close "$@" || return $?; return 70; }
     run_capture pnm_core_restore "$fixture_root/archive.tar.gz"
     assert_eq 70 "$RUN_RC" || return 1
-    assert_not_contains "$RUN_OUTPUT" 'Both Cores restored and healthy' || return 1
+    assert_not_contains "$RUN_OUTPUT" 'Node restored; desired profile service checks passed' || return 1
     assert_eq 0 "$PNM_LOCK_DEPTH" || return 1
     flock -n "$PNM_LOCK_FILE" true
 }
@@ -371,7 +373,7 @@ test_restore_term_uses_registered_service_and_file_recovery() {
     transaction=("$PNM_STATE_DIR"/transactions/*)
     pnm_tx_load_for_inspect "${transaction[0]##*/}" || return 1
     assert_eq ROLLED_BACK "$PNM_TX_INSPECT_STATE" || return 1
-    assert_not_contains "$RUN_OUTPUT" 'Both Cores restored and healthy'
+    assert_not_contains "$RUN_OUTPUT" 'Node restored; desired profile service checks passed'
 }
 
 test_restore_term_recovery_failure_retains_resources_and_journal() {
@@ -394,6 +396,18 @@ test_restore_term_recovery_failure_retains_resources_and_journal() {
 
 run_test 'TERM during restore recovers files and mocked service/applied baselines' test_restore_term_uses_registered_service_and_file_recovery
 run_test 'TERM recovery refuses file writes until mocked candidates stop' test_restore_term_recovery_failure_retains_resources_and_journal
+test_restore_respects_archived_profile() {
+    prepare_flow_fixture || return 1
+    make_backup_archive "$fixture_root/archive.tar.gz" valid reality
+    pnm_core_restore "$fixture_root/archive.tar.gz" || return 1
+    assert_eq active "${fixture_active[xray.service]}" || return 1
+    assert_eq inactive "${fixture_active[hysteria-server.service]}" || return 1
+    assert_eq disabled "${fixture_enabled[hysteria-server.service]}" || return 1
+    assert_eq 0 "${fixture_restarts[hysteria-server.service]}" || return 1
+    assert_contains "$(<"$fixture_host/etc/pnm/node.conf")" 'PNM_PROFILE=reality'
+}
+
+run_test 'restore follows the archived profile without starting its excluded Core' test_restore_respects_archived_profile
 run_test 'restore flow publishes both confirmed applied records' test_restore_success_publishes_both_confirmed_records
 run_test 'restore stops both processes before publishing runtime resources' test_restore_stops_processes_before_resource_publication
 run_test 'restore late failures recover service and applied baselines' test_restore_late_failures_recover_service_and_applied_baselines

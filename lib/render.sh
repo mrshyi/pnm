@@ -477,6 +477,10 @@ pnm_node_core_link_status() {
     local unit active config consistency_rc applied_status config_status=unknown diagnostic='' listener_rc protocol port
     local -n node_ref="$node_name"
 
+    if ! pnm_profile_includes "${node_ref[PNM_PROFILE]-dual}" "$core"; then
+        printf 'inactive|unknown|unknown|unknown|Core is excluded by the desired profile\n'
+        return 0
+    fi
     case "$core" in
         xray) unit=xray.service; config="$PNM_XRAY_CONFIG"; protocol=tcp; port="${node_ref[XRAY_PORT]}" ;;
         hysteria2) unit='hysteria-server.service'; config="$PNM_HY2_CONFIG"; protocol=udp; port="${node_ref[HY2_PORT]}" ;;

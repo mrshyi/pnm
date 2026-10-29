@@ -51,6 +51,8 @@ jobs:
           sudo bash tests/unit/test_read_access.sh
           sudo bash tests/unit/test_tls_access.sh
           sudo bash tests/unit/test_transaction.sh
+          sudo bash tests/unit/test_profile.sh
+          sudo bash tests/unit/test_recovery.sh
 
       - name: Run loopback asset acquisition checks
         run: make test-asset-network

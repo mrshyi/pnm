@@ -145,6 +145,8 @@ The entry point is `bin/pnm`; `lib/common.sh` parses global options and routes t
 - `help`, `version`, `status`, `check`
 - `node` (initialization/change, show, links, validation; aliases are documented in `README.md`)
 - `install`
+- `profile show|set` (installed-node active Core selection)
+- `recovery list|inspect` (root-only sanitized transaction diagnostics)
 - Core operations: `restart`, `log`, `apply`, `update`, `rollback`, `backup`, `restore`, `uninstall`
 
 Core operation dispatch is implemented in `lib/core-ops.sh`; node management and client links are in `lib/node.sh`; runtime rendering/comparison is in `lib/render.sh`; status and health checks are in `lib/status.sh` and `lib/check.sh`. The README is the user-facing command reference; check dispatch and argument validation in source before documenting interface changes.
@@ -215,7 +217,56 @@ Loaded units and existing Core resources require established PNM ownership recei
 
 ## Core lifecycle, health, and recovery
 
-`pnm status` reports service state and detected Core versions. Root `pnm check`, `node show` and links take a shared lock and reject unresolved deployment state. Non-root `check` retains diagnostics with UNKNOWN deployment/configuration-readiness results; `node show` and links require root (link help remains public). Local listening is not a proof of public reachability or successful client handshakes. There is no implemented Profile model; installation targets both cores.
+`pnm status` reports service state and detected Core versions. Root `status`, `check`, `node show` and links take a shared lock and reject unresolved deployment state. Non-root `check` retains diagnostics with UNKNOWN deployment/configuration-readiness results; `node show` and links require root (link help remains public). Local listening is not a proof of public reachability or successful client handshakes.
+
+Profiles select active services after dual-Core provisioning. Optional schema-1
+node field `PNM_PROFILE` accepts `dual`, `reality` or `hy2`; absence means `dual`.
+`pnm profile show` takes the existing read lock and reports desired selection
+separately from actual active/enabled observations. `pnm profile set NAME --yes`
+uses the existing exclusive write lock and a `core-profile` transaction. It
+requires a configured node, supported systemd platform, canonical PNM units with
+no drop-ins, protected binaries, valid selected runtime configuration and confirmed
+applied evidence for already active Cores. It changes only service policy that
+differs from the target, verifies local health and writes node.conf last.
+The transaction retains service baselines in `profile-state.tsv`; existing file
+snapshots cover node.conf/applied changes. Compensation restores files, changed
+services and previously confirmed applied bindings. Unchanged services retain
+their invocation. All binaries/configuration/TLS/credentials remain in place.
+Interrupted or uncertain operations use the existing pending-transaction refusal;
+there is no cross-process replay or new state database.
+
+Core write guards check profile membership under the existing lock. Link emission
+omits excluded Cores; diagnostics require their actual inactive/disabled state
+before SKIP. Trusted restore activates only the archived selection and publishes
+applied evidence only for those Cores. Initial installation remains dual-Core
+provisioning; single-Core provisioning is not implemented by this switch flow.
+
+Status adds desired Profile and per-Core desired-enabled/port fields while
+retaining the v1 JSON schema and actual service observations. It obtains ports
+only from a validated readable node configuration; unavailable state yields
+unknown/null fields without probing fallback ports. `check --resources` appends
+four observations from `adapters/resources.sh`, using the existing result renderer
+and0/1/2 exit policy. The adapter reads meminfo/loadavg/stat/vmstat through one
+standard-library Python process, with no persisted history or network operations.
+Available memory/free Swap below10%,15-minute load above visible logical CPU
+count and any cumulative OOM kills produce WARN. No Swap is SKIP; unavailable or
+invalid counters are UNKNOWN. These are system observations, not per-Core OOM
+attribution, CPU utilization, container-quota measurement or public connectivity.
+Resource observations are opt-in and never participate in install/startup health
+gates; default `check` retains its existing scope.
+
+Recovery diagnostics reuse `pnm_tx_load_for_inspect` without replaying operations.
+The root-only reader validates the protected store and takes the existing shared
+lock, deliberately bypassing the normal pending-evidence read refusal so that
+blocked transactions remain inspectable. It still queries the same pending guard
+to report `writes_blocked`, without weakening writers or ordinary protected reads.
+The v1 recovery report exposes only validated ID/operation/state and the parser's
+file/directory change count; invalid entries have redacted unknown/null fields.
+Snapshot data, paths, journals and credentials stay private. Invalid evidence
+returns78, blocked writes1, clear guard0 and missing requested ID69. Store/record
+bytes and permissions are not normalized or changed. Shared lock bookkeeping is
+the only write associated with the diagnostic command. Firewall policy remains
+operator-managed; there is no firewall rule producer or ownership-adoption path.
 
 The Core operations include per-Core restart/log/apply/update/rollback and backup/restore/uninstall routes (`lib/core-ops.sh`). Updates use pinned versions and checksums. Restore stages and validates archive contents before applying. Feature presence in source is not by itself proof that every rollback/failure path is verified; consult `docs/TASKS.md` for current acceptance status.
 

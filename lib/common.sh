@@ -333,17 +333,25 @@ pnm_main() {
             pnm_status
             ;;
         check)
-            ((${#args[@]} == 0)) || {
-                pnm_error "Usage: pnm [--json|--quiet] check"
-                return "$PNM_EXIT_USAGE"
-            }
-            pnm_check
+            if ((${#args[@]} > 0)); then
+                if ((${#args[@]} != 1)) || [[ "${args[0]}" != --resources ]]; then
+                    pnm_error "Usage: pnm [--json|--quiet] check [--resources]"
+                    return "$PNM_EXIT_USAGE"
+                fi
+            fi
+            pnm_check "${args[@]}"
             ;;
         node)
             pnm_node_command "${args[@]}"
             ;;
         install)
             pnm_install "${args[@]}"
+            ;;
+        profile)
+            pnm_profile_command "${args[@]}"
+            ;;
+        recovery)
+            pnm_recovery_command "${args[@]}"
             ;;
         restart | log | apply | update | rollback | backup | restore | uninstall)
             pnm_core_command "$command_name" "${args[@]}"

@@ -14,6 +14,15 @@ pnm_menu_install() {
     fi
 }
 
+pnm_menu_profile() {
+    local desired confirmation
+    pnm_profile_command show || return $?
+    IFS= read -r -p 'Profile [dual/reality/hy2]: ' desired || return "$PNM_EXIT_USAGE"
+    IFS= read -r -p 'Apply this profile? Type yes: ' confirmation || return "$PNM_EXIT_USAGE"
+    [[ "$confirmation" == yes ]] || return 0
+    pnm_profile_command set "$desired" --yes
+}
+
 pnm_menu() {
     local choice
 
@@ -35,6 +44,8 @@ Proxy Node Manager
 11. Uninstall a Core
 12. Version
 13. Help
+14. Switch Profile (keep Core files and credentials)
+15. Recovery Diagnostics
 0. Exit
 EOF
         read -r -p 'Select: ' choice || return "$PNM_EXIT_OK"
@@ -52,6 +63,8 @@ EOF
             11) pnm_core_menu_uninstall || true ;;
             12) pnm_print_version ;;
             13) pnm_print_help ;;
+            14) pnm_menu_profile || true ;;
+            15) pnm_recovery_command list || true ;;
             0) return "$PNM_EXIT_OK" ;;
             *) pnm_warn 'Invalid selection.' ;;
         esac

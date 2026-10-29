@@ -194,6 +194,15 @@ test_quiet_has_no_stdout() {
     assert_eq "$EXPECTED_CHECK_RC" "$RUN_RC" && assert_eq '' "$RUN_OUTPUT"
 }
 
+test_resources_option_adds_observations() {
+    PNM_FAKE_PROFILE=pass run_capture run_fake_pnm --json check --resources
+    [[ "$RUN_RC" == 0 || "$RUN_RC" == 1 || "$RUN_RC" == 2 ]] || return 1
+    python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["schema"]=="pnm.check.v1"; ids={c["id"] for c in d["checks"]}; assert {"memory","swap","load","oom"} <= ids' <<<"$RUN_OUTPUT" || return 1
+    PNM_FAKE_PROFILE=pass run_capture run_fake_pnm --quiet check --resources
+    [[ "$RUN_RC" == 0 || "$RUN_RC" == 1 || "$RUN_RC" == 2 ]] || return 1
+    assert_eq '' "$RUN_OUTPUT"
+}
+
 test_json_contains_no_fixture_password() {
     PNM_FAKE_PROFILE=pass run_capture run_fake_pnm --json check
     assert_not_contains "$RUN_OUTPUT" 'REDACTED_FIXTURE'
@@ -406,6 +415,7 @@ run_test 'HY2 TLS files are probed as the Hysteria2 runtime account' test_hyster
 run_test 'official Hysteria2 v2.13.0 banner is detected and reported' test_hysteria_v213_binary_is_detected_and_version_reported
 run_test 'missing Hysteria binary differs from version-command failure' test_hysteria_missing_binary_is_distinct_from_version_failure
 run_test 'Hysteria binary, invocation, and parse failures are distinguished' test_hysteria_version_failures_are_distinguished
+run_test 'optional resource observations preserve JSON and quiet output' test_resources_option_adds_observations
 run_test 'status reports the detected Hysteria2 version' test_status_reports_hysteria_version
 run_test 'supported Debian and Ubuntu platform matrix passes' test_supported_platform_matrix
 run_test 'each supported release requires the deployment architecture' test_platform_policy_checks_architecture_for_each_supported_release

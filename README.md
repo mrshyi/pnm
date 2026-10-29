@@ -22,13 +22,15 @@ see [current evidence](docs/TASKS.md). ARM64 remains a development environment.
 ## Commands
 
 - `pnm status [--json]`: read-only Xray and Hysteria2 status
-- `pnm check [--quiet|--json]`: read-only proxy health checks
+- `pnm [--quiet|--json] check [--resources]`: read-only proxy health checks, with optional resource observations
 - `pnm node init`: interactively initialize the single VPS node
 - `pnm node change`: replace an uncommitted single-node configuration
 - `pnm --json node show`: show the desired node state without secrets
 - `pnm node links`: print VLESS + REALITY and Hysteria2 client import links
 - `pnm --json node validate`: validate both desired-state files
 - `pnm install --apply --yes`: install/configure both cores using approved versions
+- `pnm profile show`, `pnm profile set dual|reality|hy2 --yes`: inspect or switch active cores on an installed node
+- `pnm recovery list`, `pnm recovery inspect TRANSACTION_ID`: read sanitized transaction diagnostics, including blocked transactions
 - `pnm apply xray|hy2`: transactionally apply one rendered configuration
 - `pnm restart xray|hy2`, `pnm log xray|hy2`: operate on one core only
 - `pnm update xray|hy2 [--version V]`: update one core using its pinned SHA-256
@@ -96,6 +98,85 @@ the existing installation command without these options.
 The interactive menu's installation option asks for both file paths on a new
 external-ca node and uses the same installation checks. Ending input before both
 paths are supplied cancels that installation attempt.
+
+## Select active cores
+
+First complete the existing dual-Core installation. Then select the services
+you want active:
+
+```bash
+sudo pnm profile set reality --yes  # Xray VLESS + REALITY only
+sudo pnm profile set hy2 --yes      # Hysteria2 only
+sudo pnm profile set dual --yes     # Both cores
+sudo pnm --json profile show
+```
+
+The menu also offers **Switch Profile** with an explicit confirmation. Switching
+retains both binaries, runtime configurations, accounts, TLS files and credentials;
+it does not download, reinstall or uninstall either Core. A Core that remains
+enabled is not restarted. The selected services must pass local health checks
+before the desired profile is committed. Failure restores the prior service
+policy and node configuration through the existing transaction mechanism.
+
+The optional `PNM_PROFILE` field lives in `node.conf`; older files without it mean
+`dual`. `profile show` reports desired and actual service state separately.
+`check` verifies that excluded services are inactive and disabled, and `node links`
+omits their links. `apply`, `restart`, `update` and `rollback` refuse excluded
+cores; select a profile that enables them first. Restore follows the profile in
+the trusted backup. First-install provisioning still prepares both Cores and
+requires both approved version/hash pairs and the configured TLS inputs.
+
+## Read-only resource checks
+
+```bash
+sudo pnm --json status
+sudo pnm --json check --resources
+sudo pnm --quiet check --resources
+```
+
+Status separates the desired Profile from actual services and probes the ports
+in the validated node configuration. Unavailable configuration leaves Profile,
+port and desired-selection information unknown; default ports are not guessed.
+JSON retains `pnm.status.v1` with additive `desired_profile`, Core `port` and
+`desired_enabled` fields. Root status uses the existing deployment read lock.
+
+`--resources` adds visible `/proc` memory, Swap, load and OOM observations to the
+existing check output. It warns below10% available memory/free Swap, when the
+15-minute load exceeds the visible logical CPU count, or when the cumulative
+kernel OOM-kill count is nonzero. No Swap is SKIP; missing counters are UNKNOWN.
+OOM counts cover the system since boot and do not identify a PNM Core. Load is
+not CPU usage, and these system counters do not represent container resource
+quotas. Existing exit codes remain0 OK,1 WARN/UNKNOWN,2 FAIL; ordinary `check`
+does not add these observations. Neither local health nor resource checks prove
+public client connectivity. Optional external checks remain deferred.
+
+## Inspect retained recovery evidence
+
+If ordinary commands refuse an unresolved transaction, use the recovery menu
+option or these root-only commands:
+
+```bash
+sudo pnm recovery list
+sudo pnm --json recovery inspect TRANSACTION_ID
+```
+
+Replace `TRANSACTION_ID` with an ID from the list. Diagnostics report the existing
+parser's transaction state, operation and file/directory change count, together
+with whether transaction evidence currently blocks writes. That count does not
+include service/account changes or certify successful recovery. No snapshots,
+journal details, configuration contents or credentials are printed.
+
+The diagnostic reader takes the existing shared lock and remains available when
+the normal pending-transaction guard refuses other reads. It does not replay,
+roll back, repair or clear evidence. Exit0 means the transaction guard is clear,
+1 means writes are blocked,69 means the requested ID was not found, and78 means
+evidence is invalid; unsafe store permissions refuse with77. A clear transaction
+guard does not establish service health or satisfy other write preconditions.
+Keep retained evidence private for operator review.
+
+Firewall management remains manual. Installation, Profile changes, restore and
+recovery diagnostics do not create, adopt, delete or reset firewall rules.
+Encrypted-backup key custody and automatic cross-process recovery remain deferred.
 
 ## Install and use PNM on a VPS
 

@@ -9,10 +9,10 @@ This is a planning document, not an implementation claim or authorization. Curre
 | Phase 1 | Targeted HY2 configuration/link consistency and TLS/SNI fixes | Source changes exist in current history; production/client verification is environment-specific and must not be inferred from unit tests |
 | Phase 2 | Gap classification and minimal implementation plan | Completed as a read-only report in the historical archive; it records its own HEAD and findings |
 | Phase 3 | Repair and accept existing defects G-01–G-06 | Repair scope frozen; bounded Ubuntu acceptance pending; see `TASKS.md` |
-| Phase 4 | Desired-state deployment Profiles (`dual`, `reality`, `hy2`) | Planned; not implemented in this baseline |
-| Phase 5 | Profile-aware health reporting, lightweight resource diagnostics, optional external checks | Planned; dependency on Phase 4 state semantics |
-| Phase 6 | Verifiable firewall-rule ownership and additional recovery/secret protections | Design and ownership decisions required before any automatic rule deletion; planned |
-| Phase 7 | Regression coverage, supported Linux VM acceptance, documentation and release readiness | Ongoing cross-phase work; release remains separately authorized |
+| Phase 4 | Desired-state deployment Profiles (`dual`, `reality`, `hy2`) | Installed-node main flow basically complete; real systemd acceptance pending |
+| Phase 5 | Profile-aware health reporting, lightweight resource diagnostics, optional external checks | Local status/resources main flow basically complete; local gates pass; external checks deferred |
+| Phase 6 | Verifiable firewall-rule ownership and additional recovery/secret protections | User-scoped recovery diagnostics developed; local gates pass; firewall remains manual and broader capabilities deferred |
+| Phase 7 | Regression coverage, supported Linux VM acceptance, documentation and release readiness | Local preparation complete; current-source CI and real acceptance pending; release separately authorized |
 
 ## Phase 3 — Existing defect closure
 
@@ -36,18 +36,50 @@ before Phase3 closure. Closure does not authorize Phase4, deployment or release.
 
 ## Phase 4 — Deployment Profiles
 
-**Proposed capability:** `dual` (both cores), `reality` (Xray only), and `hy2` (Hysteria2 only), with `dual` as the new-install recommendation.
+**Current implementation:** `dual` (both cores), `reality` (Xray only), and `hy2`
+(Hysteria2 only) select active services on an installed node. Initial provisioning
+continues to prepare both Cores; use `pnm profile set NAME --yes` afterward.
 
-Before implementation, confirm that the existing node/deployment state can represent Desired State, Actual State, and PNM-managed resources without introducing a parallel state store. Switching must preserve binaries, configuration, certificates, and credentials; it is not an uninstall/reinstall. Do not automatically remove firewall rules without independently verifiable ownership. Public CLI syntax remains a design decision until compatibility is assessed.
+The optional node.conf field, actual service observations and existing applied
+records retain separate meanings; see D-011. Switching preserves binaries,
+configuration, certificates and credentials through the existing transaction
+model. Real supported-systemd switching/compensation and reboot acceptance remain
+pending. Single-Core initial provisioning is separate work. No firewall automation
+or Phase5 resource/remote diagnostics are included.
 
 ## Phase 5 — Lifecycle and health observability
 
-After Profile state semantics are approved, consider Profile-aware `SKIP` results for intentionally disabled cores, lightweight memory/swap/load/OOM observations using existing system interfaces, and optional external checks. Local unit/listener state must never be labeled external connectivity success. Preserve existing commands and exit-code semantics.
+The user authorized progression after assessing the bounded Phase4 installed-node
+flow as basically complete. Existing Profile-aware SKIP/refusal behavior remains;
+status now separates selection from actual service state and uses configured
+ports. `check --resources` adds optional memory/Swap/load/cumulative OOM readings
+through existing output and exit semantics. Missing evidence remains UNKNOWN;
+these observations never establish external connectivity or per-Core OOM blame.
+Optional external checks are deferred. No monitoring daemon, metrics store,
+resource tuning or additional hardening campaign is part of this increment.
 
 ## Phase 6 — Firewall ownership and recovery security
 
-First define and test how PNM proves a firewall rule is its own. Until that exists, do not automatically delete rules. Separately evaluate transaction recovery, secret-bearing backup protection, and recovery rehearsal needs. Do not add an encryption key-management system before the key custody and restore requirements are decided.
+The user explicitly selected manual firewall management and recovery diagnostics
+for this increment. `pnm recovery list|inspect` reuses the existing parser/shared
+lock to expose sanitized state even while pending evidence blocks ordinary reads.
+It preserves all evidence and leaves the write guard in force. No automatic
+rollback/replay, firewall ownership adoption, rule creation/deletion or encrypted
+backup/key-management feature is included. These broader capabilities remain
+deferred, not implicitly complete. Existing mode0600 backup protection and the
+trusted-provenance restore requirement remain. See D-006, D-009 and D-012.
 
 ## Phase 7 — Regression and release readiness
 
-Extend the existing `tests/unit/` suite and run repository gates (`make check`, `make shellcheck`, `make release-check`) where available. Run disposable supported Ubuntu/Debian amd64/systemd validation for unit, permission, reboot, and rollback behavior, following the current priority in `TASKS.md`. Record external Xray/HY2 client results separately. Release/version/tag actions require explicit authorization and the release checklist in `RELEASING.md`.
+The user authorized Phase7 after basic completion of the scoped Phase6 recovery
+flow. Local preparation now extends the existing Ubuntu privileged CI step with
+the Profile and recovery suites, records Unreleased changes, and aligns release
+instructions with configured ports/Profiles and separate CLI/Core installation.
+The runtime implementation and regression cases are unchanged in this increment.
+
+Current-source committed CI and the authorized disposable Ubuntu U-01–U-08
+acceptance remain pending; reuse existing cases rather than extending the fault
+matrix. Record real Profile/service and external Xray/HY2 client results
+separately. Debian remains deferred. Missing targets/assets do not trigger more
+hardening or establish readiness. Release/version/tag/publishing/deployment
+actions remain separately authorized under `RELEASING.md`.

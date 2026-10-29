@@ -326,7 +326,7 @@ pnm_tx_assert_no_pending_deployment() {
                     -s "$directory/accounts.tsv" || -s "$directory/journal.tsv" ||
                     -L "$directory/changes.tsv" || -L "$directory/directories.tsv" ||
                     -L "$directory/accounts.tsv" || -L "$directory/journal.tsv" ]]; then
-                pnm_error "Unresolved transaction ${directory##*/}; inspect invalid metadata and recovery evidence."
+                pnm_error "Unresolved transaction ${directory##*/}; run sudo pnm recovery list to inspect retained evidence."
                 return "$PNM_EXIT_SOFTWARE"
             fi
             continue
@@ -341,7 +341,7 @@ pnm_tx_assert_no_pending_deployment() {
             *) ;; # Unknown producers still need valid terminal evidence.
         esac
         if ! pnm_tx_load_for_inspect "$id" || [[ "$PNM_TX_INSPECT_STATE" != COMMITTED && "$PNM_TX_INSPECT_STATE" != ROLLED_BACK ]]; then
-            pnm_error "Unresolved ${metadata[OPERATION]} transaction $id; inspect recovery evidence before continuing."
+            pnm_error "Unresolved ${metadata[OPERATION]} transaction $id; run sudo pnm recovery list before continuing."
             return "$PNM_EXIT_SOFTWARE"
         fi
     done

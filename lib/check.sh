@@ -424,6 +424,20 @@ pnm_check_core_failed_units() {
     fi
 }
 
+pnm_check_profile_inactive() {
+    local unit active enabled
+    unit="$(pnm_core_lifecycle_unit "$1")" || return $?
+    active="$(pnm_systemd_active_state "$unit")" || active=unknown
+    enabled="$(pnm_systemd_enabled_state "$unit")" || enabled=unknown
+    if [[ "$active" == inactive && "$enabled" == disabled ]]; then
+        pnm_check_add "$1" SKIP 'Core is disabled by the desired profile' 'inactive and disabled'
+    elif [[ "$active" == unknown || "$enabled" == unknown ]]; then
+        pnm_check_add "$1" UNKNOWN 'Profile-disabled Core state cannot be determined' ''
+    else
+        pnm_check_add "$1" FAIL 'Core state disagrees with the desired profile' "active=$active enabled=$enabled"
+    fi
+}
+
 pnm_check_collect() {
     pnm_check_reset
     if ((EUID != 0)); then
@@ -432,12 +446,20 @@ pnm_check_collect() {
     pnm_check_configuration
     pnm_check_platform
     pnm_check_systemd_runtime
-    pnm_check_xray
-    pnm_check_hysteria
-    pnm_check_core_runtime_consistency xray
-    pnm_check_core_runtime_consistency hysteria2
-    pnm_check_hysteria_tls
-    pnm_check_hysteria_tls_permissions
+    if pnm_profile_includes "${PNM_NODE_CONFIG[PNM_PROFILE]-dual}" xray; then
+        pnm_check_xray
+        pnm_check_core_runtime_consistency xray
+    else
+        pnm_check_profile_inactive xray
+    fi
+    if pnm_profile_includes "${PNM_NODE_CONFIG[PNM_PROFILE]-dual}" hysteria2; then
+        pnm_check_hysteria
+        pnm_check_core_runtime_consistency hysteria2
+        pnm_check_hysteria_tls
+        pnm_check_hysteria_tls_permissions
+    else
+        pnm_check_profile_inactive hysteria2
+    fi
     pnm_check_file_metadata xray_permissions "$PNM_XRAY_CONFIG" 640 root xray
     pnm_check_file_metadata hysteria_permissions "$PNM_HY2_CONFIG" 600 hysteria hysteria
     pnm_check_file_metadata secret_directory "$PNM_CONFIG_DIR/secrets" 700 root root
@@ -517,11 +539,23 @@ pnm_check() {
     pnm_with_deployment_read_lock pnm_check_unlocked "$@"
 }
 
+pnm_check_resources() {
+    local observations id status summary detail
+    if ! observations="$(pnm_resource_observations)"; then
+        pnm_check_add host_resources UNKNOWN 'Host resources cannot be observed' 'resource reader or Python3 is unavailable'
+        return 0
+    fi
+    while IFS='|' read -r id status summary detail; do
+        pnm_check_add "$id" "$status" "$summary" "$detail"
+    done <<<"$observations"
+}
+
 pnm_check_unlocked() {
     local rc
 
     pnm_init_colors
     pnm_check_collect
+    if [[ "${1-}" == --resources ]]; then pnm_check_resources; fi
     if [[ "$PNM_OUTPUT_MODE" == 'json' ]]; then
         pnm_check_render_json
     else

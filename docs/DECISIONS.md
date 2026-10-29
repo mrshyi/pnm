@@ -16,7 +16,7 @@ This file records durable decisions supported by current project rules and imple
 
 **Reason:** Existing scripts and installed nodes depend on them; changes should be incremental.
 
-**Evidence/status:** `AGENTS.md`, `bin/pnm`, `lib/common.sh`, and README. Current commands are implemented; no proposed Profile command is part of the current interface.
+**Evidence/status:** `AGENTS.md`, `bin/pnm`, `lib/common.sh`, and README. Existing commands are retained; the additive Profile interface is described in D-011.
 
 ## D-003 — Separate desired settings, versions, secrets, applied evidence, and runtime observations
 
@@ -101,3 +101,42 @@ version adapter in `adapters/network.sh`, and the targeted
 `test_install_asset_versions.sh` regression. Programs remain trusted executable
 inputs after explicit hash approval; reported version is not authenticity or
 arbitrary-code sandboxing. Current automated/VM results are in `TASKS.md`.
+
+## D-011 — Profiles select service policy without deleting managed resources
+
+**Decision:** Store an optional `PNM_PROFILE=dual|reality|hy2` in the existing
+schema-1 node configuration, interpreting absence as dual. The initial workflow
+provisions both Cores, then `pnm profile set NAME --yes` selects active services.
+Keep desired selection separate from actual active/enabled observations and
+applied evidence. Switching uses the existing transaction and locks, retains
+binaries/configuration/accounts/TLS/credentials, and leaves an unchanged Core's
+process running. Trusted restore respects the archived selection.
+
+**Reason:** This delivers profile switching without a parallel state store,
+uninstall/reinstall cycle or new provisioning framework. Single-Core initial
+provisioning and extended observability remain separate work; profile switching
+does not imply completion of outstanding Phase3 deployment/reboot acceptance.
+
+**Evidence/status:** `lib/profile.sh`, configuration validation, Core write guards,
+link/check selection and restore flow; temporary-fixture tests cover normal
+switches, unchanged peers and compensation. Real systemd acceptance is separate.
+
+## D-012 — Recovery diagnostics inspect pending state without clearing it
+
+**Decision:** Provide root-only `pnm recovery list|inspect` through the existing
+shared lock and transaction parser. Diagnostics are an explicit exception to
+pending-transaction read refusal; they report the guard's result and a bounded
+record summary, without snapshots, private paths, journal details or credentials.
+They do not modify evidence, replay callbacks or allow other readers/writers to
+bypass the guard. File/directory counts are parser observations, not service or
+account recovery proof. Unsafe stores and invalid evidence refuse success.
+
+**Reason:** Operators need a usable diagnostic entry point precisely when pending
+evidence prevents ordinary commands. Reusing the parser and lock avoids another
+recovery engine. D-006 remains binding: firewall management is manual; there is
+no automatic rule creation/deletion/adoption. D-009's trusted backup boundary
+remains unchanged; encryption/key custody and cross-process replay are deferred.
+
+**Evidence/status:** `lib/recovery.sh`, the transaction guard's diagnostic hint,
+CLI/menu routing and private-fixture tests for blocked-state access, redaction,
+evidence preservation, invalid input/store refusal and lock release.

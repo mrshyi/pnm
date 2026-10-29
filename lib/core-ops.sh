@@ -39,6 +39,7 @@ pnm_core_restart_locked() {
     local core rc
     local PNM_CORE_PRIOR_CONFIG_HASH='' PNM_CORE_PRIOR_APPLIED_HASH='' PNM_CORE_PRIOR_APPLIED_ATTRIBUTES=''
     pnm_core_resolve "$1" || return $?
+    pnm_core_profile_allowed "$PNM_CORE_ID" || return $?
     core=$PNM_CORE_ID
     pnm_core_lifecycle_snapshot "$core" || return $?
     pnm_tx_begin "core-lifecycle-$core" || return $?
@@ -230,6 +231,7 @@ pnm_core_apply_config_locked() {
     local node_name=PNM_CORE_NODE secret_name=PNM_CORE_SECRET
     local -A PNM_CORE_NODE=() PNM_CORE_SECRET=()
     pnm_core_resolve "$core" || return $?
+    pnm_core_profile_allowed "$PNM_CORE_ID" || return $?
     core=$PNM_CORE_ID
     [[ -d "$(dirname -- "$PNM_CORE_CONFIG")" && ! -L "$(dirname -- "$PNM_CORE_CONFIG")" ]] || return "$PNM_EXIT_CONFIG"
     pnm_load_node_config "$node_name" || return "$PNM_EXIT_CONFIG"
@@ -435,6 +437,7 @@ pnm_core_update_locked() {
     local PNM_CORE_PRIOR_CONFIG_HASH='' PNM_CORE_PRIOR_APPLIED_HASH='' PNM_CORE_PRIOR_APPLIED_ATTRIBUTES=''
     local -A PNM_UPDATE_NODE=() PNM_UPDATE_SECRET=()
     pnm_core_resolve "$1" || return $?
+    pnm_core_profile_allowed "$PNM_CORE_ID" || return $?
     pnm_assets_load || return "$PNM_EXIT_CONFIG"
     if [[ "$PNM_CORE_ID" == xray ]]; then
         version=${PNM_ASSET_VERSIONS[XRAY_VERSION]} hash=${PNM_ASSET_VERSIONS[XRAY_SHA256]}
@@ -567,6 +570,7 @@ pnm_core_rollback_locked() {
     local core version current_version previous_dir previous_file previous_meta rc style metadata_stage
     local PNM_CORE_PRIOR_CONFIG_HASH='' PNM_CORE_PRIOR_APPLIED_HASH='' PNM_CORE_PRIOR_APPLIED_ATTRIBUTES=''
     pnm_core_resolve "$1" || return $?
+    pnm_core_profile_allowed "$PNM_CORE_ID" || return $?
     core=$PNM_CORE_ID
     style=xray
     [[ "$core" == hysteria2 ]] && style=hysteria
@@ -890,12 +894,15 @@ PY
     fi
     pnm_tx_commit || { rc=$?; pnm_core_restore_abort "$rc"; return $?; }
     pnm_tx_close || return $?
-    pnm_success 'Both Cores restored and healthy.'
+    pnm_success 'Node restored; desired profile service checks passed.'
 }
 
 pnm_core_restore_apply_staged() {
     local staging="$1" directory file destination mode owner unit core record index=0
     local -a files=()
+    local -A restored_node=()
+    PNM_CONFIG_DIR="$staging/etc/pnm" pnm_load_node_config restored_node &&
+        pnm_validate_node_config restored_node || return "$PNM_EXIT_CONFIG"
     # Retain the service baseline as protected data for manual recovery after
     # an uncatchable interruption. It is never sourced or replayed as code.
     (umask 077; printf 'SCHEMA_VERSION=1\nXRAY_LOAD=%s\nXRAY_ACTIVE=%s\nXRAY_ENABLED=%s\nHY2_LOAD=%s\nHY2_ACTIVE=%s\nHY2_ENABLED=%s\n' \
@@ -931,13 +938,19 @@ pnm_core_restore_apply_staged() {
     done
     pnm_systemd_daemon_reload || return "$PNM_EXIT_SOFTWARE"
     pnm_core_restore_prepare_directory /etc/systemd/system/multi-user.target.wants - || return $?
-    pnm_systemctl enable xray.service || return $?
-    pnm_systemctl enable hysteria-server.service || return $?
-    pnm_systemctl restart xray.service || return $?
-    pnm_systemctl restart hysteria-server.service || return $?
-    pnm_systemd_unit_healthy xray.service && pnm_systemd_unit_healthy hysteria-server.service || return "$PNM_EXIT_CONFIG"
     declare -F pnm_check_deploy_core_health >/dev/null 2>&1 || return "$PNM_EXIT_UNAVAILABLE"
-    pnm_check_deploy_core_health xray && pnm_check_deploy_core_health hysteria2 || return "$PNM_EXIT_CONFIG"
+    for core in xray hysteria2; do
+        pnm_core_resolve "$core" || return $?
+        unit=$PNM_CORE_UNIT
+        if pnm_profile_includes "${restored_node[PNM_PROFILE]-dual}" "$core"; then
+            pnm_systemctl enable "$unit" && pnm_systemctl restart "$unit" || return "$PNM_EXIT_SOFTWARE"
+            pnm_systemd_unit_healthy "$unit" && pnm_check_deploy_core_health "$core" || return "$PNM_EXIT_CONFIG"
+        else
+            pnm_systemctl disable "$unit" || return "$PNM_EXIT_SOFTWARE"
+            [[ "$(pnm_systemd_active_state "$unit")" == inactive &&
+                "$(pnm_systemd_enabled_state "$unit")" == disabled ]] || return "$PNM_EXIT_CONFIG"
+        fi
+    done
     for core in xray hysteria2; do
         [[ -n "${PNM_CORE_RESTORE_APPLIED_HASH[$core]-}" ]] || continue
         record="$PNM_STATE_DIR/cores/$core/applied.env"
@@ -946,8 +959,11 @@ pnm_core_restore_apply_staged() {
             "$(stat -c '%a:%u:%g' -- "$record")" == "${PNM_CORE_RESTORE_APPLIED_ATTRIBUTES[$core]}" ]] || return "$PNM_EXIT_SOFTWARE"
     done
     pnm_make_temp_dir PNM_CORE_STAGE || return "$PNM_EXIT_CANTCREAT"
-    pnm_core_record_applied_config xray "$PNM_XRAY_CONFIG" "$PNM_CORE_STAGE" || return $?
-    pnm_core_record_applied_config hysteria2 "$PNM_HY2_CONFIG" "$PNM_CORE_STAGE" || return $?
+    for core in xray hysteria2; do
+        pnm_profile_includes "${restored_node[PNM_PROFILE]-dual}" "$core" || continue
+        if [[ "$core" == xray ]]; then file=$PNM_XRAY_CONFIG; else file=$PNM_HY2_CONFIG; fi
+        pnm_core_record_applied_config "$core" "$file" "$PNM_CORE_STAGE" || return $?
+    done
     pnm_tx_verify_written_resources
 }
 

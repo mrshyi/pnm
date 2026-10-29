@@ -30,13 +30,13 @@ stat() {
 }
 
 make_backup_archive() {
-    python3 - "$1" "$2" <<'PY'
+    python3 - "$1" "$2" "$TEST_ROOT/fixtures/config-valid/node.conf" "${3:-dual}" <<'PY'
 import io
 import pathlib
 import sys
 import tarfile
 
-destination, scenario = sys.argv[1:]
+destination, scenario, node_fixture, profile = sys.argv[1:]
 paths = ["etc/pnm/node.conf", "etc/pnm/versions.conf", "etc/pnm/secrets/reality.env",
          "etc/pnm/secrets/hysteria.env", "usr/local/etc/xray/config.json",
          "etc/hysteria/config.yaml", "etc/hysteria/tls/server.crt", "etc/hysteria/tls/server.key",
@@ -60,7 +60,10 @@ with tarfile.open(destination, "w:gz", format=tarfile.USTAR_FORMAT) as archive:
             continue
         name = "/" + path if scenario == "absolute" else "./" + path
         kind = tarfile.SYMTYPE if scenario == "symlink" and path.endswith("server.key") else tarfile.REGTYPE
-        add(name, kind=kind)
+        content = b"non-executable fixture\n"
+        if path == "etc/pnm/node.conf":
+            content = pathlib.Path(node_fixture).read_bytes() + f"PNM_PROFILE={profile}\n".encode()
+        add(name, content, kind=kind)
     if scenario == "duplicate":
         add("./etc/pnm/node.conf")
     elif scenario == "root-file":

@@ -1,14 +1,154 @@
 # PNM Current Tasks
 
-**Updated:** 2026-10-29. **Phase 3 repair scope is frozen; bounded Ubuntu acceptance is pending. Phase 4 and release work have not started.**
+**Updated:** 2026-10-29. **Phase 3 bounded Ubuntu acceptance remains pending.
+Phase 4 installed-node Profile main flow is basically complete; real systemd
+acceptance is pending. Phase 5 local observability is implemented with passing
+local gates; optional external checks remain deferred.
+Phase 6's scoped recovery diagnostics are implemented with passing local gates;
+firewall management remains manual. Phase 7 local regression/release preparation
+is complete; current-source CI and real acceptance remain pending. No release
+has been published.**
 
-**Published baseline:** branch `dev`, commit `ce0faf7`, VERSION
+**Published baseline:** branch `dev`, commit `268a315`, VERSION
 `0.16.0-rc.1`, including TLS/test repairs, cloud-development cleanup and
 Ubuntu22.04/24.04 CI/regressions plus stages11–17 and bounded main-flow preparation below. Earlier preparation checks
 used their recorded parents; do not attribute earlier39312aa CI to this baseline.
 
 ## Continuation checkpoint
 
+- Phase6 assessment / Phase7 authorization (2026-10-29): source and the separately
+  recorded35-suite/475-pass gate below support basic completion of the recovery
+  diagnostic scope. Manual firewall management is retained. The user authorized
+  Phase7 preparation; this does not authorize release/tag/version changes,
+  deployment or automatic Git mutations.
+- Phase7 local preparation: add the existing Profile/recovery unit suites to the
+  existing Ubuntu22.04/24.04 privileged CI step (six suites total), without new
+  fixtures, scenarios or deployment commands. Profile service controls remain
+  simulated; recovery uses private root-owned receipts. Add the Unreleased
+  changelog and update release/contribution instructions for Profile selection,
+  configured ports, separate CLI/Core installation and exact-source evidence.
+  Runtime code and regression cases are unchanged from the Phase6 gate.
+- Phase7 fresh checks: `tests/release-scan.sh` exit0 (including security scan);
+  offline guest preparation exit0,36 total/28 executed/8 root-only skipped;
+  real-Core refusal guard exit0,1/1. PyYAML6.0.3 BaseLoader validates both Ubuntu
+  labels, six existing root suite commands/files, unchanged push/PR triggers and
+  contents-read token scope. Ten local links/anchors in the changed release
+  documents pass; external URLs were not fetched. `git diff --check` exits0.
+  Logs: `/tmp/pnm-phase7.Nd88pCIv/` and `/tmp/pnm-phase7-guards.ox0oWKZU/`.
+  The prior475-pass business gate and ShellCheck results were not rerun or counted
+  as fresh checks for this documentation/workflow-only increment.
+- Phase7 disposition: local preparation complete, release readiness NOT READY.
+  HEAD remains268a315 with uncommitted Phase4–7 changes; the new CI definition has
+  not run on a committed candidate. The rechecked namespace remains UID1001,
+  ARM64/PID1 `codex`, without KVM/QEMU/nspawn; full authorized boot fixtures and
+  approved assets are still absent. U-02–U-08, real Profile/root/systemd/reboot
+  and external-client acceptance remain unverified. Debian remains deferred.
+  No install, dependency provisioning, real service/account/firewall mutation,
+  version bump, commit, push, tag or release was performed. Stop adding features;
+  the next work is candidate review/commit/CI when requested, then the existing
+  finite acceptance on an explicitly authorized disposable environment.
+- Phase5 assessment / Phase6 scope (2026-10-29): the local status/resources main
+  flow is basically complete based on source and the recorded34-suite/468-pass
+  gate below. External checks remain deferred. The user authorized continuing
+  Phase6 and then explicitly selected manual firewall management, with only
+  recovery diagnostics in this increment. No new hardening campaign is required.
+- Phase6 implementation: `pnm recovery list|inspect` and its menu entry reuse
+  the existing transaction parser and shared lock. They remain available while
+  the pending guard blocks ordinary reads, report that exact guard's result,
+  redact sensitive evidence and leave records/permissions/write refusal intact.
+  No new transaction engine, state database, automatic replay/repair, firewall
+  writes or backup encryption. Current uncommitted work remains based on268a315;
+  final Phase6 gate results follow.
+- Phase6 fresh validation (2026-10-29,268a315 plus uncommitted Phase4/5/6 edits):
+  `make release-check` exit0, including release/syntax/security scans and35
+  unit/mock suites,475 passed/0 failed. Recovery6/6 and CLI18/18 are included;
+  the actual update CLI body remains skipped in this non-root run. The other four
+  root-only skips remain read access, TLS access, low-mode recovery and numeric
+  ownership. The targeted recovery suite separately passed6/6, exit0.
+  `make shellcheck`, supplemental ShellCheck of the two changed Phase6 unit
+  scripts and `git diff --check` each exited0. Private logs/exits:
+  `/tmp/pnm-phase6.4XsyX9zB/`. Environment: UID1001, Ubuntu22.04 ARM64,
+  PID1 `codex`, umask077, Bash5.1.16, Python3.10.12, OpenSSL3.0.2 and approved
+  temporary ShellCheck0.8.0.
+- Phase6's user-selected development scope is complete: CLI/menu recovery
+  diagnostics, actionable refusal hints, shared-lock inspection while blocked,
+  validated/redacted output and evidence preservation. Tests use real private
+  files/transaction receipts with a test-only root-policy override; the real CLI
+  root refusal is exercised. This is not native root/systemd integration,
+  production recovery, reboot or external-client acceptance. No packages,
+  accounts, services or firewall rules were changed; no deployment, new amd64 CI,
+  commit or push was performed. Firewall automation, automatic replay and backup
+  encryption/key custody are explicitly deferred. Stop this increment here;
+  Phase7 release/deployment actions are not automatically authorized.
+- Phase4 assessment / Phase5 authorization (2026-10-29): source and the recorded
+  33-suite/458-pass gate support basic completion of the bounded installed-node
+  Profile flow (CLI/menu, three selections, preserved resources, unchanged peer,
+  failure compensation, membership guards, links/checks and trusted restore).
+  This assessment does not substitute for real systemd acceptance or imply
+  single-Core initial provisioning. The user explicitly authorized Phase5 when
+  this flow was basically complete; missing integration fixtures do not trigger
+  another Phase4 hardening cycle.
+- Phase5 scope: additive Profile/desired-port information in status, and optional
+  `check --resources` memory/Swap/load/system OOM observations. Default check
+  behavior, CLI name, state/transaction architecture and VERSION remain intact.
+  No automatic tuning, daemon/state store, external connectivity checks or new
+  fault campaign. Earlier Phase4 test results below remain separately identified;
+  final Phase5 gate evidence is recorded next.
+- Phase5 fresh validation (2026-10-29,268a315 plus the uncommitted Phase4/5 edits):
+  `make release-check` exit0; release scan, syntax/security scan and34 unit/mock
+  suites,468 passed/0 failed. Five root-only bodies/suites remain skipped:
+  actual update CLI, read access, TLS access, low-mode recovery and numeric ownership.
+  Included suites: Profile9/9, resources/status8/8, CLI17/17 and check28/28.
+  The check suite separately exited0 with28/28; the earlier seven-case resource
+  run passed before the reader-unavailable case was added, and the final gate
+  executes all eight. Production ShellCheck and supplemental ShellCheck of the
+  three changed Phase5 unit scripts exited0. `git diff --check` exited0.
+  A read-only native `/proc` observation exited0 with the expected four-row format;
+  this establishes reader execution, not node health or absence of warnings.
+  Private logs/exits: `/tmp/pnm-phase5.uTsUPDpn/`. UID1001, Ubuntu22.04 ARM64,
+  PID1 `codex`, umask077; approved temporary ShellCheck0.8.0, Bash5.1.16,
+  Python3.10.12 and OpenSSL3.0.2. No packages, accounts or services were changed;
+  no deployment, external-client checks, new amd64 CI, commit or push was run.
+- Phase5 local main flow is now basically complete: default checks retain their
+  scope, optional resource diagnostics preserve JSON/quiet output and0/1/2 exit
+  precedence, and status separates desired Profile/ports from actual services.
+  Unreadable desired state is unknown/null without default-port probes. OOM is
+  explicitly system-wide/cumulative, not Core attribution. Keep real supported
+  systemd/Profile/reboot acceptance pending with Phase3/4; optional external
+  checks remain deferred. Phase6 recovery diagnostics are now explicitly scoped
+  above; firewall management remains manual.
+- Phase4 authorization (2026-10-29): the user explicitly requested its main-flow
+  implementation without waiting for the unavailable Phase3 acceptance fixtures.
+  This does not close Phase3 or authorize deployment. The bounded development
+  flow is existing dual-Core install → `profile set reality|hy2|dual --yes` →
+  profile-aware links/checks and trusted restore. Optional `PNM_PROFILE` reuses
+  node.conf; missing means dual. Switching retains all Core resources and uses
+  the existing transaction/locks. Single-Core initial provisioning, broader
+  Phase5 observability and firewall/release work are outside this increment.
+  Current uncommitted edits are based on268a315. Do not apply earlier
+  published-source CI to them.
+- Phase4 local validation (2026-10-29): final `make release-check` exited0,
+  including release scanning, syntax/security checks and33 unit/mock suites:
+  458 passed/0 failed. Five root-only skips remain the actual update CLI, read
+  access, TLS access, low-mode recovery and numeric ownership. The new Profile
+  suite passes9/9; CLI passes16/16 with its root-only body skipped; restore includes
+  an archived reality-profile case that leaves Hysteria2 inactive/disabled.
+  Separate targeted Profile9/9 and CLI16/16 runs exited0. `make shellcheck` and
+  supplemental ShellCheck of the four changed unit scripts each exited0.
+  `git diff --check` exited0. Final gate logs/exits are private under
+  `/tmp/pnm-phase4.wbxCBFvE/final-release-check.*`; the incomplete earlier gate
+  had no terminal exit record and is not counted. Environment: UID1001,
+  Ubuntu22.04 ARM64/PID1 `codex`, umask077, Bash5.1.16, Python3.10.12,
+  OpenSSL3.0.2 and approved temporary ShellCheck0.8.0.
+- Profile tests use private real files/transactions and simulated service
+  observations; they do not establish actual systemd activation, production
+  ownership admission, client connectivity or reboot acceptance. No installation,
+  dependency provisioning, real service/account changes or new amd64 CI was run.
+  Phase4's installed-node CLI/menu, preserved resources, failure compensation,
+  disabled-Core guards/links/checks and profile-aware restore are implemented
+  locally. Remaining acceptance is the same normal switch and selected failure
+  flow on approved Ubuntu22.04/24.04 amd64/systemd fixtures; no new fault campaign
+  is required. Phase3 U-02–U-08 remain BLOCKED. VERSION remains0.16.0-rc.1.
 - Cleanup based on HEAD `d926d07` (2026-10-29): removed11 unused
   functions,120 runtime lines including separators, across assets/preflight,
   legacy host diagnostics and lifecycle reset. Repository reference checks found
@@ -115,7 +255,8 @@ declared. The recordedce0faf7 CI satisfies only the U-01 layer for that
 source; U-02–U-08 remain pending. No target, assets or installation/reboot
 authorization is inferred from this checklist. Phase3 remains acceptance-pending;
 closure requires the bounded results and an explicit disposition of residuals,
-not merely this document edit. Phase4 still requires separate authorization.
+not merely this document edit. Phase4 development is now separately authorized;
+its implementation does not change these Phase3 acceptance dispositions.
 
 | Closeout ID | Ubuntu22.04 | Ubuntu24.04 |
 |---|---|---|
@@ -853,5 +994,8 @@ quota failure was resolved through the normal approval path; no bypass was used.
 4. Fix only reproduced in-scope defects, rerun affected checks and required gates,
    then issue one closeout table with remaining explicit deferrals. Do not rerun
    unchanged gates solely to increase counts or add speculative fault campaigns.
-5. Keep Debian and extended production acceptance deferred. Do not start Profiles,
-   production changes or release work automatically after Ubuntu closeout.
+5. Phase4–6 scoped development is basically complete and Phase7 local preparation
+   is complete. Review/commit the candidate and verify its CI when requested,
+   then execute the finite authorized Ubuntu acceptance. Keep Debian and optional
+   external checks deferred. Production changes, single-Core provisioning,
+   firewall automation, encryption/key custody and publishing remain outside this increment.

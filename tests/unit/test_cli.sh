@@ -65,6 +65,47 @@ test_version() {
     assert_eq 0 "$RUN_RC" && assert_eq "pnm $(<"$PROJECT_ROOT/VERSION")" "$RUN_OUTPUT"
 }
 
+test_profile_cli_usage() {
+    run_capture "$PROJECT_ROOT/bin/pnm" help profile
+    assert_eq 0 "$RUN_RC" || return 1
+    assert_contains "$RUN_OUTPUT" 'profile set <dual|reality|hy2> --yes' || return 1
+    run_capture "$PROJECT_ROOT/bin/pnm" profile set invalid --yes
+    assert_eq 64 "$RUN_RC" || return 1
+    run_capture "$PROJECT_ROOT/bin/pnm" profile set reality
+    assert_eq 64 "$RUN_RC"
+}
+
+test_check_resource_cli_usage() {
+    run_capture "$PROJECT_ROOT/bin/pnm" help check
+    assert_eq 0 "$RUN_RC" || return 1
+    assert_contains "$RUN_OUTPUT" '--resources' || return 1
+    run_capture "$PROJECT_ROOT/bin/pnm" check --other
+    assert_eq 64 "$RUN_RC" || return 1
+    run_capture "$PROJECT_ROOT/bin/pnm" check --resources --resources
+    assert_eq 64 "$RUN_RC"
+}
+
+test_recovery_cli_usage() (
+    run_capture "$PROJECT_ROOT/bin/pnm" help recovery
+    assert_eq 0 "$RUN_RC" || return 1
+    assert_contains "$RUN_OUTPUT" 'recovery inspect TRANSACTION_ID' || return 1
+    run_capture "$PROJECT_ROOT/bin/pnm" recovery inspect ../outside
+    assert_eq 64 "$RUN_RC" || return 1
+    run_capture "$PROJECT_ROOT/bin/pnm" recovery clear
+    assert_eq 64 "$RUN_RC" || return 1
+    if ((EUID != 0)); then
+        run_capture "$PROJECT_ROOT/bin/pnm" recovery list
+        assert_eq 77 "$RUN_RC"
+    else
+        local fixture
+        fixture=$(mktemp -d)
+        trap 'rm -rf -- "$fixture"' EXIT
+        run_capture env PNM_STATE_DIR="$fixture/state" PNM_LOCK_FILE="$fixture/lock" \
+            "$PROJECT_ROOT/bin/pnm" --json recovery list
+        assert_eq 0 "$RUN_RC"
+    fi
+)
+
 test_unknown_command() {
     run_capture "$PROJECT_ROOT/bin/pnm" does-not-exist
     assert_eq 64 "$RUN_RC" && assert_contains "$RUN_ERROR" 'Unknown command'
@@ -141,6 +182,9 @@ run_test 'menu preserves self-signed installation without extra prompts' test_me
 run_test 'menu does not install when external TLS path entry ends early' test_menu_canceled_external_tls_installation
 run_test 'install TLS arguments require paired values and appear in help' test_external_tls_cli_usage
 run_test 'version command' test_version
+run_test 'profile CLI documents switching and requires valid confirmed arguments' test_profile_cli_usage
+run_test 'resource diagnostics CLI rejects unsupported and duplicate options' test_check_resource_cli_usage
+run_test 'recovery CLI is read-only validates identifiers and requires root' test_recovery_cli_usage
 run_test 'unknown command returns usage' test_unknown_command
 run_test 'broad commands are removed from the CLI' test_removed_broad_commands_return_usage
 run_test 'help documents the dual-Core CLI' test_core_help_hides_broad_entrypoints
