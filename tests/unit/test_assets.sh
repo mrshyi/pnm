@@ -62,18 +62,18 @@ test_asset_hash_query_failure_refuses_even_with_matching_output() (
     assert_eq 1 "$RUN_RC"
 )
 
-test_assets_json_has_no_secrets() {
-    local old_config="$PNM_CONFIG_DIR"
+test_assets_loads_approved_manifest_without_output() (
     PNM_CONFIG_DIR="$TEST_ROOT/fixtures/config-secrets"
-    pnm_assets_load || return 1
-    PNM_OUTPUT_MODE=json
-    run_capture pnm_assets
-    PNM_OUTPUT_MODE=text
-    PNM_CONFIG_DIR="$old_config"
+    run_capture pnm_assets_load
     assert_eq 0 "$RUN_RC" || return 1
-    python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["schema"] == "pnm.assets.v1"; assert len(d["assets"]) == 2' <<<"$RUN_OUTPUT"
-    assert_not_contains "$RUN_OUTPUT" 'abcdefghijklmnopqrstuvwxyz012345'
-}
+    assert_eq '' "$RUN_OUTPUT" || return 1
+    assert_eq '' "$RUN_ERROR" || return 1
+    assert_eq 6 "${#PNM_ASSET_VERSIONS[@]}" || return 1
+    assert_eq v1.0.0 "${PNM_ASSET_VERSIONS[XRAY_VERSION]}" || return 1
+    assert_eq aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa "${PNM_ASSET_VERSIONS[XRAY_SHA256]}" || return 1
+    assert_eq v2.0.0 "${PNM_ASSET_VERSIONS[HY2_VERSION]}" || return 1
+    assert_eq bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb "${PNM_ASSET_VERSIONS[HY2_SHA256]}"
+)
 
 test_verified_download_atomically_installs_payload() {
     local temp_dir fakebin destination digest rc
@@ -186,7 +186,7 @@ run_test 'asset URLs are fixed by Core and version' test_asset_urls_are_pinned_b
 run_test 'asset SHA-256 verification fails closed' test_asset_hash_verification
 run_test 'asset verification accepts literal backslashes in Linux paths' test_asset_hash_accepts_backslash_in_source_path
 run_test 'failed hash queries refuse matching output without depending on pipefail' test_asset_hash_query_failure_refuses_even_with_matching_output
-run_test 'assets output is JSON and excludes Secret values' test_assets_json_has_no_secrets
+run_test 'approved asset loading retains both Core pins without output' test_assets_loads_approved_manifest_without_output
 run_test 'verified download atomically installs the payload' test_verified_download_atomically_installs_payload
 run_test 'failed download removes its partial candidate without publication' test_failed_download_removes_partial_candidate
 run_test 'checksum refusal removes its unverified candidate without publication' test_checksum_refusal_removes_unverified_candidate

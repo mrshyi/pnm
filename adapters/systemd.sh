@@ -168,14 +168,3 @@ pnm_systemd_unit_healthy() {
     enabled="$(pnm_systemd_enabled_state "$unit")" || return "$PNM_EXIT_UNAVAILABLE"
     [[ "$active" == active && "$enabled" == enabled ]]
 }
-
-pnm_timedatectl_synchronized() {
-    local output
-
-    pnm_command_exists timedatectl || return 1
-    if output="$(timedatectl show --property NTPSynchronized --value 2>/dev/null)"; then
-        printf '%s\n' "$output"
-        return 0
-    fi
-    return 1
-}

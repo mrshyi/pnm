@@ -115,22 +115,6 @@ pnm_check_systemd_runtime() {
     fi
 }
 
-pnm_check_time_sync() {
-    local state active enabled synced
-
-    state="$(pnm_service_state_line systemd-timesyncd.service)"
-    IFS='|' read -r _ active enabled _ <<<"$state"
-    synced="$(pnm_timedatectl_synchronized 2>/dev/null || printf 'unknown')"
-
-    if [[ "$active" == 'active' && "$enabled" == 'enabled' && "$synced" == 'yes' ]]; then
-        pnm_check_add time_sync OK 'Clock synchronization is healthy' 'timesyncd active/enabled; synchronized yes'
-    elif [[ "$active" == 'unknown' || "$enabled" == 'unknown' || "$synced" == 'unknown' ]]; then
-        pnm_check_add time_sync UNKNOWN 'Clock synchronization cannot be fully determined' "active=$active enabled=$enabled synchronized=$synced"
-    else
-        pnm_check_add time_sync FAIL 'Clock synchronization is not healthy' "active=$active enabled=$enabled synchronized=$synced"
-    fi
-}
-
 pnm_check_file_metadata() {
     local id="${1:?check id required}"
     local path="${2:?path required}"
@@ -437,26 +421,6 @@ pnm_check_core_failed_units() {
         pnm_check_add failed_core_units FAIL 'A proxy Core unit is failed' "${failed[*]}"
     else
         pnm_check_add failed_core_units OK 'No failed proxy Core units' ''
-    fi
-}
-
-pnm_check_updates() {
-    local count
-
-    if ! count="$(pnm_apt_simulated_upgrades 2>/dev/null)"; then
-        pnm_check_add updates UNKNOWN 'Available package updates cannot be determined' 'apt simulation unavailable'
-    elif ((count > 0)); then
-        pnm_check_add updates WARN 'Package updates are available' "$count package(s)"
-    else
-        pnm_check_add updates OK 'No package upgrades are currently pending' ''
-    fi
-}
-
-pnm_check_reboot_required() {
-    if [[ -e /run/reboot-required || -e /var/run/reboot-required ]]; then
-        pnm_check_add reboot WARN 'A reboot is required' 'reboot-required marker present'
-    else
-        pnm_check_add reboot OK 'No reboot-required marker is present' ''
     fi
 }
 

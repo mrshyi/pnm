@@ -5,13 +5,6 @@ PNM_LIFECYCLE_UNIT=''
 PNM_LIFECYCLE_PRE_ACTIVE=''
 PNM_LIFECYCLE_PRE_ENABLED=''
 
-pnm_core_lifecycle_reset() {
-    PNM_LIFECYCLE_CORE=''
-    PNM_LIFECYCLE_UNIT=''
-    PNM_LIFECYCLE_PRE_ACTIVE=''
-    PNM_LIFECYCLE_PRE_ENABLED=''
-}
-
 pnm_core_lifecycle_unit() {
     case "${1:?core id required}" in
         xray) printf '%s\n' 'xray.service' ;;

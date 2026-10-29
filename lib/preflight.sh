@@ -374,23 +374,3 @@ pnm_preflight_render_json_object() {
     done
     printf ']}'
 }
-
-pnm_preflight_render_json() {
-    printf '{"schema":"pnm.preflight.v1","generated_at":%s,"preflight":' "$(pnm_json_string "$(pnm_now_utc)")"
-    pnm_preflight_render_json_object
-    printf '}\n'
-}
-
-pnm_preflight() {
-    local rc
-
-    pnm_init_colors
-    pnm_preflight_collect
-    if [[ "$PNM_OUTPUT_MODE" == 'json' ]]; then
-        pnm_preflight_render_json
-    else
-        pnm_preflight_render_text
-    fi
-    if pnm_preflight_exit_code; then rc=0; else rc=$?; fi
-    return "$rc"
-}

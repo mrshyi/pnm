@@ -131,16 +131,3 @@ pnm_binary_version_number() {
     [[ -n "$version" ]] || return "$PNM_EXIT_CONFIG"
     printf '%s\n' "${version#v}"
 }
-
-pnm_apt_simulated_upgrades() {
-    local output count
-
-    pnm_command_exists apt-get || return 1
-    if pnm_command_exists timeout; then
-        output="$(LC_ALL=C timeout 20s apt-get -s -o Debug::NoLocking=1 upgrade 2>/dev/null)" || return 1
-    else
-        output="$(LC_ALL=C apt-get -s -o Debug::NoLocking=1 upgrade 2>/dev/null)" || return 1
-    fi
-    count="$(awk '/^Inst / {count += 1} END {print count + 0}' <<<"$output")"
-    printf '%s\n' "$count"
-}

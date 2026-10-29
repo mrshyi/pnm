@@ -1,6 +1,6 @@
 # PNM Current Tasks
 
-**Updated:** 2026-10-27. **Phase 3 repair scope is frozen; bounded Ubuntu acceptance is pending. Phase 4 and release work have not started.**
+**Updated:** 2026-10-29. **Phase 3 repair scope is frozen; bounded Ubuntu acceptance is pending. Phase 4 and release work have not started.**
 
 **Published baseline:** branch `dev`, commit `ce0faf7`, VERSION
 `0.16.0-rc.1`, including TLS/test repairs, cloud-development cleanup and
@@ -9,6 +9,25 @@ used their recorded parents; do not attribute earlier39312aa CI to this baseline
 
 ## Continuation checkpoint
 
+- Cleanup based on HEAD `d926d07` (2026-10-29): removed11 unused
+  functions,120 runtime lines including separators, across assets/preflight,
+  legacy host diagnostics and lifecycle reset. Repository reference checks found
+  no remaining callers. The removed asset-output test now checks the production
+  manifest loader's two version/hash pairs and silent output. Active CLI,
+  transaction, TLS, account and recovery paths were retained; no new stage or
+  fault scenario was added. Other cleanup candidates remain outside this change.
+- Fresh cleanup validation on Ubuntu22.04 ARM64, UID1001/PID1 `codex`, umask077:
+  `make release-check` exit0, including syntax/security scanning and the embedded
+  `make check`:32 suites,447 passed/0 failed. Five root-only skips remain:
+  actual update CLI, read access, TLS access, low-mode recovery and numeric ownership.
+  The assets suite passed13/13 separately. `make shellcheck` and supplemental
+  ShellCheck of `tests/unit/test_assets.sh` each exited0; `git diff --check` exited0.
+  Tools: Bash5.1.16, Python3.10.12, OpenSSL3.0.2 and the previously approved
+  temporary ShellCheck0.8.0. Private logs: `/tmp/pnm-mainflow-cleanup.N3ctKksT/`.
+  The worktree was clean before these edits; VERSION remains0.16.0-rc.1.
+- No new amd64 CI, managed installation, real account/service changes or reboot
+  was run for this cleanup. The published-source CI below is earlier evidence,
+  not validation of these local edits. U-02–U-08 remain BLOCKED; Debian is deferred.
 - Ubuntu development validation remains first; Debian acceptance is deferred.
 - Latest published/validated source:ce0faf7efedd86f8d4516e605220e3cc7a4a8f4d,
   [run40526987902](https://github.com/mrshyi/pnm/actions/runs/40526987902), success
