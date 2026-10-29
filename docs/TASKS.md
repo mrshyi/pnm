@@ -6,16 +6,34 @@ acceptance is pending. Phase 5 local observability is implemented with passing
 local gates; optional external checks remain deferred.
 Phase 6's scoped recovery diagnostics are implemented with passing local gates;
 firewall management remains manual. Phase 7 local regression/release preparation
-is complete; current-source CI and real acceptance remain pending. No release
+is complete; current-source Ubuntu CI passes and full real acceptance remains pending. No release
 has been published.**
 
-**Published baseline:** branch `dev`, commit `268a315`, VERSION
-`0.16.0-rc.1`, including TLS/test repairs, cloud-development cleanup and
-Ubuntu22.04/24.04 CI/regressions plus stages11–17 and bounded main-flow preparation below. Earlier preparation checks
-used their recorded parents; do not attribute earlier39312aa CI to this baseline.
+**Published runtime baseline:** branch `dev`, source commit `32423be`, VERSION
+`0.16.0-rc.1`. Includes the dual-Core lifecycle, installed-node Profiles, optional
+resource/status observations, sanitized recovery diagnostics and Ubuntu CI.
+Earlier records below remain specific to their own sources and execution layers.
 
 ## Continuation checkpoint
 
+- Delivery checkpoint (2026-10-29): reviewed and pushed runtime source
+  `32423becce020410774f040ee425fac62fc0b0b3`; no blocking review finding was
+  confirmed. [CI run40894062624](https://github.com/mrshyi/pnm/actions/runs/40894062624),
+  push/attempt1, completed successfully on Ubuntu22.04 and24.04 amd64.
+  Jobs123518257106 and123518257275 each pass normal check and release-check:
+  35 suites/475 passed/0 failed per gate. Privileged suites pass70/0
+  (CLI18/read1/TLS8/transaction28/Profile9/recovery6), with no root-section skips.
+  Each job also passes ShellCheck, preparation36 total/28 executed/8 skipped,
+  loopback asset transport7, isolated real systemd8 and pinned real-Core10.
+  All78 shell summaries per job have zero failures. Repeated gates and execution
+  layers are not summed as unique coverage. The five ordinary root-only skips
+  remain explicit and are exercised by the corresponding privileged suites.
+- This checkpoint changes evidence/documentation only after the runtime commit;
+  no version bump or runtime change accompanies the result record. CI's Profile
+  service controls remain simulated; recovery uses private root-owned receipts.
+  Existing temporary systemd/Core checks do not establish a full managed install,
+  actual Profile ownership admission, real accounts, reboot or public clients.
+  U-02–U-08 remain pending; firewall remains manual and Debian is deferred.
 - Phase6 assessment / Phase7 authorization (2026-10-29): source and the separately
   recorded35-suite/475-pass gate below support basic completion of the recovery
   diagnostic scope. Manual firewall management is retained. The user authorized
@@ -37,16 +55,16 @@ used their recorded parents; do not attribute earlier39312aa CI to this baseline
   Logs: `/tmp/pnm-phase7.Nd88pCIv/` and `/tmp/pnm-phase7-guards.ox0oWKZU/`.
   The prior475-pass business gate and ShellCheck results were not rerun or counted
   as fresh checks for this documentation/workflow-only increment.
-- Phase7 disposition: local preparation complete, release readiness NOT READY.
-  HEAD remains268a315 with uncommitted Phase4–7 changes; the new CI definition has
-  not run on a committed candidate. The rechecked namespace remains UID1001,
+- Phase7 disposition: local preparation and current-runtime Ubuntu CI complete;
+  release readiness remains NOT READY. The rechecked development namespace remains UID1001,
   ARM64/PID1 `codex`, without KVM/QEMU/nspawn; full authorized boot fixtures and
   approved assets are still absent. U-02–U-08, real Profile/root/systemd/reboot
   and external-client acceptance remain unverified. Debian remains deferred.
-  No install, dependency provisioning, real service/account/firewall mutation,
-  version bump, commit, push, tag or release was performed. Stop adding features;
-  the next work is candidate review/commit/CI when requested, then the existing
-  finite acceptance on an explicitly authorized disposable environment.
+  No managed installation, development-host dependency provisioning, production
+  service/account/firewall mutation, version bump, tag or release was performed.
+  Candidate review/commit/push and its Ubuntu CI are now complete. Stop adding
+  features; the next work is the existing finite acceptance on an explicitly
+  authorized disposable environment.
 - Phase5 assessment / Phase6 scope (2026-10-29): the local status/resources main
   flow is basically complete based on source and the recorded34-suite/468-pass
   gate below. External checks remain deferred. The user authorized continuing
@@ -169,7 +187,7 @@ used their recorded parents; do not attribute earlier39312aa CI to this baseline
   was run for this cleanup. The published-source CI below is earlier evidence,
   not validation of these local edits. U-02–U-08 remain BLOCKED; Debian is deferred.
 - Ubuntu development validation remains first; Debian acceptance is deferred.
-- Latest published/validated source:ce0faf7efedd86f8d4516e605220e3cc7a4a8f4d,
+- Earlier published/validated source:ce0faf7efedd86f8d4516e605220e3cc7a4a8f4d,
   [run40526987902](https://github.com/mrshyi/pnm/actions/runs/40526987902), success
   on both Ubuntu22.04/24.04 amd64. Public external-ca inputs now reach the menu
   installation action too; this does not establish a full guest-install pass.
@@ -251,7 +269,7 @@ failures remain required below, not deferred.
 
 The finite execution contract is [U-01–U-08](ACCEPTANCE_PLAN.md#ubuntu-closeout).
 All eight must have evidence on Ubuntu22.04 and24.04 before Ubuntu closeout is
-declared. The recordedce0faf7 CI satisfies only the U-01 layer for that
+declared. The recorded32423be CI satisfies only the U-01 layer for that
 source; U-02–U-08 remain pending. No target, assets or installation/reboot
 authorization is inferred from this checklist. Phase3 remains acceptance-pending;
 closure requires the bounded results and an explicit disposition of residuals,
@@ -260,7 +278,7 @@ its implementation does not change these Phase3 acceptance dispositions.
 
 | Closeout ID | Ubuntu22.04 | Ubuntu24.04 |
 |---|---|---|
-| U-01 | PASS atce0faf7, run40526987902 | PASS atce0faf7, same run |
+| U-01 | PASS at32423be, run40894062624 | PASS at32423be, same run |
 | U-02 | BLOCKED | BLOCKED |
 | U-03 | BLOCKED | BLOCKED |
 | U-04 | BLOCKED | BLOCKED |
@@ -994,8 +1012,8 @@ quota failure was resolved through the normal approval path; no bypass was used.
 4. Fix only reproduced in-scope defects, rerun affected checks and required gates,
    then issue one closeout table with remaining explicit deferrals. Do not rerun
    unchanged gates solely to increase counts or add speculative fault campaigns.
-5. Phase4–6 scoped development is basically complete and Phase7 local preparation
-   is complete. Review/commit the candidate and verify its CI when requested,
-   then execute the finite authorized Ubuntu acceptance. Keep Debian and optional
+5. Phase4–6 scoped development, Phase7 local preparation and current-runtime Ubuntu
+   CI are complete. Execute the finite authorized Ubuntu acceptance when its
+   environment/assets are supplied. Keep Debian and optional
    external checks deferred. Production changes, single-Core provisioning,
    firewall automation, encryption/key custody and publishing remain outside this increment.

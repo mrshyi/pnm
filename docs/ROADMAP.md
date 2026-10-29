@@ -12,7 +12,7 @@ This is a planning document, not an implementation claim or authorization. Curre
 | Phase 4 | Desired-state deployment Profiles (`dual`, `reality`, `hy2`) | Installed-node main flow basically complete; real systemd acceptance pending |
 | Phase 5 | Profile-aware health reporting, lightweight resource diagnostics, optional external checks | Local status/resources main flow basically complete; local gates pass; external checks deferred |
 | Phase 6 | Verifiable firewall-rule ownership and additional recovery/secret protections | User-scoped recovery diagnostics developed; local gates pass; firewall remains manual and broader capabilities deferred |
-| Phase 7 | Regression coverage, supported Linux VM acceptance, documentation and release readiness | Local preparation complete; current-source CI and real acceptance pending; release separately authorized |
+| Phase 7 | Regression coverage, supported Linux VM acceptance, documentation and release readiness | Local preparation and current-runtime Ubuntu CI pass; full real acceptance pending; release separately authorized |
 
 ## Phase 3 — Existing defect closure
 
@@ -77,8 +77,8 @@ the Profile and recovery suites, records Unreleased changes, and aligns release
 instructions with configured ports/Profiles and separate CLI/Core installation.
 The runtime implementation and regression cases are unchanged in this increment.
 
-Current-source committed CI and the authorized disposable Ubuntu U-01–U-08
-acceptance remain pending; reuse existing cases rather than extending the fault
+Current runtime source32423be passes its committed Ubuntu22.04/24.04 CI; the
+authorized disposable Ubuntu U-02–U-08 acceptance remains pending. Reuse existing cases rather than extending the fault
 matrix. Record real Profile/service and external Xray/HY2 client results
 separately. Debian remains deferred. Missing targets/assets do not trigger more
 hardening or establish readiness. Release/version/tag/publishing/deployment
