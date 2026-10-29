@@ -70,6 +70,21 @@ by `make test-real-cores` with root-private, hash-verified pinned test assets an
 private network namespaces. These integration steps do not install managed PNM,
 change production services, reboot the runner or prove external connectivity.
 Check actual job results before claiming either runner or integration step passed.
+
+The workflow also defines Debian12/13 amd64 jobs using the official
+`debian:12-slim` and `debian:13-slim` containers on an Ubuntu24.04 runner.
+Dependencies are installed inside the disposable job container. Gates,
+ShellCheck, offline main-flow preparation and loopback acquisition run as nobody
+against a private source copy that excludes `.git`; the original checkout is
+retained for the six existing root access/transaction/Profile/recovery suites.
+No test user is created. Logs record the actual Debian release, architecture,
+source commit, PID1 and tool versions. These containers are not privileged or
+booted with systemd: they cover Debian userspace, crypto, static unit validation
+and private-file permission behavior, not real service startup, managed accounts,
+Core namespace traffic, reboot or full Debian platform acceptance. Those checks
+still require an authorized disposable supported systemd environment. A defined
+Debian job is not a successful run; results remain in TASKS.
+
 `make release-check` adds release scanning and repeats `make check`; it does not
 publish anything, and its repeated tests are not additional independent coverage.
 Keep each gate's exit code, suite totals and explicit skips. A non-root run may

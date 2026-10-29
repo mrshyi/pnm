@@ -17,6 +17,9 @@ Notable changes are recorded here for each release.
   and remove unused legacy command/host-diagnostic helpers.
 - Extend the Ubuntu22.04/24.04 CI configuration to run existing Profile/recovery
   fixtures as root. This configuration is not evidence of a completed CI run.
+- Add Debian12/13 amd64 container CI for non-root gates, static systemd validation,
+  loopback acquisition and root access/recovery fixtures; real Debian service and
+  reboot acceptance remain separate.
 
 These changes retain manual firewall management and do not add automatic recovery
 replay or encrypted-backup key management. Current tests and remaining real

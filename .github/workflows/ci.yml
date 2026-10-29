@@ -84,3 +84,116 @@ jobs:
           done
           PNM_REAL_CORE_ASSETS="$cache" make test-real-cores
           BASH
+
+  debian-checks:
+    name: Debian ${{ matrix.debian }} container checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        debian: ['12', '13']
+    container:
+      image: debian:${{ matrix.debian }}-slim
+    defaults:
+      run:
+        shell: bash
+    env:
+      PNM_CI_DEBIAN_RELEASE: ${{ matrix.debian }}
+    steps:
+      - name: Install container test dependencies
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends \
+            bash git ca-certificates make ripgrep shellcheck python3 jq openssl curl \
+            zip unzip tar util-linux iproute2 systemd passwd
+
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Record Debian identity and tool versions
+        run: |
+          cat /etc/os-release
+          uname -m
+          id
+          printf 'PID 1: '
+          cat /proc/1/comm
+          export PNM_OS_RELEASE_FILE=/etc/os-release
+          source adapters/platform-linux.sh
+          [[ "$(pnm_platform_id)" == debian ]]
+          [[ "$(pnm_platform_version_id)" == "$PNM_CI_DEBIAN_RELEASE" ]]
+          pnm_platform_supported
+          git rev-parse HEAD
+          bash --version | head -n 1
+          python3 --version
+          openssl version
+          curl --version | head -n 1
+          systemd-analyze --version | head -n 1
+          shellcheck --version
+          id nobody
+
+      - name: Prepare private non-root source copy
+        run: |
+          umask 077
+          pnm_ci_source="$(mktemp -d /tmp/pnm-debian-ci.XXXXXXXX)"
+          tar --exclude=.git -cf - . | tar -xf - -C "$pnm_ci_source"
+          chown -R "$(id -u nobody):$(id -g nobody)" "$pnm_ci_source"
+          printf 'PNM_DEBIAN_SOURCE=%s\n' "$pnm_ci_source" >> "$GITHUB_ENV"
+
+      - name: Run non-root test and security checks
+        run: |
+          cd -- "$PNM_DEBIAN_SOURCE"
+          runuser -u nobody -- bash -e -o pipefail -c '
+            umask 077
+            make check
+          '
+
+      - name: Run non-root ShellCheck
+        run: |
+          cd -- "$PNM_DEBIAN_SOURCE"
+          runuser -u nobody -- bash -e -o pipefail -c '
+            umask 077
+            make shellcheck
+          '
+
+      - name: Run non-root main-flow preparation without deployment
+        run: |
+          cd -- "$PNM_DEBIAN_SOURCE"
+          runuser -u nobody -- bash -e -o pipefail -c '
+            umask 077
+            python3 -B tests/integration/test_guest_mainflow_guard.py
+          '
+
+      - name: Run non-root loopback asset acquisition checks
+        run: |
+          cd -- "$PNM_DEBIAN_SOURCE"
+          runuser -u nobody -- bash -e -o pipefail -c '
+            umask 077
+            make test-asset-network
+          '
+
+      - name: Run non-root release checks
+        run: |
+          cd -- "$PNM_DEBIAN_SOURCE"
+          runuser -u nobody -- bash -e -o pipefail -c '
+            umask 077
+            make release-check
+          '
+
+      - name: Run privileged container access and recovery checks
+        run: |
+          umask 077
+          bash tests/unit/test_cli.sh
+          bash tests/unit/test_read_access.sh
+          bash tests/unit/test_tls_access.sh
+          bash tests/unit/test_transaction.sh
+          bash tests/unit/test_profile.sh
+          bash tests/unit/test_recovery.sh
+
+      - name: Record container acceptance boundary
+        run: |
+          printf '%s\n' \
+            'Debian container gates do not establish systemd PID 1, managed installation or reboot acceptance.' \
+            'Real service/Core namespace and VM acceptance remain separate opt-in checks.'

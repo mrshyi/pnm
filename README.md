@@ -19,6 +19,11 @@ certificate checks and isolated static systemd unit validation. CI configuration
 does not establish completed installation, reboot or external-client acceptance;
 see [current evidence](docs/TASKS.md). ARM64 remains a development environment.
 
+The CI workflow also defines Debian12/13 amd64 container gates with separate
+non-root and root fixture checks. Container results do not establish Debian
+systemd startup, managed installation or reboot acceptance; see
+[test boundaries](CONTRIBUTING.md#repository-gates).
+
 ## Commands
 
 - `pnm status [--json]`: read-only Xray and Hysteria2 status

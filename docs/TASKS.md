@@ -16,6 +16,30 @@ Earlier records below remain specific to their own sources and execution layers.
 
 ## Continuation checkpoint
 
+- Debian CI addition (2026-10-29, local edits based oneebd208): the user requested
+  Debian12/13 CI. The existing Ubuntu job is retained unchanged; a separate
+  `debian-checks` matrix uses official `debian:12-slim`/`debian:13-slim` images on
+  the amd64 Ubuntu24.04 runner. Each job checks actual Debian release/architecture
+  and records source/PID1/tool identities, then runs check/ShellCheck/preparation/
+  loopback transport/release gates as nobody in a private source copy without
+  `.git`. Six existing privileged suites run as container root against private
+  fixtures. No PNM-managed accounts or service changes are introduced by these
+  tests. Containers have no privileged options and no systemd/real-Core/VM targets
+  are invoked. Debian userspace CI is now in scope; full Debian service/account,
+  network-namespace and reboot acceptance remains deferred. The new jobs have
+  not run for these uncommitted edits; no Debian PASS is claimed.
+- Debian CI configuration checks: PyYAML BaseLoader confirms the12/13 image
+  matrix, explicit Bash, actual-release checks, unchanged Ubuntu job/triggers/
+  token permissions, five non-root gates and the six existing root suites.
+  All10 run scripts pass `bash -n` and ShellCheck0.8.0 with the configured
+  Bash errexit/pipefail context; no rules were disabled. A synthetic private
+  copy probe confirms `.git` exclusion while retaining `.gitignore`, workflow
+  and runtime files. Release scan/security scan and `git diff --check` exit0.
+  Logs/scripts: `/tmp/pnm-debian-ci-config.Nb2Wpi4T/`. Runtime implementation is
+  unchanged, so the475-case business suite was not repeated. No images were
+  pulled, dependencies installed, containers started, Git changes committed or
+  pushed on the ARM64 development host. Actual Debian job exits/skips and tool
+  versions remain pending until this candidate is run in GitHub CI.
 - Delivery checkpoint (2026-10-29): reviewed and pushed runtime source
   `32423becce020410774f040ee425fac62fc0b0b3`; no blocking review finding was
   confirmed. [CI run40894062624](https://github.com/mrshyi/pnm/actions/runs/40894062624),
