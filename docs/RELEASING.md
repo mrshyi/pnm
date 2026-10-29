@@ -11,8 +11,8 @@ Current source/test evidence and blockers live in [TASKS](TASKS.md).
    `CHANGELOG.md` together. Unreleased development changes do not require a bump.
 3. Run `make check`, `make shellcheck`, and `make release-check`; retain exact
    source identity, exits and skips. Verify Ubuntu22.04/24.04 CI on the actual
-   candidate commit, including the selected root/systemd/Core steps. A workflow
-   definition or a different source commit's success is not a passing candidate.
+   candidate commit, including the selected root/systemd/Core steps and both native
+   architectures. A workflow definition or a different source commit's success is not a passing candidate.
 4. Review the staged diff for credentials, private keys, backups, logs, and generated artifacts.
 5. Confirm repository security settings and private vulnerability reporting with
    the repository owner; account-setting changes require their authorization.
@@ -22,7 +22,7 @@ Current source/test evidence and blockers live in [TASKS](TASKS.md).
 ## Production readiness
 
 A source release or passing local tests alone does not make a node production-ready.
-Use an explicitly authorized disposable supported amd64/systemd target; do not
+Use an explicitly authorized disposable supported amd64/arm64/systemd target; do not
 provision the ARM64 development host or reboot a CI controller to satisfy this list.
 
 1. Verify target identity, copied source, approved asset hashes and the allowed

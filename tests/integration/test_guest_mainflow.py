@@ -61,15 +61,15 @@ import os,sys,json,subprocess,tempfile,shutil,uuid,hashlib
 sys.dont_write_bytecode=True
 repo=Path(__file__).resolve().parents[2]
 sys.path.insert(0,str(repo/'tests/integration'))
-from test_real_cores import verified_assets
+from test_real_cores import verified_assets, core_manifest_path, load_core_manifest
 assets=verified_assets(options.asset_cache)
-manifest=json.loads((repo/'tests/integration/real_core_versions.json').read_text())
+manifest=load_core_manifest()
 current_assets=assets
 target_manifest=manifest
 if is_update:
-    previous_manifest=repo/'tests/integration/previous_core_versions.json'
+    previous_manifest=core_manifest_path(previous=True)
     assets=verified_assets(options.previous_asset_cache,manifest_path=previous_manifest)
-    manifest=json.loads(previous_manifest.read_text())
+    manifest=load_core_manifest(previous_manifest)
 source=options.baseline/'rootfs'
 assert source.is_dir() and source==source.resolve(), 'canonical rootfs required'
 assert json.loads((options.baseline/'boot-result.json').read_text())['guest']['passed'] is True

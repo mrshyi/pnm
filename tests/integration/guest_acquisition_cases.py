@@ -38,8 +38,8 @@ def run_acquisition(logs, env, call, absent, passed, *, include_versions=False) 
         body=path.read_bytes()
         require(hashlib.sha256(body).hexdigest()==pins[core]['sha256']
                 and len(body)==pins[core]['size'],'initial acquisition cache differs from pin')
-        paths[core]=('/XTLS/Xray-core/releases/download/'+pins[core]['version']+'/Xray-linux-64.zip'
-                     if core=='xray' else '/apernet/hysteria/releases/download/app/'+pins[core]['version']+'/hysteria-linux-amd64')
+        paths[core]=('/XTLS/Xray-core/releases/download/'+pins[core]['version']+'/'+pins[core]['url'].rsplit('/',1)[1]
+                     if core=='xray' else '/apernet/hysteria/releases/download/app/'+pins[core]['version']+'/'+pins[core]['url'].rsplit('/',1)[1])
         payloads[paths[core]]=body
     private=logs/'acquisition'
     private.mkdir(mode=0o700)

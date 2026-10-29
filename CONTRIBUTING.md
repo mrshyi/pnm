@@ -11,8 +11,9 @@ authorize commits, provisioning, fault injection or production changes.
 ## Linux workspace
 
 Development checks run on Linux, including an Ubuntu ARM64 cloud workspace.
-Deployment support remains Debian 12/13 and Ubuntu 22.04/24.04 **amd64** with
-systemd. ARM64 L1 results do not accept an amd64 deployment or add ARM64 support.
+Deployment targets are Debian 12/13 and Ubuntu 22.04/24.04 **amd64/arm64** with
+systemd. Native L1 results do not establish managed installation acceptance on
+either architecture; record each OS/architecture separately.
 Native Windows/Git Bash test shims are no longer maintained.
 
 Before selecting checks, inspect the current execution environment:
@@ -52,7 +53,7 @@ make release-check
 ```
 
 `make check` runs syntax, security scanning and the unit/mock suites.
-CI runs the same gates on explicit `ubuntu-22.04` and `ubuntu-24.04` amd64 runners,
+CI runs the same gates on explicit `ubuntu-22.04` and `ubuntu-24.04` amd64 runners and their `-arm` ARM64 counterparts,
 using [GitHub's runner labels](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)
 and recording OS, Bash, Python, OpenSSL and systemd versions. The service suite invokes
 the real `systemd-analyze verify` against generated units with temporary Core
@@ -71,8 +72,8 @@ private network namespaces. These integration steps do not install managed PNM,
 change production services, reboot the runner or prove external connectivity.
 Check actual job results before claiming either runner or integration step passed.
 
-The workflow also defines Debian12/13 amd64 jobs using the official
-`debian:12-slim` and `debian:13-slim` containers on an Ubuntu24.04 runner.
+The workflow also defines Debian12/13 native amd64/arm64 jobs using the official
+`debian:12-slim` and `debian:13-slim` containers on the corresponding Ubuntu24.04 amd64/arm64 runner.
 Dependencies are installed inside the disposable job container. Gates,
 ShellCheck, offline main-flow preparation and loopback acquisition run as nobody
 against a private source copy that excludes `.git`; the original checkout is
@@ -121,8 +122,8 @@ separately from the L1 suites.
 | Layer | Environment | Boundary |
 |---|---|---|
 | L1 | Linux workspace, including ARM64/non-root | Real temporary files/crypto and selected loopback transport; managed service/account observations may be mocked and skips remain visible |
-| L2 | Approved disposable supported Ubuntu/Debian amd64/systemd environment | Real accounts, pinned Core programs, units, listeners, fault recovery and same-disk reboot |
-| Other supported platforms | Separate execution for each remaining supported amd64 release | Their own acceptance; os-release fixtures are L1 only |
+| L2 | Approved disposable supported Ubuntu/Debian amd64/arm64/systemd environment | Real accounts, pinned Core programs, units, listeners, fault recovery and same-disk reboot |
+| Other supported platforms | Separate execution for each remaining supported release/architecture pair | Their own acceptance; os-release fixtures are L1 only |
 | L3 | Authorized targets and controlled external clients | Separate Xray REALITY and HY2 handshakes and traffic |
 
 The `test-systemd`, `test-real-cores`, `test-guest-mainflow` and

@@ -9,17 +9,17 @@ PNM manages the lifecycle of two independent proxy cores on one supported Debian
 
 PNM does not forward traffic. It installs pinned binaries, renders and validates each configuration, controls the corresponding systemd service, and manages secret-bearing backups.
 
-Supported platforms: Debian 12/13 and Ubuntu 22.04/24.04, amd64, with systemd.
+Target deployment platforms: Debian 12/13 and Ubuntu 22.04/24.04, amd64 and arm64, with systemd. ARM64 compatibility is implemented; actual per-platform acceptance is tracked in [TASKS](docs/TASKS.md).
 
-Ubuntu 22.04 LTS and 24.04 LTS use the same pinned Core assets, service-account
+Ubuntu 22.04 LTS and 24.04 LTS use architecture-specific pinned Core assets, the same service-account
 policy and independent systemd units. TLS checks handle OpenSSL 3.0 hostname
 results and default certificate-date output. CI targets both Ubuntu versions
 explicitly and records their tool versions; the default tests include real
 certificate checks and isolated static systemd unit validation. CI configuration
 does not establish completed installation, reboot or external-client acceptance;
-see [current evidence](docs/TASKS.md). ARM64 remains a development environment.
+see [current evidence](docs/TASKS.md). The cloud ARM64 workspace remains a development environment, not a deployment acceptance target.
 
-The CI workflow also defines Debian12/13 amd64 container gates with separate
+The CI workflow also defines Debian12/13 native amd64/arm64 container gates with separate
 non-root and root fixture checks. Container results do not establish Debian
 systemd startup, managed installation or reboot acceptance; see
 [test boundaries](CONTRIBUTING.md#repository-gates).
@@ -44,6 +44,8 @@ systemd startup, managed installation or reboot acceptance; see
 - `pnm uninstall xray|hy2 --yes`: back up and remove one core
 
 Each update changes one core per command. Failed configuration changes and updates restore that core's prior files or binary and check service health.
+
+Backups include Core binaries and must be restored on the same architecture. Foreign-architecture ELF candidates are rejected before execution or managed-resource writes; cross-architecture migration is not supported.
 
 Restore accepts operator-verified trusted PNM backups. Candidate validation executes the packaged Core binaries as root. Record the backup's SHA-256 when it is created, retain that digest in a separate trusted record, and compare it again before restoration:
 
@@ -185,7 +187,7 @@ Encrypted-backup key custody and automatic cross-process recovery remain deferre
 
 ## Install and use PNM on a VPS
 
-Use a supported Debian 12/13 or Ubuntu 22.04/24.04 amd64 host with systemd, root access, and an internet connection. The installer needs `curl` and `tar`; core installation checks for its required tools, including `unzip` for the Xray archive.
+Use a supported Debian 12/13 or Ubuntu 22.04/24.04 amd64/arm64 host with systemd, root access, and an internet connection. The installer needs `curl` and `tar`; core installation checks for its required tools, including `unzip` for the Xray archive.
 
 To install the PNM CLI and runtime library under `/usr/local/lib/pnm` and create `/usr/local/bin/pnm`, download the installer to a temporary file and execute it as root:
 

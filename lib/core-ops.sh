@@ -798,15 +798,16 @@ pnm_core_restore() {
 }
 
 pnm_core_restore_locked() {
-    local archive=$1 staging rc archive_identity
+    local archive=$1 staging rc archive_identity arch
     PNM_CORE_RESTORE_STARTED=0
     [[ -f "$archive" && ! -L "$archive" ]] || return "$PNM_EXIT_CONFIG"
     archive_identity="$(stat -c '%a:%u:%d:%i' -- "$archive" 2>/dev/null)" || return "$PNM_EXIT_NOPERM"
     [[ "$archive_identity" =~ ^600:0:[0-9]+:[0-9]+$ ]] || return "$PNM_EXIT_NOPERM"
     archive_identity="${archive_identity#600:0:}"
     pnm_platform_supported || return "$PNM_EXIT_CONFIG"
+    arch="$(pnm_arch)" || return "$PNM_EXIT_CONFIG"
     pnm_make_temp_dir staging || return $?
-    if python3 - "$archive" "$staging" "$archive_identity" <<'PY'
+    if python3 - "$archive" "$staging" "$archive_identity" "$arch" <<'PY'
 import contextlib, os, pathlib, resource, shutil, stat, sys, tarfile
 allowed = {"etc/pnm/node.conf", "etc/pnm/versions.conf", "etc/pnm/secrets/reality.env",
  "etc/pnm/secrets/hysteria.env", "usr/local/etc/xray/config.json", "etc/hysteria/config.yaml",
@@ -871,6 +872,14 @@ try:
             data = source.extractfile(item)
             if data is None: raise ValueError("backup member unreadable")
             with data, target.open("xb") as out: shutil.copyfileobj(data, out, 1048576)
+        # Reject foreign ELF binaries even on hosts with binfmt emulation enabled.
+        machine = {"amd64": 62, "arm64": 183}[sys.argv[4]]
+        for name in ("xray", "hysteria"):
+            with (root / "usr/local/bin" / name).open("rb") as binary:
+                header = binary.read(20)
+            if header.startswith(b"\x7fELF") and (len(header) < 20 or header[4:6] != b"\x02\x01"
+                    or int.from_bytes(header[18:20], "little") != machine):
+                raise ValueError("backup Core architecture differs from host")
 except (OSError, tarfile.TarError, ValueError, MemoryError, OverflowError, RecursionError) as error:
     print(f"invalid backup: {error}", file=sys.stderr); sys.exit(1)
 PY

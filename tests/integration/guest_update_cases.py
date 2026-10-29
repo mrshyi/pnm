@@ -204,8 +204,8 @@ def run_updates(logs: Path, env: dict[str,str], call: Callable,
         body=(assets/pin['filename']).read_bytes()
         require(len(body)==pin['size'] and hashlib.sha256(body).hexdigest()==pin['sha256'],
                 'update fixture asset differs from frozen pin')
-        path=('/XTLS/Xray-core/releases/download/'+pin['version']+'/Xray-linux-64.zip'
-              if core=='xray' else '/apernet/hysteria/releases/download/app/'+pin['version']+'/hysteria-linux-amd64')
+        path=('/XTLS/Xray-core/releases/download/'+pin['version']+'/'+pin['url'].rsplit('/',1)[1]
+              if core=='xray' else '/apernet/hysteria/releases/download/app/'+pin['version']+'/'+pin['url'].rsplit('/',1)[1])
         paths[core]=path
         payloads[path]=body
     certificate=logs/'asset-server.crt'

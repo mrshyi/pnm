@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path
 import pwd
+import platform
 import secrets
 import shutil
 import signal
@@ -44,12 +45,27 @@ def require(condition: bool, label: str) -> None:
         raise CheckFailed(label)
 
 
+def core_manifest_path(*, previous: bool = False) -> Path:
+    machine = platform.machine()
+    require(machine in ("x86_64", "aarch64"), "unsupported Core test architecture")
+    base = "previous_core_versions" if previous else "real_core_versions"
+    return Path(__file__).with_name(base + ("_arm64" if machine == "aarch64" else "") + ".json")
+
+
+def load_core_manifest(path: Path | None = None) -> dict:
+    manifest = json.loads((path or core_manifest_path()).read_text())
+    architecture = {"x86_64": "amd64", "aarch64": "arm64"}.get(platform.machine())
+    require(architecture is not None and manifest["architecture"] == architecture,
+            "Core test manifest architecture differs from host")
+    return manifest
+
+
 def verified_assets(cache: Path, *, manifest_path: Path | None = None) -> dict[str, bytes]:
     require(cache.is_absolute() and cache == cache.resolve(), "asset cache must be canonical")
     info = cache.stat()
     require(stat.S_ISDIR(info.st_mode) and info.st_uid == 0 and stat.S_IMODE(info.st_mode) == 0o700,
             "asset cache must be root-owned mode 0700")
-    manifest = json.loads((manifest_path or Path(__file__).with_name("real_core_versions.json")).read_text())
+    manifest = load_core_manifest(manifest_path)
     result: dict[str, bytes] = {}
     for core in ("xray", "hysteria2"):
         asset = manifest[core]
@@ -249,7 +265,7 @@ class Harness:
 
     def exercise(self) -> None:
         self.stage = "actual versions"
-        manifest = json.loads(Path(__file__).with_name("real_core_versions.json").read_text())
+        manifest = load_core_manifest()
         for core, binary, argument in (("xray", self.xray, "version"), ("hysteria2", self.hy2, "version")):
             version = run(self.offline + [str(binary), argument])
             require(version.returncode == 0 and manifest[core]["version"].lstrip("v").encode() in version.stdout,

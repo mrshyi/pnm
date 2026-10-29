@@ -10,6 +10,15 @@ readonly PNM_EXIT_CANTCREAT=73
 readonly PNM_EXIT_NOPERM=77
 readonly PNM_EXIT_CONFIG=78
 
+pnm_arch() {
+    local machine="${1:-$(uname -m)}"
+    case "$machine" in
+        x86_64) printf 'amd64\n' ;;
+        aarch64) printf 'arm64\n' ;;
+        *) return "$PNM_EXIT_CONFIG" ;;
+    esac
+}
+
 # Validate every existing component before mkdir/chmod or a managed file write.
 # This assumes protected parent directories; it is not an openat-based race lock.
 pnm_validate_managed_path() {

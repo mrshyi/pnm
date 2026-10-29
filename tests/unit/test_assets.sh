@@ -19,10 +19,24 @@ source "$PNM_LIB_DIR/assets.sh"
 # shellcheck source=../testlib.sh
 source "$TEST_ROOT/testlib.sh"
 
-test_asset_urls_are_pinned_by_core_and_version() {
-    assert_eq 'https://github.com/XTLS/Xray-core/releases/download/v1.2.3/Xray-linux-64.zip' "$(pnm_asset_url xray v1.2.3)" || return 1
-    assert_eq 'https://github.com/apernet/hysteria/releases/download/app%2Fv2.3.4/hysteria-linux-amd64' "$(pnm_asset_url hysteria2 v2.3.4)"
-}
+test_asset_urls_are_pinned_by_core_and_version() (
+    local machine asset architecture
+    uname() { printf '%s\n' "$machine"; }
+    for machine in x86_64 aarch64; do
+        if [[ "$machine" == x86_64 ]]; then
+            asset=Xray-linux-64.zip architecture=amd64
+        else
+            asset=Xray-linux-arm64-v8a.zip architecture=arm64
+        fi
+        assert_eq "$architecture" "$(pnm_arch)" || return 1
+        assert_eq "https://github.com/XTLS/Xray-core/releases/download/v1.2.3/$asset" "$(pnm_asset_url xray v1.2.3)" || return 1
+        assert_eq "https://github.com/apernet/hysteria/releases/download/app%2Fv2.3.4/hysteria-linux-$architecture" "$(pnm_asset_url hysteria2 v2.3.4)" || return 1
+    done
+    machine=armv7l
+    run_capture pnm_asset_url xray v1.2.3
+    assert_eq 78 "$RUN_RC" || return 1
+    assert_eq '' "$RUN_OUTPUT"
+)
 
 test_asset_hash_verification() {
     local temp_dir asset digest rc

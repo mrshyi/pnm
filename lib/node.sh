@@ -44,7 +44,9 @@ pnm_node_parse_xray_sha256() {
 
 pnm_node_parse_hysteria_sha256() {
     local digest_file="${1:?Hysteria2 hash file required}"
-    local asset_name='hysteria-linux-amd64'
+    local asset_name
+
+    asset_name="$(pnm_asset_name hysteria2)" || return $?
 
     [[ -r "$digest_file" ]] || return "$PNM_EXIT_CONFIG"
     awk -v asset="$asset_name" '
@@ -135,6 +137,7 @@ pnm_node_resolve_latest_tag() {
 pnm_node_fetch_latest_versions() {
     local temp_dir xray_metadata hysteria_metadata xray_digest hysteria_digest
     local xray_tag hysteria_tag xray_version hysteria_version xray_sha256 hysteria_sha256
+    local xray_asset
     local release_channel='latest'
     local xray_api_url="https://api.github.com/repos/XTLS/Xray-core/releases/${release_channel}"
     local hysteria_api_url="https://api.github.com/repos/apernet/hysteria/releases/${release_channel}"
@@ -143,6 +146,7 @@ pnm_node_fetch_latest_versions() {
 
     PNM_NODE_LATEST_VERSIONS=()
     PNM_NODE_LATEST_ERROR=''
+    xray_asset="$(pnm_asset_name xray)" || return "$PNM_EXIT_CONFIG"
     pnm_make_temp_dir temp_dir || return $?
     xray_metadata="$temp_dir/xray-release.json"
     hysteria_metadata="$temp_dir/hysteria-release.json"
@@ -159,7 +163,7 @@ pnm_node_fetch_latest_versions() {
     }
     xray_version="$xray_tag"
     pnm_node_fetch_url \
-        "https://github.com/XTLS/Xray-core/releases/download/${xray_version}/Xray-linux-64.zip.dgst" \
+        "https://github.com/XTLS/Xray-core/releases/download/${xray_version}/${xray_asset}.dgst" \
         "$xray_digest" || {
         PNM_NODE_LATEST_ERROR='Xray official SHA-256 file is unavailable'
         return "$PNM_EXIT_UNAVAILABLE"

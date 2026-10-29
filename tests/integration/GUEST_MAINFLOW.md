@@ -208,7 +208,10 @@ and the dedicated enabled `pnm-boot-probe.service` that executes
 baseline without PNM resources/accounts. Its package executables and services
 are trusted input, not authenticated by the JSON report. Supply a separately
 trusted root-owned native nspawn executable and the existing exact pinned Core
-cache (see `real_core_versions.json`). Do not use an arbitrary downloaded image.
+cache (see `real_core_versions.json` for amd64 or
+`real_core_versions_arm64.json` for arm64). The driver selects native architecture
+and refuses a foreign manifest; keep separate caches and matching native boot
+fixtures. Do not use an arbitrary downloaded image.
 
 For the locally prepared fixture (Linux root shell):
 
@@ -281,7 +284,8 @@ timing interleavings, external clients or other supported platforms.
 
 For distinct-version testing, set `PNM_GUEST_SCENARIO=core-update` and
 `PNM_PREVIOUS_CORE_ASSETS=/var/tmp/pnm-update-core-assets`. That separately
-acquired mode-0700 root-owned cache must match `previous_core_versions.json`:
+acquired mode-0700 root-owned cache must match `previous_core_versions.json` on amd64 or
+`previous_core_versions_arm64.json` on arm64:
 Xray v26.9.30 and HY2 v2.12.3. The existing asset verifier checks both old and
 current pairs. The clone initially installs the old pair, then explicitly approves
 the current pair only in its own versions.conf. It runs each real Core through

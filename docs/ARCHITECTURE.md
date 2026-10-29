@@ -2,6 +2,16 @@
 
 This document describes implemented behavior, including the shared TLS compatibility repair on 2026-10-26. It is not a production deployment attestation. Current baseline and execution evidence are tracked in [TASKS.md](TASKS.md); verify behavior against source and tests when changing it.
 
+Architecture selection accepts Linux `x86_64` (amd64) and `aarch64` (arm64).
+The shared asset-name selector supplies both download URLs and the matching
+Xray digest filename / Hysteria hash-list member during initialization. Versions
+and SHA-256 approvals remain in the existing configuration format; hashes are
+specific to the selected architecture. No foreign execution or migration mode
+is provided. Restore checks ELF64 little-endian machine identity before candidate
+execution, including on hosts with binfmt emulation; existing non-ELF candidate
+validation and trusted-backup requirements remain in force. Backup formats and
+the existing transaction model are unchanged. Actual acceptance is in TASKS.
+
 Host first-install staging checks both hash-verified Core programs' reported
 versions against the validated approved manifest before publishing either
 managed binary. It reuses the same version-number adapter as update. Mismatched,

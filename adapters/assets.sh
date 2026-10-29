@@ -1,17 +1,31 @@
 #!/usr/bin/env bash
 
+pnm_asset_name() {
+    local core="${1:?core required}" arch
+    arch="$(pnm_arch)" || return $?
+    case "$core:$arch" in
+        xray:amd64) printf 'Xray-linux-64.zip\n' ;;
+        xray:arm64) printf 'Xray-linux-arm64-v8a.zip\n' ;;
+        hysteria2:*) printf 'hysteria-linux-%s\n' "$arch" ;;
+        *) return "$PNM_EXIT_CONFIG" ;;
+    esac
+}
+
 pnm_asset_url() {
     local core="${1:?core required}"
     local version="${2:?version required}"
+    local asset
+
+    asset="$(pnm_asset_name "$core")" || return $?
 
     case "$core" in
         xray)
             [[ "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([._+-][A-Za-z0-9.-]+)?$ ]] || return 1
-            printf 'https://github.com/XTLS/Xray-core/releases/download/%s/Xray-linux-64.zip\n' "$version"
+            printf 'https://github.com/XTLS/Xray-core/releases/download/%s/%s\n' "$version" "$asset"
             ;;
         hysteria2)
             [[ "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([._+-][A-Za-z0-9.-]+)?$ ]] || return 1
-            printf 'https://github.com/apernet/hysteria/releases/download/app%%2F%s/hysteria-linux-amd64\n' "$version"
+            printf 'https://github.com/apernet/hysteria/releases/download/app%%2F%s/%s\n' "$version" "$asset"
             ;;
         *) return 1 ;;
     esac

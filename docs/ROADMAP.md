@@ -80,7 +80,8 @@ The runtime implementation and regression cases are unchanged in this increment.
 Current runtime source32423be passes its committed Ubuntu22.04/24.04 CI; the
 authorized disposable Ubuntu U-02–U-08 acceptance remains pending. Reuse existing cases rather than extending the fault
 matrix. Record real Profile/service and external Xray/HY2 client results
-separately. Debian12/13 userspace container CI is configured; full Debian
+separately. Native amd64/arm64 Ubuntu and Debian12/13 userspace container CI is configured;
+ARM64 runs and full Debian
 service/reboot acceptance remains deferred. Missing targets/assets do not trigger more
 hardening or establish readiness. Release/version/tag/publishing/deployment
 actions remain separately authorized under `RELEASING.md`.

@@ -15,6 +15,8 @@ source "$PROJECT_ROOT/lib/config.sh"
 source "$PROJECT_ROOT/lib/lock.sh"
 # shellcheck source=../../lib/transaction.sh
 source "$PROJECT_ROOT/lib/transaction.sh"
+# shellcheck source=../../adapters/assets.sh
+source "$PROJECT_ROOT/adapters/assets.sh"
 # shellcheck source=../../lib/node.sh
 source "$PROJECT_ROOT/lib/node.sh"
 # shellcheck source=../../lib/render.sh
@@ -759,7 +761,9 @@ test_invalid_node_is_rejected() {
 }
 
 test_release_metadata_parsers() {
-    local temp_dir release_file xray_digest hysteria_digest
+    local temp_dir release_file xray_digest hysteria_digest architecture other_architecture
+    architecture="$(pnm_arch)"
+    if [[ "$architecture" == amd64 ]]; then other_architecture=arm64; else other_architecture=amd64; fi
     temp_dir="$(mktemp -d)"
     release_file="$temp_dir/release.json"
     xray_digest="$temp_dir/xray.dgst"
@@ -767,8 +771,8 @@ test_release_metadata_parsers() {
 
     printf '{"tag_name":"v1.2.3","prerelease":false}\n' >"$release_file"
     printf 'SHA-256= AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n' >"$xray_digest"
-    printf 'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB  build/hysteria-linux-amd64\n' >"$hysteria_digest"
-
+    printf 'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee  build/hysteria-linux-%s\n' "$other_architecture" >"$hysteria_digest"
+    printf 'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB  build/hysteria-linux-%s\n' "$architecture" >>"$hysteria_digest"
     assert_eq 'v1.2.3' "$(pnm_node_parse_release_tag "$release_file")" || return 1
     assert_eq 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' \
         "$(pnm_node_parse_xray_sha256 "$xray_digest")" || return 1
@@ -788,14 +792,15 @@ test_latest_version_lookup_persists_concrete_values() {
             *api.github.com/repos/XTLS/Xray-core/releases/*)
                 printf '{"tag_name":"v9.8.7"}\n' >"$destination"
                 ;;
-            *Xray-linux-64.zip.dgst)
+            *Xray-linux-64.zip.dgst | *Xray-linux-arm64-v8a.zip.dgst)
+                [[ "$url" == *"/$(pnm_asset_name xray).dgst" ]] || return 1
                 printf 'SHA2-256= cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\n' >"$destination"
                 ;;
             *api.github.com/repos/apernet/hysteria/releases/*)
                 printf '{"tag_name":"app/v8.7.6"}\n' >"$destination"
                 ;;
             *hashes.txt)
-                printf 'dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd  build/hysteria-linux-amd64\n' >"$destination"
+                printf 'dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd  build/hysteria-linux-%s\n' "$(pnm_arch)" >"$destination"
                 ;;
             *)
                 return 1
@@ -817,6 +822,14 @@ test_latest_version_lookup_persists_concrete_values() {
     assert_eq dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd \
         "${PNM_NODE_LATEST_VERSIONS[HY2_SHA256]}" || return 1
 }
+
+test_latest_version_lookup_for_each_architecture() (
+    local machine
+    uname() { printf '%s\n' "$machine"; }
+    for machine in x86_64 aarch64; do
+        test_latest_version_lookup_persists_concrete_values || return 1
+    done
+)
 
 test_init_writes_valid_files_transactionally() {
     local temp_dir rc
@@ -906,6 +919,6 @@ run_test 'Xray drift diagnostic lists field paths without values or secrets' tes
 run_test 'Xray drift diagnostics redact unrecognized JSON field names' test_xray_drift_diagnostic_redacts_unknown_field_names
 run_test 'node validation rejects invalid values' test_invalid_node_is_rejected
 run_test 'latest release metadata parsers return pinned values' test_release_metadata_parsers
-run_test 'latest lookup returns concrete pinned versions and hashes' test_latest_version_lookup_persists_concrete_values
+run_test 'latest lookup returns concrete pinned versions and hashes' test_latest_version_lookup_for_each_architecture
 run_test 'node init writes both validated files in one transaction' test_init_writes_valid_files_transactionally
 finish_tests

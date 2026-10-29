@@ -33,6 +33,7 @@ make_backup_archive() {
     python3 - "$1" "$2" "$TEST_ROOT/fixtures/config-valid/node.conf" "${3:-dual}" <<'PY'
 import io
 import pathlib
+import platform
 import sys
 import tarfile
 
@@ -63,6 +64,11 @@ with tarfile.open(destination, "w:gz", format=tarfile.USTAR_FORMAT) as archive:
         content = b"non-executable fixture\n"
         if path == "etc/pnm/node.conf":
             content = pathlib.Path(node_fixture).read_bytes() + f"PNM_PROFILE={profile}\n".encode()
+        if scenario in ("native-xray", "foreign-xray", "foreign-hysteria") and path == "usr/local/bin/" + scenario.split("-", 1)[1]:
+            machine = 183 if platform.machine() == "aarch64" else 62
+            if scenario.startswith("foreign-"):
+                machine = 62 if machine == 183 else 183
+            content = b"\x7fELF\x02\x01" + bytes(12) + machine.to_bytes(2, "little")
         add(name, content, kind=kind)
     if scenario == "duplicate":
         add("./etc/pnm/node.conf")
@@ -88,7 +94,7 @@ PY
 
 test_complete_archive_reaches_isolated_validation() {
     local archive="$suite_root/valid.tar.gz" validation_reached=0 rc
-    make_backup_archive "$archive" valid || return 1
+    make_backup_archive "$archive" native-xray || return 1
     if pnm_core_restore "$archive"; then rc=0; else rc=$?; fi
     assert_eq 78 "$rc" || return 1
     assert_eq 1 "$validation_reached"
@@ -96,7 +102,7 @@ test_complete_archive_reaches_isolated_validation() {
 
 test_unsafe_archives_stop_before_candidate_execution() {
     local scenario archive validation_reached rc
-    for scenario in root-file root-directory-payload directory-payload oversized-manifest missing-tls absolute symlink duplicate duplicate-manifest traversal unknown-file too-many-members; do
+    for scenario in foreign-xray foreign-hysteria root-file root-directory-payload directory-payload oversized-manifest missing-tls absolute symlink duplicate duplicate-manifest traversal unknown-file too-many-members; do
         archive="$suite_root/$scenario.tar.gz"
         validation_reached=0
         make_backup_archive "$archive" "$scenario" || return 1

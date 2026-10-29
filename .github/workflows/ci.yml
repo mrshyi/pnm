@@ -13,7 +13,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04, ubuntu-24.04]
+        os: [ubuntu-22.04, ubuntu-24.04, ubuntu-22.04-arm, ubuntu-24.04-arm]
     runs-on: ${{ matrix.os }}
     steps:
       - name: Check out source
@@ -72,7 +72,11 @@ jobs:
           source adapters/assets.sh
           cache="$(mktemp -d /tmp/pnm-ci-assets.XXXXXXXX)"
           trap 'rm -rf -- "$cache"' EXIT
-          manifest=tests/integration/real_core_versions.json
+          case "$(uname -m)" in
+              x86_64) manifest=tests/integration/real_core_versions.json ;;
+              aarch64) manifest=tests/integration/real_core_versions_arm64.json ;;
+              *) exit 78 ;;
+          esac
           for core in xray hysteria2; do
               version="$(jq -er --arg core "$core" '.[$core].version' "$manifest")"
               hash="$(jq -er --arg core "$core" '.[$core].sha256' "$manifest")"
@@ -86,13 +90,14 @@ jobs:
           BASH
 
   debian-checks:
-    name: Debian ${{ matrix.debian }} container checks
-    runs-on: ubuntu-24.04
+    name: Debian ${{ matrix.debian }} container (${{ matrix.runner }}) checks
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
         debian: ['12', '13']
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
     container:
       image: debian:${{ matrix.debian }}-slim
     defaults:
@@ -100,6 +105,7 @@ jobs:
         shell: bash
     env:
       PNM_CI_DEBIAN_RELEASE: ${{ matrix.debian }}
+      PNM_CI_MACHINE: ${{ matrix.runner == 'ubuntu-24.04-arm' && 'aarch64' || 'x86_64' }}
     steps:
       - name: Install container test dependencies
         run: |
@@ -122,6 +128,7 @@ jobs:
           cat /proc/1/comm
           export PNM_OS_RELEASE_FILE=/etc/os-release
           source adapters/platform-linux.sh
+          [[ "$(uname -m)" == "$PNM_CI_MACHINE" ]]
           [[ "$(pnm_platform_id)" == debian ]]
           [[ "$(pnm_platform_version_id)" == "$PNM_CI_DEBIAN_RELEASE" ]]
           pnm_platform_supported

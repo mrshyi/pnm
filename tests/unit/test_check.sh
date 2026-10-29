@@ -324,9 +324,10 @@ test_platform_policy_checks_architecture_for_each_supported_release() {
     pnm_platform_arch() { printf '%s\n' "$architecture"; }
     for fixture in os-release-debian-12 os-release-debian-13 os-release-ubuntu-22.04 os-release-ubuntu-24.04; do
         PNM_OS_RELEASE_FILE="$TEST_ROOT/fixtures/$fixture"
-        architecture=x86_64
-        pnm_platform_supported || return 1
-        for architecture in aarch64 armv7l i686; do
+        for architecture in x86_64 aarch64; do
+            pnm_platform_supported || return 1
+        done
+        for architecture in armv7l i686 riscv64; do
             if pnm_platform_supported; then return 1; fi
         done
     done

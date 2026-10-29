@@ -3,13 +3,30 @@
 from pathlib import Path
 import sys
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 sys.dont_write_bytecode = True
-from test_real_cores import CheckFailed, Harness
+from test_real_cores import CheckFailed, Harness, core_manifest_path, load_core_manifest
 
 
 class RefusalGuardTest(unittest.TestCase):
+    def test_manifests_select_native_architecture_and_reject_foreign_pins(self) -> None:
+        for machine, architecture in (("x86_64", "amd64"), ("aarch64", "arm64")):
+            with self.subTest(machine=machine), patch("test_real_cores.platform.machine", return_value=machine):
+                for previous in (False, True):
+                    manifest = load_core_manifest(core_manifest_path(previous=previous))
+                    self.assertEqual(manifest["architecture"], architecture)
+                    self.assertIn("arm64" if architecture == "arm64" else "linux-64", manifest["xray"]["url"])
+                    self.assertTrue(manifest["hysteria2"]["url"].endswith("linux-" + architecture))
+                foreign = core_manifest_path()
+            other = "aarch64" if machine == "x86_64" else "x86_64"
+            with patch("test_real_cores.platform.machine", return_value=other):
+                with self.assertRaisesRegex(CheckFailed, "architecture differs"):
+                    load_core_manifest(foreign)
+        with patch("test_real_cores.platform.machine", return_value="armv7l"):
+            with self.assertRaisesRegex(CheckFailed, "unsupported"):
+                core_manifest_path()
+
     def test_start_safety_failures_propagate_before_refusal_evidence(self) -> None:
         for label in ("actual process identity mismatch", "actual process privilege mismatch",
                       "helper did not join the Core network namespace", "systemd observation failed"):

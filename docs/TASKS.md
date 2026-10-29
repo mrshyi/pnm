@@ -6,7 +6,8 @@ acceptance is pending. Phase 5 local observability is implemented with passing
 local gates; optional external checks remain deferred.
 Phase 6's scoped recovery diagnostics are implemented with passing local gates;
 firewall management remains manual. Phase 7 local regression/release preparation
-is complete; current-source Ubuntu and Debian userspace CI pass, while full real acceptance remains pending. No release
+is complete; the previously verified amd64 baseline passes Ubuntu and Debian userspace CI.
+Current ARM64 adaptation awaits native matrix execution; full real acceptance remains pending. No release
 has been published.**
 
 **Published runtime baseline:** branch `dev`, source commit `32423be`, VERSION
@@ -15,6 +16,47 @@ resource/status observations, sanitized recovery diagnostics and Ubuntu CI.
 Earlier records below remain specific to their own sources and execution layers.
 
 ## Continuation checkpoint
+
+- Dual-architecture delivery candidate (2026-10-29, based on050c9bb): user authorized amd64/arm64 compatibility. Linux x86_64/aarch64
+  are accepted on the existing four OS releases; other architectures remain
+  refused. Download URLs and initialization digest selection share native
+  asset names. Existing CLI/config/backup formats and transactions are retained;
+  restore rejects foreign ELF64 machine identity before candidate execution,
+  including on binfmt-enabled hosts. No cross-architecture migration is added.
+  Ubuntu22/24 native amd64/arm64 and Debian12/13 containers on matching native
+  runners define eight CI jobs; these modified jobs have not run yet. Old CI
+  results below apply only to their recorded commits, not this dual-architecture candidate.
+- Delivery review (2026-10-29): no blocking defect was confirmed in the runtime,
+  callers, architecture-specific manifests, CI or test changes. Existing local
+  results below apply to this implementation; they were not counted as newly
+  rerun business tests for submission. Release/security scans, manifest digest
+  format checks and diff whitespace checks pass again before commit. User
+  explicitly authorized commit/push; the native online CI result remains pending.
+- Fresh compatibility validation: `make release-check` exits0, including
+  release/syntax/security scans and35 suites/475 passed/0 failed. Five
+  root-only skips remain update CLI, read access, TLS access, low-mode
+  recovery and numeric ownership. Focused suites assets13/node30/archive9
+  also exit0; URL/latest lookup cases exercise both architecture observations,
+  and the archive fixture accepts a native ELF header while refusing foreign
+  Xray/HY2 headers before candidate validation. The modified node digest fixture
+  includes both architecture entries to avoid selecting the wrong hash.
+  Standard ShellCheck0.8.0 and changed-shell-test ShellCheck exit0. Offline
+  mainflow preparation exits0 (36 total/28 executed/8 skipped); Core refusal /
+  native-manifest guards exit0 (2 tests). Native loopback TLS acquisition exits0
+  (7 tests); its initial restricted-sandbox attempt could not create sockets
+  (7 setup errors), then normal reviewed execution passed without product changes.
+  PyYAML validates eight native jobs;20 extracted Bash steps pass syntax and
+  ShellCheck, and integration Python sources pass AST syntax checks. Logs:
+  `/tmp/pnm-arm-{release-check,assets,node,backup,guard,network,shellcheck}.log`.
+  New online CI, actual Core execution and full managed acceptance remain pending.
+- ARM64 test assets: current Xray26.10.21/HY2 2.13.0 and previous Xray26.9.30/
+  HY2 2.12.3 manifests record official release API URLs, sizes and SHA-256
+  digests. Test loaders select the host architecture and reject foreign pins.
+  This is isolated test metadata, not approval to install production assets;
+  no Core assets were downloaded or executed on the development host.
+- Fresh environment: UID1001, aarch64, PID1 codex; no QEMU/nspawn executable
+  was found. Native L1 gates use private temporary fixtures; full root/systemd,
+  reboot and external-client acceptance remains pending for both architectures.
 
 - Delivery / CI verification (2026-10-29): reviewed, committed and pushed the
   Debian12/13 CI addition and its fixture corrections. Source

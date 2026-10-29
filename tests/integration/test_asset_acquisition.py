@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import platform
 from pathlib import Path
 import shutil
 import ssl
@@ -17,9 +18,11 @@ from guest_update_cases import AssetServer
 
 PROJECT = Path(__file__).resolve().parents[2]
 BODY = b"PNM private acquisition fixture\n"
+XRAY_ASSET = "Xray-linux-arm64-v8a.zip" if platform.machine() == "aarch64" else "Xray-linux-64.zip"
+HY2_ASSET = "hysteria-linux-arm64" if platform.machine() == "aarch64" else "hysteria-linux-amd64"
 PINS = {
-    "xray": ("v1.2.3", "/XTLS/Xray-core/releases/download/v1.2.3/Xray-linux-64.zip"),
-    "hysteria2": ("v2.3.4", "/apernet/hysteria/releases/download/app/v2.3.4/hysteria-linux-amd64"),
+    "xray": ("v1.2.3", f"/XTLS/Xray-core/releases/download/v1.2.3/{XRAY_ASSET}"),
+    "hysteria2": ("v2.3.4", f"/apernet/hysteria/releases/download/app/v2.3.4/{HY2_ASSET}"),
 }
 DOWNLOAD = r'''
 set -Eeuo pipefail

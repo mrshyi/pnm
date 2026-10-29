@@ -15,5 +15,6 @@
     "size": 23003298,
     "url": "https://github.com/HyNetworks/hysteria/releases/download/app/v2.12.3/hysteria-linux-amd64",
     "release": "https://github.com/HyNetworks/hysteria/releases/tag/app/v2.12.3"
-  }
+  },
+  "architecture": "amd64"
 }

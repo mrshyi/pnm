@@ -9,11 +9,11 @@
 | 层级 | 环境 / 方法 | 可以证明 | 不可替代 |
 |---|---|---|---|
 | L0 | 当前工作区的源码、Git 和文档静态检查 | 分支与差异、静态缺口、设计可追踪 | 动态测试、真实权限及服务行为 |
-| L1 | Linux 开发环境，含 Ubuntu ARM64／非 root；mock、私有临时目录与回环传输测试 | 返回码、步骤、状态记录、实际文件/权限、受控 curl/TLS 错误和注入分支；root 专项明确跳过 | 目标 amd64 平台、真实 systemd/Core、reboot、公网握手 |
-| L2 | 可丢弃的受支持 Ubuntu/Debian amd64/systemd 环境 | root/账户/权限、真实 unit、监听、恢复、reboot | 其他发行版矩阵及公网客户端连通 |
+| L1 | Linux 开发环境，含 Ubuntu ARM64／非 root；mock、私有临时目录与回环传输测试 | 返回码、步骤、状态记录、实际文件/权限、受控 curl/TLS 错误和注入分支；root 专项明确跳过 | 目标 OS/架构组合、真实 systemd/Core、reboot、公网握手 |
+| L2 | 可丢弃的受支持 Ubuntu/Debian amd64/arm64/systemd 环境 | root/账户/权限、真实 unit、监听、恢复、reboot | 其他发行版矩阵及公网客户端连通 |
 | L3 | 受控外部 Xray/HY2 客户端 | 相应网络条件下真实协议握手和传输 | 服务故障补偿和其他网络条件 |
 
-README 声明支持 Debian 12/13、Ubuntu 22.04/24.04 amd64。当前验证优先级见 TASKS；各发行版未执行就保留未验证，不能仅靠 os-release fixture 宣称整个平台验收完成，也不要求完成 Debian 验收后才验证 Ubuntu。
+README 声明支持 Debian 12/13、Ubuntu 22.04/24.04 amd64/arm64。当前验证优先级见 TASKS；各发行版未执行就保留未验证，不能仅靠 os-release fixture 宣称整个平台验收完成，也不要求完成 Debian 验收后才验证 Ubuntu。
 
 云端开发准备和只运行 L1 的边界见 [CONTRIBUTING.md](../CONTRIBUTING.md)。旧 WSL
 宿主、磁盘容量、私有夹具路径和已完成的准备计划不作为当前环境前提；每次重新检查
@@ -39,6 +39,7 @@ make release-check
 ## 有限 Ubuntu 主流程收口清单
 
 本次收口固定为 U-01～U-08，在 Ubuntu22.04、24.04 amd64 上各执行一套；
+ARM64 适配后复用相同 ID 独立记录，不能继承 amd64 的 PASS，也不增加故障组合；
 不以完成 Debian 或穷举全部故障排列为前置。开发修复状态、既有证据及明确延期项
 统一记录在 TASKS。以下为验收要求，**不是本轮已执行结果，也不是安装/部署授权**。
 
@@ -120,7 +121,7 @@ U-01～U-08。延期不改变这些场景未验证的事实，也不取消生产
 | [test_core_ops.sh](../tests/unit/test_core_ops.sh)、[test_core_evidence.sh](../tests/unit/test_core_evidence.sh) | per-Core 生命周期、binary/metadata 配对、applied 恢复 | T-22/T-25 剩余 L2 存储、中断与恢复失败组合 |
 | [test_preflight.sh](../tests/unit/test_preflight.sh) | 依赖、配置端口、监听归属、重复安装和恢复收据 | 其他平台/获取失败与未执行的实际工具条件 |
 | [test_node.sh](../tests/unit/test_node.sh)、[test_check.sh](../tests/unit/test_check.sh) | 脱敏、双 Core 门控、证据缺失、非 root 拒绝 | T-20/T-26 剩余调度与真实 root/runuser 边界；L3 另验 |
-| [test_tls.sh](../tests/unit/test_tls.sh)、[test_hy2_sni.sh](../tests/unit/test_hy2_sni.sh)、[test_tls_access.sh](../tests/unit/test_tls_access.sh) | 真实证书、SAN、有效期与可读性 | root 专项、目标 amd64 工具版本及真实客户端 TLS 加载 |
+| [test_tls.sh](../tests/unit/test_tls.sh)、[test_hy2_sni.sh](../tests/unit/test_hy2_sni.sh)、[test_tls_access.sh](../tests/unit/test_tls_access.sh) | 真实证书、SAN、有效期与可读性 | root 专项、目标架构工具版本及真实客户端 TLS 加载 |
 
 当前通过和跳过项见 TASKS，历史结果见第 6 节链接。上表是用例与验收边界索引，不将旧缺口重新标为未实现。隔离 VM 应使用真实二进制和 systemd，避免测试 fakebin 提前占用 PATH 造成假通过。
 

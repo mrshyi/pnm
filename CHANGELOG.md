@@ -4,6 +4,10 @@ Notable changes are recorded here for each release.
 
 ## Unreleased
 
+- Add amd64/arm64 platform and architecture-specific Core download/digest selection,
+  native Ubuntu/Debian CI coverage, and foreign-ELF backup refusal before execution.
+  Full ARM64 managed installation/reboot/client acceptance remains pending.
+
 - Add installed-node `dual`, `reality` and `hy2` Profile switching through the
   existing transaction model, retaining Core files/credentials and unchanged peers.
   Initial provisioning continues to prepare both Cores.

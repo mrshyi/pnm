@@ -18,7 +18,7 @@ Read only documents relevant to the task. Keep enduring rules here; keep impleme
 
 ## Linux and cloud development
 
-- Develop and run L1 tests on Linux. Ubuntu ARM64 is a development environment; the managed deployment platform remains the amd64 Debian/Ubuntu matrix in README. Do not bypass platform guards or select amd64 assets for native ARM64 execution.
+- Develop and run L1 tests on Linux. The managed deployment targets are the amd64/arm64 Debian/Ubuntu matrix in README; implementation support and completed acceptance are separate. The ARM64 development host remains a development environment. Do not bypass platform guards or select foreign-architecture assets for native execution.
 - Recheck the execution namespace's UID, architecture, PID 1, tools, privileges and virtualization before integration tests. A cloud host name or an installed `systemctl` does not establish systemd, root, mount or KVM access.
 - Run L1 as the normal workspace user with private temporary fixtures. Keep non-root WARN/UNKNOWN/refusal behavior and explicit root-only skips; never weaken production permission checks to make tests pass.
 - Real service/account, mount, disk-exhaustion and reboot tests require an explicitly authorized disposable environment and the existing harness guards. Do not run them on the development host merely because a test target exists.
