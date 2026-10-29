@@ -16,6 +16,16 @@ Earlier records below remain specific to their own sources and execution layers.
 
 ## Continuation checkpoint
 
+- Debian CI rerun (8a8cec5, run40898436294): the Git identity fix passed;
+  both Debian releases then exposed the same three deploy rollback fixture
+  failures (expected original errors1/73, got recovery error70). The fixture
+  mocked service queries and commands but still depended on the host's
+  `/run/systemd/system` directory during daemon reload. Mock systemd availability
+  alongside the existing service stubs; production code and assertions are
+  unchanged. A private-copy probe forcing host availability false reproduces
+  all three failures before the fix (5 passed/3 failed, exit1) and passes after
+  it (8/0, exit0). Native focused suite8/0, ShellCheck0.8.0 and diff checks exit0.
+  Fresh four-platform CI results remain pending for this fixture correction.
 - Debian CI first execution (36a2eaf, run40898184336): both Debian containers
   reached the expected12/13 amd64 identity but the source-ID command refused128
   because the root container and mounted checkout have different owners. Tests

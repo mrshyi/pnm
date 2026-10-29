@@ -44,6 +44,7 @@ prepare_deploy() {
     DEPLOY_MARK_CONFIGURED_CALLS=0
     DEPLOY_RESTORE_CALLS=0
     pnm_require_root() { return 0; }
+    pnm_systemd_available() { return 0; }
     pnm_systemd_load_state() { printf 'not-found\n'; }
     pnm_systemd_active_state() { printf 'inactive\n'; }
     pnm_systemd_show_value() { [[ "$2" == MainPID ]] || return 1; printf '0\n'; }
