@@ -96,8 +96,8 @@ def lifecycle() -> dict:
     configured=scenario=='configured-ports'
     acquisition=scenario in ('deployment-acquisition-failures','deployment-version-failures')
     acquisition_checks=9 if scenario=='deployment-version-failures' else 7
-    expected=(26 if update else 19 if evidence else 14+acquisition_checks if acquisition
-              else 17 if candidates else 16 if inodes or space or configured else 15 if progress or rename else 14)
+    expected=(31 if update else 24 if evidence else 19+acquisition_checks if acquisition
+              else 22 if candidates else 21 if inodes or space or configured else 20 if progress or rename else 19)
     need(result.returncode==0 and detail.get('passed') is True
          and detail.get('mainflow_completed') is True and len(detail.get('checks',[]))==expected,
          'independent VM mainflow/update checks did not pass')

@@ -17,6 +17,55 @@ Earlier records below remain specific to their own sources and execution layers.
 
 ## Continuation checkpoint
 
+- Expanded cloud acceptance (2026-10-30 UTC): user authorized the recommended
+  next steps, then explicitly separated public dual-protocol acceptance. The
+  managed-installation workflow now selects eight native OS/architecture pairs
+  automatically (max four concurrent) or a dispatch-selected subset. The existing
+  lifecycle gains a real dual→reality→hy2→dual cycle with unchanged-peer/resource
+  assertions, a real HY2 UDP bind failure/compensation/retry, and invalid-candidate
+  admission refusal. It adds five checks to the prior14; VM lifecycle counts
+  follow the same shared19-check baseline. No production CLI change is included.
+  Native cloud execution is pending; local preparation guards40 total/32 executed/
+  8 skipped and workflow/Bash/Python checks pass. VM reboot integration is next;
+  public endpoint provisioning/client tests remain separate by user instruction.
+- Cloud root-cause closure (2026-10-30 UTC; 2026-10-29 workspace date):
+  fixed source `2e927a29addf475df0ff4b2fd818eb9cdedc6d71` passes
+  [managed-installation run40997253783](https://github.com/mrshyi/pnm/actions/runs/40997253783),
+  job123873139880, Debian13 amd64/lifecycle. The real export log confirms
+  template root mode0700 before normalization to0755. The parent evidence
+  directory remains0700. Rootfs was initially created0700 and Docker export
+  did not supply a root entry to correct it; unprivileged Core services could
+  not traverse `/`. Earlier cloud diagnostics showed Xray post-health FAIL,
+  permission_denied and rollback. This was a test-template permission defect,
+  not an amd64/ARM64 asset or PNM platform-guard defect.
+- The fixed cloud boot-only and lifecycle clones both report root0755,
+  manager running, mapped non-host-root UIDs, private namespace/network and
+  approved owned cgroup/payload boundaries. All14 existing lifecycle checks
+  pass: fresh baseline, actual node init/validate and preview, real dual-Core
+  installation/commit, distinct service identities and bounded privileges,
+  config/InvocationID applied bindings, URI readiness, Core/TLS health,
+  repeat-install refusal, each Core restart and apply preserving its peer,
+  trusted protected backup/restore with real bindings and damaged-package refusal.
+  No recovery-required flag remains in the successful scenario. Both clones
+  exit0, retire their exact scopes/mounts and leave host account/package database
+  hashes unchanged. Product files32 retain manifest4e2c718e5391d02c573d9cd771fa26299641a880398dcc44185c4aa6fcc4de98
+  across the failing and passing runs: production validators/permissions/code
+  were not weakened or modified. Only harness diagnostics and fixture mode changed.
+- Fresh local guard regression:40 total/32 executed/8 root-only skipped,
+  exit0; synthetic export verifies root0700 becomes0755 while its parent stays
+  private0700. Builder ShellCheck0.8.0, syntax, security/release scans and diff
+  checks pass. A prior diagnostic commit b0faa98 missed the extracted timeout
+  fixture's new helper dependency;2e4d3cf fixed the fixture, and39 guards then
+  passed before the subsequent cloud diagnostic commits. No production behavior
+  was changed for that test correction. The latest regular eight-job
+  [CI40997254129](https://github.com/mrshyi/pnm/actions/runs/40997254129)
+  was still running at this checkpoint; no final result is claimed.
+- Remaining acceptance: this successful pilot is only Debian13 amd64/
+  selfsigned lifecycle. Other OS/architecture deployment combinations, the
+  distinct-version update/four fixed failure scenarios, external-ca variants,
+  actual Profiles, installed CLI wrapper/uninstall, VM reboot and public clients
+  remain unaccepted. Do not turn14 checks or local ready URIs into those claims.
+  The development host was not used for dependency/image preparation or deployment.
 - Cloud failure investigation (2026-10-29): continuing the authorized isolated
   CI pilot after source751634a failed install apply78. The retired runner's
   private logs are unavailable, so the existing guest call wrapper now adds
@@ -101,7 +150,7 @@ Earlier records below remain specific to their own sources and execution layers.
   |---|---|---|---|---|
   | Debian12 | amd64 | PASS | BLOCKED | BLOCKED |
   | Debian12 | arm64 | PASS | BLOCKED | BLOCKED |
-  | Debian13 | amd64 | PASS | Boot/isolation PASS; selected Core suite pending | FAIL: first install78; remaining stages unexecuted |
+  | Debian13 | amd64 | PASS | Managed lifecycle14 PASS; separate protocol suite pending | Lifecycle14 PASS on2e927a2; remaining acceptance pending |
   | Debian13 | arm64 | PASS | BLOCKED | BLOCKED |
   | Ubuntu22.04 | amd64 | PASS | PASS | BLOCKED |
   | Ubuntu22.04 | arm64 | PASS | PASS | BLOCKED |

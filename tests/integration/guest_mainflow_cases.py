@@ -713,6 +713,9 @@ try:
         binding(core)
         links_ready('links-apply-'+core)
         passed.append('actual '+core+' apply activates desired change and preserves peer Core')
+    stage='real installed-node Profile cycle'
+    from guest_profile_cases import profile_cycle
+    profile_cycle(call,core_state,binding,resources,fingerprint,check,passed)
     stage='protected backup and verified restore'
     all_paths=('/etc/pnm/node.conf','/etc/pnm/versions.conf')+tuple(p for c in units for p in resources[c])
     backup_resources={p:fingerprint(p) for p in all_paths}
@@ -807,7 +810,7 @@ try:
     restore_interrupted=scenario.startswith('restore-sigkill-')
     verify_source_snapshot(Path('/opt/pnm'),Path('/opt/pnm-source-hashes.json'))
     result={'passed':True,'checks':passed,'clock_diagnostic':checks.get('time_sync'),'uids_distinct':True,
-            'mainflow_completed':True,
+            'mainflow_completed':True,'profiles_checked':True,
             'tls_mode':'external-ca' if external_tls else 'selfsigned-pin',
             'external_ca_mismatch_checked':scenario=='external-ca-mismatch',
             'damaged_backup_refused':True,

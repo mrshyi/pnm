@@ -158,7 +158,8 @@ print('install_fixture='+str(base)+' source_files='+str(len(hashes)),flush=True)
 
 # Only the newly created clone is writable; no host directory is bind-mounted.
 for name,target in (('guest_mainflow_cases.py','pnm-install-cases.py'),
-                    ('guest_mainflow_worker.py','pnm-boot-worker.py')):
+                    ('guest_mainflow_worker.py','pnm-boot-worker.py'),
+                    ('guest_profile_cases.py','guest_profile_cases.py')):
     destination=root/'opt'/target
     assert not destination.is_symlink()
     shutil.copyfile(repo/'tests/integration'/name,destination)

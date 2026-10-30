@@ -3,11 +3,11 @@
 ## Automated disposable CI preparation
 
 `.github/workflows/guest-mainflow.yml` adds a separate managed-installation job.
-Pushes touching the workflow/runtime/integration harness automatically select one
-Debian13 amd64 lifecycle pilot on an Ubuntu24.04 runner. This intentionally starts
-with one combination; it is not eight completed deployment acceptance records.
+Pushes touching the workflow/runtime/integration harness select eight native
+Debian12/13 and Ubuntu22/24 amd64/arm64 combinations, with at most four concurrent.
+This defines the execution matrix, not eight completed deployment acceptance records.
 `workflow_dispatch` declares OS choices debian12/debian13/ubuntu22/ubuntu24,
-native amd64/arm64 runner selection and the eight existing bounded scenarios:
+native amd64/arm64 runner selection (or all) and the eight existing bounded scenarios:
 lifecycle, external-ca, external-ca-mismatch, core-update, dependency-refusal,
 deployment-startup-failure, core-update-failure and restore-failure. Dispatch
 availability and job success must be checked in GitHub, not inferred from YAML.
@@ -28,8 +28,8 @@ The new `--boot-only` mode reuses the existing nspawn driver and guest identity/
 UID/network/cgroup/host-database checks. It does not run PNM operations. Only after
 a real verified clone boot, safe shutdown and clean host observations does it
 write the original template's boot-result.json. It never fabricates boot success.
-The next invocation clones that verified template and executes the unchanged
-selected CLI scenario with approved native, checksum-verified Core test assets.
+The next invocation clones that verified template and executes the selected
+CLI scenario plus the real Profile cycle/compensation checks with approved native, checksum-verified Core test assets.
 Both hybrid cgroup mounts and cgroup v2 are accepted only when host mountinfo
 confirms this guest's owned scope/payload boundary; no host cgroup root is accepted.
 Failure is nonzero and retained as failure, not silently skipped.
@@ -37,8 +37,8 @@ Failure is nonzero and retained as failure, not silently skipped.
 Artifacts are restricted to source/OS/architecture/scenario, image provenance,
 public package versions and success metadata. Guest logs, account databases,
 configurations, snapshots, credentials and share links are never uploaded.
-The job does not establish VM/kernel reboot, public connectivity, actual Profile
-switching, or the user-facing install.sh wrapper. It must first run successfully
+The job does not establish VM/kernel reboot, public connectivity or the
+user-facing install.sh wrapper. Actual Profile checks require a passing new run. It must first run successfully
 before any current-source managed-installation PASS is recorded. Development-host
 package installation, Docker preparation or deployment is not enabled by this path.
 

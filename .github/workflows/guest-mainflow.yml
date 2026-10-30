@@ -15,13 +15,13 @@ on:
       os:
         description: Native guest OS
         type: choice
-        options: [debian13, debian12, ubuntu24, ubuntu22]
-        default: debian13
+        options: [all, debian13, debian12, ubuntu24, ubuntu22]
+        default: all
       arch:
         description: Native runner and guest architecture
         type: choice
-        options: [amd64, arm64]
-        default: amd64
+        options: [all, amd64, arm64]
+        default: all
       scenario:
         description: Existing bounded mainflow scenario
         type: choice
@@ -33,12 +33,17 @@ permissions:
 
 jobs:
   managed-installation:
-    # Start with one automatic pilot; dispatch reuses it for the other native pairs.
-    runs-on: ${{ inputs.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        os: ${{ inputs.os && inputs.os != 'all' && fromJSON(format('["{0}"]', inputs.os)) || fromJSON('["debian12","debian13","ubuntu22","ubuntu24"]') }}
+        arch: ${{ inputs.arch && inputs.arch != 'all' && fromJSON(format('["{0}"]', inputs.arch)) || fromJSON('["amd64","arm64"]') }}
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     timeout-minutes: 45
     env:
-      PNM_CI_OS: ${{ inputs.os || 'debian13' }}
-      PNM_CI_ARCH: ${{ inputs.arch || 'amd64' }}
+      PNM_CI_OS: ${{ matrix.os }}
+      PNM_CI_ARCH: ${{ matrix.arch }}
       PNM_CI_SCENARIO: ${{ inputs.scenario || 'lifecycle' }}
     steps:
       - name: Check out candidate
@@ -106,7 +111,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: managed-installation-${{ github.run_id }}-${{ github.run_attempt }}
+          name: managed-installation-${{ matrix.os }}-${{ matrix.arch }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             ci-evidence/identity.json
             ci-evidence/template.json
