@@ -35,9 +35,11 @@ class GuestGuardTests(unittest.TestCase):
                 'time\tSTEP_FAILED\tprivate-key-DO-NOT-PRINT rc=78\n'
                 'time\tROLLED_BACK\tprivate-key-DO-NOT-PRINT\n')
             report=namespace['sanitized_failure'](
-                b'Staged Xray version does not match the approved manifest. private-key-DO-NOT-PRINT',root)
+                b'Staged Xray version does not match the approved manifest. private-key-DO-NOT-PRINT '
+                b'hysteria2 post-health failed at hysteria_tls_permissions (FAIL)',root)
             self.assertEqual(report['error_categories'],['xray_version_mismatch'])
             self.assertIn({'event':'STEP_FAILED','step':'stage_assets','rc':78},report['transaction_events'])
+            self.assertEqual(report['health_checks'],[{'core':'hysteria2','check':'hysteria_tls_permissions','status':'FAIL'}])
             self.assertNotIn('private-key-DO-NOT-PRINT',json.dumps(report))
 
     def test_cgroup_view_is_confined_to_owned_scope_on_both_layouts(self):

@@ -45,6 +45,8 @@ def sanitized_failure(stderr: bytes, state: Path = Path('/var/lib/pnm')) -> dict
         'tls_check_failed': b'Hysteria2 TLS certificate check returned ',
         'exec_format': b'Exec format error',
         'permission_denied': b'Permission denied',
+        'xray_post_health': b'post-health failed for Xray;',
+        'hy2_post_health': b'post-health failed for Hysteria2;',
     }
     steps={'ensure_service_accounts','prepare_root','prepare_dirs','stage_assets',
            'stage_tls','write_secrets','render_configs','install_units','validate',
@@ -71,8 +73,13 @@ def sanitized_failure(stderr: bytes, state: Path = Path('/var/lib/pnm')) -> dict
                     events.append({'event':event})
     except OSError:
         events.append({'event':'DIAGNOSTICS_UNAVAILABLE'})
+    health_ids={'xray','xray_permissions','xray_config_consistency','hysteria2',
+                'hysteria_permissions','hysteria_tls','hysteria_tls_permissions','hysteria2_config_syntax'}
+    health=[{'core':core,'check':name,'status':status} for core,name,status in re.findall(
+        r'\b(xray|hysteria2) post-health failed at ([a-z0-9_]+) \((FAIL|WARN|UNKNOWN|SKIP)\)',
+        stderr.decode('utf-8',errors='replace')) if name in health_ids]
     return {'error_categories':[key for key,value in messages.items() if value in stderr],
-            'transaction_events':events[-12:]}
+            'health_checks':health[:4], 'transaction_events':events[-12:]}
 
 def call(label,args,accepted=(0,),*,process_slot=None):
     global failure_diagnostics
