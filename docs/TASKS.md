@@ -17,6 +17,11 @@ Earlier records below remain specific to their own sources and execution layers.
 
 ## Continuation checkpoint
 
+- Single dispatch41007196357/source62472cc now stops on the first failed
+  guest boot as intended, rather than retrying. Host received no result bytes;
+  read-only disk extraction did not parse a completion record. Add fixed
+  exception-class/worker-line diagnostics from the private serial log and
+  read-result exit/length booleans; never publish raw guest journals or data.
 - Single amd64 VM dispatch41006646409 at sourced10c1a1 still loses completion
   frames; its fixed-class serial emission diagnostic was not observed. Further
   diagnosis reads only fixed completion-record paths from the owned stopped

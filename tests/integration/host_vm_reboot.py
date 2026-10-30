@@ -189,7 +189,8 @@ def run_vm(root, work):
                         try:
                             persisted=json.loads(probe.stdout)
                         except (ValueError,UnicodeError):
-                            print(json.dumps({'vm_persisted_result':scope,'present':False}),flush=True)
+                            print(json.dumps({'vm_persisted_result':scope,'present':False,'bytes':len(probe.stdout),
+                                'read_exit':probe.returncode,'lookup_missing':b'File not found' in probe.stderr}),flush=True)
                             continue
                         print(json.dumps({'vm_persisted_result':scope,'present':True,
                             'passed':persisted.get('passed') is True,
@@ -199,7 +200,10 @@ def run_vm(root, work):
                     log.flush()
                     raw=(work/'vm-serial.private.log').read_bytes()
                     print(json.dumps({'vm_serial_has_result':b'boot-result' in raw,
-                                      'vm_serial_has_emit_error':b'PNM_VM_EMIT_ERROR' in raw}),flush=True)
+                        'vm_serial_has_emit_error':b'PNM_VM_EMIT_ERROR' in raw,
+                        'vm_worker_exception_lines':[int(n) for n in re.findall(rb'File "/opt/guest_vm_boot.py", line ([0-9]+)',raw)],
+                        'vm_exception_classes':sorted({n.decode('ascii') for n in re.findall(
+                            rb'\b(NameError|TypeError|ValueError|FileNotFoundError|UnboundLocalError|RuntimeError|PermissionError):',raw)})}),flush=True)
                 require(all(hashlib.sha256(Path(p).read_bytes()).digest()==v for p,v in databases.items()),
                         'VM test changed host account/package databases')
         public={'passed':True,'backend':'qemu-kvm','architecture':machine,'independent_boots':2,
