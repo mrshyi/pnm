@@ -35,6 +35,7 @@ profile_fixture() {
     pnm_systemd_show_value() { [[ "$2" == InvocationID ]] && printf '%s\n' "${fixture_invocation[$1]}"; }
     pnm_systemd_daemon_reload() { :; }
     pnm_core_runtime_listener_ready() { :; }
+    pnm_profile_wait_listener() { :; }
     pnm_check_deploy_core_health() { local unit; unit=$(pnm_core_lifecycle_unit "$1"); [[ "${fixture_active[$unit]}:${fixture_enabled[$unit]}" == active:enabled ]]; }
     pnm_systemctl() {
         local action=$1 unit=$2
@@ -44,7 +45,7 @@ profile_fixture() {
             disable) fixture_enabled[$unit]=disabled ;;
             stop | reset-failed) fixture_active[$unit]=inactive ;;
             start)
-                if [[ "$fail_start" == "$unit" ]]; then fail_start=''; fixture_active[$unit]=failed; return 1; fi
+                if [[ "$fail_start" == "$unit" ]]; then fail_start=''; fixture_active[$unit]=${fail_state:-failed}; return 1; fi
                 if [[ "${fixture_active[$unit]}" != active ]]; then ((serial+=1)); printf -v 'fixture_invocation[$unit]' '%032x' "$serial"; fi
                 fixture_active[$unit]=active ;;
             *) return 1 ;;
@@ -123,6 +124,11 @@ test_profile_start_failure_recovers() (
     pnm_profile_command set hy2 --yes
 )
 
+test_profile_auto_restart_failure_recovers() (
+    local fail_state=activating
+    test_profile_start_failure_recovers
+)
+
 test_profile_precheck_refuses_changes() (
     profile_fixture
     invalid_core=hysteria2
@@ -198,6 +204,7 @@ test_profile_menu_confirmation() (
 run_test 'legacy nodes default to dual and invalid profiles refuse' test_profile_compatibility
 run_test 'profile roundtrip preserves files and unchanged Core invocations' test_profile_switch_roundtrip
 run_test 'failed activation restores the prior profile and applied binding, then permits retry' test_profile_start_failure_recovers
+run_test 'auto-restarting failed activation is stopped before policy recovery' test_profile_auto_restart_failure_recovers
 run_test 'profile precheck and confirmation refuse before service changes' test_profile_precheck_refuses_changes
 run_test 'profile show exposes actual drift and diagnostics fail it' test_profile_show_reports_actual_drift
 run_test 'disabled Core restart and client link are refused' test_profile_disabled_core_refuses_restart

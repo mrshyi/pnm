@@ -19,6 +19,7 @@ account_deletions=('account-deletion-userdel','account-deletion-groupdel')
 parser.add_argument('--baseline',type=Path,required=True,help='private verified boot fixture parent')
 parser.add_argument('--nspawn',type=Path,required=True,help='trusted native systemd-nspawn executable')
 parser.add_argument('--asset-cache',type=Path,required=True,help='verified pinned Core asset cache')
+parser.add_argument('--vm-reboot',action='store_true',help='run the existing independent-kernel two-boot worker')
 parser.add_argument('--boot-only',action='store_true',help='verify a fresh template clone without running PNM operations')
 parser.add_argument('--scenario',choices=('lifecycle','external-ca','external-ca-mismatch','deployment-failure','core-update','core-update-failure',
     'configured-ports','runtime-evidence','restore-failure','restore-publication','startup-readiness',
@@ -146,7 +147,7 @@ if is_update:
         path.write_bytes(current_assets[core])
         path.chmod(0o600)
     write_clone_file(root/'opt/pnm-update-targets.json',json.dumps(target_manifest))
-prefix=[str(options.nspawn),'--directory='+str(root),'--machine=placeholder','--settings=no','--register=no','--link-journal=no','--private-network','--private-users=pick','--private-users-ownership=auto','--resolv-conf=off','--timezone=off','--console=pipe']
+prefix=[str(options.nspawn),'--directory='+str(root),'--machine=placeholder','--settings=no','--register=no','--link-journal=no','--private-network','--private-users=pick','--private-users-ownership=auto','--capability=CAP_SYS_PTRACE','--resolv-conf=off','--timezone=off','--console=pipe']
 machine='pnm-install-'+uuid.uuid4().hex[:18]
 prefix=[('--directory='+str(root)) if s.startswith('--directory=') else ('--machine='+machine) if s.startswith('--machine=') else s for s in prefix]
 (base/'nspawn-prefix.json').write_text(json.dumps(prefix))
@@ -282,6 +283,11 @@ assert (root/'etc/systemd/system/multi-user.target.wants/pnm-boot-probe.service'
 write_clone_file(unit,'[Unit]\nDescription=Private PNM guest main-flow test\nAfter=basic.target\n'
     '[Service]\nType=simple\nExecStart=/usr/bin/python3 /opt/pnm-boot-worker.py\n'
     'NoNewPrivileges=yes\nRuntimeMaxSec=690\n[Install]\nWantedBy=multi-user.target\n')
+if options.vm_reboot:
+    assert not options.boot_only and options.scenario=='lifecycle', 'VM pilot scope is lifecycle only'
+    from host_vm_reboot import run_vm
+    run_vm(root,base)
+    raise SystemExit(0)
 from pathlib import Path
 import hashlib,json,os,signal,subprocess,time,uuid
 root=base/'rootfs'

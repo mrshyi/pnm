@@ -118,7 +118,7 @@ def lifecycle() -> dict:
         json.dump(baseline,stream)
         stream.flush()
         os.fsync(stream.fileno())
-    return {'mainflow_checks':14,'update_checks':12 if update else 0,
+    return {'mainflow_checks':19,'update_checks':12 if update else 0,
             'runtime_evidence_checks':5 if evidence else 0,
             'configured_port_checks':2 if configured else 0,
             'committed_progress_refusal_checks':1 if progress else 0,

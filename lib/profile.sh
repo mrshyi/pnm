@@ -81,7 +81,7 @@ pnm_profile_validate_core() {
 }
 
 pnm_profile_restore() {
-    local core
+    local core state
     local PNM_CORE_PRIOR_CONFIG_HASH PNM_CORE_PRIOR_APPLIED_HASH PNM_CORE_PRIOR_APPLIED_ATTRIBUTES
     local PNM_LIFECYCLE_UNIT PNM_LIFECYCLE_PRE_ACTIVE PNM_LIFECYCLE_PRE_ENABLED
     pnm_tx_restore_written_files || return "$PNM_EXIT_SOFTWARE"
@@ -90,9 +90,13 @@ pnm_profile_restore() {
         PNM_LIFECYCLE_UNIT=$PNM_CORE_UNIT
         PNM_LIFECYCLE_PRE_ACTIVE=${PNM_PROFILE_ACTIVE[$core]}
         PNM_LIFECYCLE_PRE_ENABLED=${PNM_PROFILE_ENABLED[$core]}
-        if [[ "$(pnm_systemd_active_state "$PNM_CORE_UNIT")" == failed ]]; then
-            pnm_systemd_stop_verified "$PNM_CORE_UNIT" || return "$PNM_EXIT_SOFTWARE"
-        fi
+        state="$(pnm_systemd_active_state "$PNM_CORE_UNIT")" || return "$PNM_EXIT_SOFTWARE"
+        case "$state" in
+            failed | activating | deactivating)
+                pnm_systemd_stop_verified "$PNM_CORE_UNIT" || return "$PNM_EXIT_SOFTWARE" ;;
+            active | inactive) ;;
+            *) return "$PNM_EXIT_SOFTWARE" ;;
+        esac
         pnm_core_lifecycle_restore || return "$PNM_EXIT_SOFTWARE"
         PNM_CORE_PRIOR_CONFIG_HASH=${PNM_PROFILE_CONFIG_HASH[$core]}
         PNM_CORE_PRIOR_APPLIED_HASH=${PNM_PROFILE_APPLIED_HASH[$core]}
@@ -100,6 +104,25 @@ pnm_profile_restore() {
         pnm_core_recover_applied || return "$PNM_EXIT_SOFTWARE"
     done
     pnm_tx_restore_directories
+}
+
+pnm_profile_wait_listener() {
+    local core=$1 unit=$2 pid attempt protocol port
+    if [[ "$core" == xray ]]; then
+        protocol=tcp port=${PNM_PROFILE_NODE[XRAY_PORT]}
+    else
+        protocol=udp port=${PNM_PROFILE_NODE[HY2_PORT]}
+    fi
+    for ((attempt=0; attempt<26; attempt+=1)); do
+        [[ "$(pnm_systemd_active_state "$unit")" == active ]] || return "$PNM_EXIT_CONFIG"
+        pid="$(pnm_systemd_show_value "$unit" MainPID)" || return "$PNM_EXIT_CONFIG"
+        if pnm_listener_owned_by_pid "$protocol" "$port" "$pid" &&
+            [[ "$(pnm_systemd_active_state "$unit")" == active && "$(pnm_systemd_show_value "$unit" MainPID)" == "$pid" ]]; then
+            return 0
+        fi
+        if ((attempt<25)); then sleep 0.2 || return "$PNM_EXIT_SOFTWARE"; fi
+    done
+    return "$PNM_EXIT_CONFIG"
 }
 
 pnm_profile_apply() {
@@ -113,6 +136,7 @@ pnm_profile_apply() {
             PNM_PROFILE_CHANGED+=("$core")
             if [[ "$wanted_active" == active ]]; then
                 pnm_systemctl enable "$PNM_CORE_UNIT" && pnm_systemctl start "$PNM_CORE_UNIT" || return "$PNM_EXIT_SOFTWARE"
+                pnm_profile_wait_listener "$core" "$PNM_CORE_UNIT" || return "$PNM_EXIT_CONFIG"
                 pnm_check_deploy_core_health "$core" || return "$PNM_EXIT_CONFIG"
                 pnm_core_record_applied_config "$core" "$PNM_CORE_CONFIG" "$PNM_TX_PATH" || return $?
             else

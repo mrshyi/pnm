@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import os
 import platform
+import socket
 from pathlib import Path
 import shutil
 import ssl
@@ -113,6 +114,17 @@ class AcquisitionTest(unittest.TestCase):
         self.assertEqual(expected_curl, curl_status)
         self.assertEqual(expected_status, result.returncode)
         self.assertFalse(destination.exists() or destination.is_symlink())
+
+    def test_listener_requires_the_actual_process_socket(self):
+        script='source "$1/lib/common.sh"; source "$1/lib/config.sh"; source "$1/adapters/network.sh"; pnm_listener_owned_by_pid "$2" "$3" "$4"'
+        with socket.socket(socket.AF_INET,socket.SOCK_DGRAM) as udp:
+            udp.bind(('127.0.0.1',0))
+            for protocol,port in (('tcp',self.server.server_address[1]),('udp',udp.getsockname()[1])):
+                for pid,expected in ((os.getpid(),0),(1,1)):
+                    with self.subTest(protocol=protocol,pid=pid):
+                        result=subprocess.run(['bash','-c',script,'--',str(PROJECT),protocol,str(port),str(pid)],capture_output=True,timeout=5)
+                        self.assertEqual(result.returncode,expected,result.stderr.decode())
+                        self.assertEqual(result.stdout,b'')
 
     def test_verified_transport_publishes_private_content(self) -> None:
         for core in PINS:

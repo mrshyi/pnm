@@ -4,8 +4,8 @@
 
 `.github/workflows/guest-mainflow.yml` adds a separate managed-installation job.
 Pushes touching the workflow/runtime/integration harness select eight native
-Debian12/13 and Ubuntu22/24 amd64/arm64 combinations, with at most four concurrent.
-This defines the execution matrix, not eight completed deployment acceptance records.
+Debian12/13 and Ubuntu22/24 amd64/arm64 combinations, with at most four concurrent. Two additional Debian13 native KVM pilots
+(amd64/arm64) test independent kernel reboot. This defines the execution matrix, not eight completed deployment acceptance records.
 `workflow_dispatch` declares OS choices debian12/debian13/ubuntu22/ubuntu24,
 native amd64/arm64 runner selection (or all) and the eight existing bounded scenarios:
 lifecycle, external-ca, external-ca-mismatch, core-update, dependency-refusal,
@@ -37,10 +37,24 @@ Failure is nonzero and retained as failure, not silently skipped.
 Artifacts are restricted to source/OS/architecture/scenario, image provenance,
 public package versions and success metadata. Guest logs, account databases,
 configurations, snapshots, credentials and share links are never uploaded.
-The job does not establish VM/kernel reboot, public connectivity or the
-user-facing install.sh wrapper. Actual Profile checks require a passing new run. It must first run successfully
-before any current-source managed-installation PASS is recorded. Development-host
-package installation, Docker preparation or deployment is not enabled by this path.
+The nspawn backend does not establish VM/kernel reboot or public connectivity.
+The `qemu` backend is currently a lifecycle-only pilot: guest kernel/initrd
+packages are acquired by signed APT inside the owned build container; the host
+controller populates one owned2GiB ext4 file using mkfs.ext4 -d without host mounts.
+It requires actual native KVM, refuses software/cross-architecture fallback,
+passes only that disk FD to QEMU and supplies no NIC, host shares or monitor.
+The existing guest_vm_boot/lifecycle workers retain their nonce/boot-ID/kernel/
+root-UUID/worker-hash approval guards. The host verifies its QEMU process and disk
+before each fresh per-boot serial approval, then requires same-disk kernel reboot,
+19 lifecycle checks and7 reboot checks, exit0 and unchanged host databases.
+ARM64 uses the QEMU virt device-tree marker and PL011 console, while x86 retains
+its QEMU DMI and ttyS0 checks. Missing KVM fails explicitly; it is not a passing
+reboot test. Native nspawn root receives namespace-scoped CAP_SYS_PTRACE only so
+the existing PID/socket ownership probe can inspect its own Core processes; all
+PID/user/network/cgroup guards and service capability bounds remain in force.
+Public dual-protocol acceptance is separate by user instruction. Neither backend
+validates the installed CLI wrapper or normal uninstall yet; online results are
+required before claiming any new Profile/reboot acceptance.
 
 
 Current Ubuntu work is limited to [U-01–U-08](../../docs/ACCEPTANCE_PLAN.md#ubuntu-closeout).

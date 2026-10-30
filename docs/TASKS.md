@@ -17,6 +17,34 @@ Earlier records below remain specific to their own sources and execution layers.
 
 ## Continuation checkpoint
 
+- Eight-way Profile execution (source2ad759e, run40999425408): all eight
+  native combinations prepared/booted and reached real Profile reality after
+  actual installation/restart/apply. The controlled HY2 bind failure then
+  exposed a false-success race on some targets and incomplete restoration of
+  auto-restarting service policy on others; no full matrix/Profile PASS is
+  claimed. Root fixes reuse the existing exact-PID socket attribution helper
+  before recording activation and stop failed/activating/deactivating targets
+  before compensation. The mapped guest grants its own root namespace-scoped
+  ptrace capability for ownership inspection; Core service capability bounds
+  remain unchanged. Focused Profile10 and preflight19 pass; native loopback
+  transport/PID attribution8 pass. A duplicate local helper initially caused a
+  preflight failure in release-check(exit2); it was removed before delivery in
+  favor of the existing helper. Fresh make release-check then exits0:
+  35 suites/476 passed/0 failed, with the existing five root-only skips.
+  Standard ShellCheck0.8.0 and security/release scans also pass.
+- Independent reboot integration (2026-10-30 UTC): added native KVM pilots on
+  Debian13 amd64/arm64, reusing the existing guest VM nonce approval/lifecycle/
+  reboot workers rather than replacing their guarded state checks. Signed guest
+  APT prepares kernel/initrd in the disposable build container; host creates an
+  owned2GiB ext4 file without mount/loop devices, boots via inherited disk FD,
+  verifies process/drive identity and approves each of two distinct guest boots.
+  There is no NIC, host share, monitor, physical disk or software-emulation
+  fallback. ARM64 adds explicit virt/FDT and PL011 identity with native-arch
+  binding. Missing KVM remains an environment failure, not a reboot PASS.
+  Local integration guards41 total/33 executed/8 skipped, Bash/ShellCheck and
+  Python/workflow checks pass; actual reboot is not yet accepted. Public dual-
+  protocol tests are explicitly outside this increment. No development-host
+  installation, privileged container or reboot was performed.
 - Expanded cloud acceptance (2026-10-30 UTC): user authorized the recommended
   next steps, then explicitly separated public dual-protocol acceptance. The
   managed-installation workflow now selects eight native OS/architecture pairs

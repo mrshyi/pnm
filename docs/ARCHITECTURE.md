@@ -238,6 +238,12 @@ requires a configured node, supported systemd platform, canonical PNM units with
 no drop-ins, protected binaries, valid selected runtime configuration and confirmed
 applied evidence for already active Cores. It changes only service policy that
 differs from the target, verifies local health and writes node.conf last.
+On activation, Profile switching waits within the existing26-probe budget for
+the configured listener to be attributed to that unit's stable MainPID, reusing
+the network adapter's exact-PID check. A foreign process occupying the port
+cannot authorize a committed Profile. Compensation stops failed/auto-restarting
+services before restoring prior active/enabled policy and applied bindings.
+
 The transaction retains service baselines in `profile-state.tsv`; existing file
 snapshots cover node.conf/applied changes. Compensation restores files, changed
 services and previously confirmed applied bindings. Unchanged services retain

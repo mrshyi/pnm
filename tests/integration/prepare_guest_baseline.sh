@@ -8,7 +8,7 @@ if [[ "${PNM_RUN_GUEST_PREPARE:-0}" != 1 || "${GITHUB_ACTIONS:-}" != true ||
     printf 'Guest preparation requires explicit opt-in on a disposable GitHub-hosted root runner.\n' >&2
     exit 77
 fi
-[[ $# == 2 ]] || { printf 'Usage: prepare_guest_baseline.sh OS BASELINE\n' >&2; exit 64; }
+[[ $# == 2 || ( $# == 3 && "$3" == --with-kernel ) ]] || { printf 'Usage: prepare_guest_baseline.sh OS BASELINE [--with-kernel]\n' >&2; exit 64; }
 case "$1" in
     debian12) image=debian:12-slim; os_id=debian; version=12 ;;
     debian13) image=debian:13-slim; os_id=debian; version=13 ;;
@@ -19,6 +19,10 @@ esac
 repo="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd -P)"
 source "$repo/lib/common.sh"
 arch="$(pnm_arch)"
+kernel_package=''
+if [[ "${3-}" == --with-kernel ]]; then
+    if [[ "$os_id" == debian ]]; then kernel_package="linux-image-$arch"; else kernel_package=linux-image-generic; fi
+fi
 [[ "$(cat /proc/1/comm)" == systemd ]] || exit 69
 for tool in docker systemd-nspawn python3 tar; do command -v "$tool" >/dev/null || exit 69; done
 baseline="$2"
@@ -56,11 +60,15 @@ cleanup() {
 trap cleanup EXIT
 # No privileged mode, host bind mounts, host sockets or host PID/network namespace.
 container="$(docker create --name "pnm-build-$nonce" --label "io.pnm.fixture=$nonce" \
-    --env DEBIAN_FRONTEND=noninteractive "$image_id" bash -euc '
+    --env DEBIAN_FRONTEND=noninteractive --env "PNM_TEMPLATE_KERNEL=$kernel_package" "$image_id" bash -euc '
         umask 022
         apt-get update
         apt-get install --yes --no-install-recommends systemd-sysv dbus python3 \
             bash ca-certificates curl openssl zip unzip tar util-linux iproute2 passwd tzdata
+        if [[ -n "$PNM_TEMPLATE_KERNEL" ]]; then
+            apt-get install --yes --no-install-recommends "$PNM_TEMPLATE_KERNEL" initramfs-tools
+            update-initramfs -u -k all
+        fi
         apt-get clean
         dpkg-query -W > /opt/pnm-template-packages.txt
     ')"

@@ -51,11 +51,19 @@ def require_vm() -> VmIdentity:
                 or info.st_nlink!=1 or info.st_size>4096):
             raise ValueError('expected record protection')
         expected=json.loads(expected_path.read_text())
-        if (set(expected)!={'schema','backend','kernel_release','root_uuid',
-                           'worker_sha256','host_machine_id_sha256'}
+        if (set(expected) not in ({'schema','backend','kernel_release','root_uuid',
+                           'worker_sha256','host_machine_id_sha256'},
+                          {'schema','backend','kernel_release','root_uuid',
+                           'worker_sha256','host_machine_id_sha256','architecture'})
                 or type(expected['schema']) is not int or expected['schema']!=1
                 or expected['backend']!='qemu-kvm'):
             raise ValueError('expected record schema')
+        architecture=platform.machine()
+        if architecture not in ('x86_64','aarch64') or expected.get('architecture', 'x86_64')!=architecture:
+            raise ValueError('guest architecture mismatch')
+        vendor=(Path('/sys/class/dmi/id/sys_vendor').read_text().strip()=='QEMU'
+                if architecture=='x86_64' else
+                b'linux,dummy-virt' in Path('/sys/firmware/devicetree/base/compatible').read_bytes().split(b'\x00'))
         blobs={}
         for name in ('instance','host-boot-id','root-uuid'):
             with (firmware/name/'raw').open('rb') as stream:
@@ -70,7 +78,7 @@ def require_vm() -> VmIdentity:
                 or not re.fullmatch(r'[0-9a-f]{64}',expected['host_machine_id_sha256'])
                 or hashlib.sha256(Path(__file__).read_bytes()).hexdigest()!=expected['worker_sha256']
                 or Path('/proc/1/comm').read_text().strip()!='systemd'
-                or Path('/sys/class/dmi/id/sys_vendor').read_text().strip()!='QEMU'
+                or not vendor
                 or sorted(path.name for path in Path('/sys/class/net').iterdir())!=['lo']):
             raise ValueError('guest identity mismatch')
         return VmIdentity(blobs['instance'],boot_id,blobs['root-uuid'],platform.release(),
@@ -110,9 +118,11 @@ def main(*, action: Callable[[],dict] | None=None, scope: str='boot-only',
             'boot_id':identity.boot_id,'passed':False,'scope':scope}
     stage='serial setup'
     try:
-        descriptor=os.open('/dev/ttyS0',os.O_RDWR|os.O_NOCTTY|os.O_NONBLOCK|os.O_NOFOLLOW)
+        serial='/dev/ttyS0' if platform.machine()=='x86_64' else '/dev/ttyAMA0'
+        serial_device=(4,64) if platform.machine()=='x86_64' else (204,64)
+        descriptor=os.open(serial,os.O_RDWR|os.O_NOCTTY|os.O_NONBLOCK|os.O_NOFOLLOW)
         info=os.fstat(descriptor)
-        if not stat.S_ISCHR(info.st_mode) or (os.major(info.st_rdev),os.minor(info.st_rdev))!=(4,64):
+        if not stat.S_ISCHR(info.st_mode) or (os.major(info.st_rdev),os.minor(info.st_rdev))!=serial_device:
             raise RuntimeError('unexpected guest serial device')
         attributes=termios.tcgetattr(descriptor)
         attributes[0]&=~(termios.ICRNL|termios.INLCR|termios.IGNCR)
@@ -164,7 +174,7 @@ def main(*, action: Callable[[],dict] | None=None, scope: str='boot-only',
         if machine_id==identity.host_machine_id_sha256:
             raise RuntimeError('guest reused host machine identity')
         ready={'schema':1,'kind':'boot-ready','instance':identity.instance,'boot_id':identity.boot_id,
-               'kernel_release':identity.kernel_release,'root_uuid':identity.root_uuid,
+               'kernel_release':identity.kernel_release,'root_uuid':identity.root_uuid,'architecture':platform.machine(),
                'os_id':os_id,'os_version':os_version,'vm_detected':detected.stdout.strip(),
                'manager_state':manager,'network_only_loopback':True,'pnm_absent':absent,'scope':scope,
                'machine_id_differs_from_host':True}

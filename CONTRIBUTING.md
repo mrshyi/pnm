@@ -47,15 +47,15 @@ Do not hardcode a previous session's `/tmp` path or change the host automaticall
 The separate [managed-installation workflow](.github/workflows/guest-mainflow.yml)
 prepares an official-image native rootfs inside a normal disposable build
 container, then boots a mapped-user, private-network systemd-nspawn clone through
-the existing harness. The first automatic pilot is Debian13 amd64/lifecycle;
-manual workflow inputs select the remaining native OS/architecture combinations
-and existing bounded scenarios. Rootfs metadata is never treated as boot success:
+the existing harness. Automatic lifecycle jobs cover all eight supported native OS/architecture pairs,
+including real Profiles. Two additional Debian13 native KVM pilots attempt an
+independent same-disk reboot; manual inputs select existing bounded scenarios. Rootfs metadata is never treated as boot success:
 a verified boot-only invocation precedes any managed operation. See
 [guest mainflow](tests/integration/GUEST_MAINFLOW.md#automated-disposable-ci-preparation).
 Only disposable GitHub-hosted runners prepare dependencies/images; ordinary L1
 and the development host do not. Missing or unsafe runner capabilities fail the
-job rather than weakening guards. This adds installation automation, not VM
-reboot, actual Profile switching or public-client acceptance.
+job rather than weakening guards. A configured job does not prove installation or reboot acceptance; current
+results are recorded in TASKS. Public-client acceptance remains separate.
 
 ## Repository gates
 

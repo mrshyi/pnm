@@ -22,6 +22,11 @@ on:
         type: choice
         options: [all, amd64, arm64]
         default: all
+      backend:
+        description: Isolated systemd or independent KVM reboot
+        type: choice
+        options: [nspawn, qemu]
+        default: nspawn
       scenario:
         description: Existing bounded mainflow scenario
         type: choice
@@ -38,12 +43,15 @@ jobs:
       max-parallel: 4
       matrix:
         os: ${{ inputs.os && inputs.os != 'all' && fromJSON(format('["{0}"]', inputs.os)) || fromJSON('["debian12","debian13","ubuntu22","ubuntu24"]') }}
+        backend: ${{ fromJSON(format('["{0}"]', inputs.backend || 'nspawn')) }}
+        include: ${{ inputs.backend && fromJSON('[]') || fromJSON('[{"os":"debian13","arch":"amd64","backend":"qemu"},{"os":"debian13","arch":"arm64","backend":"qemu"}]') }}
         arch: ${{ inputs.arch && inputs.arch != 'all' && fromJSON(format('["{0}"]', inputs.arch)) || fromJSON('["amd64","arm64"]') }}
     runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     timeout-minutes: 45
     env:
       PNM_CI_OS: ${{ matrix.os }}
       PNM_CI_ARCH: ${{ matrix.arch }}
+      PNM_CI_BACKEND: ${{ matrix.backend }}
       PNM_CI_SCENARIO: ${{ inputs.scenario || 'lifecycle' }}
     steps:
       - name: Check out candidate
@@ -52,11 +60,19 @@ jobs:
           persist-credentials: false
 
       - name: Install disposable runner prerequisites
-        run: sudo apt-get update && sudo apt-get install --yes systemd-container python3 jq curl unzip
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes systemd-container python3 jq curl unzip
+          if [[ "$PNM_CI_BACKEND" == qemu ]]; then
+              [[ "$PNM_CI_SCENARIO" == lifecycle ]] || { echo "VM pilot currently accepts lifecycle only"; exit 64; }
+              [[ -c /dev/kvm ]] || { echo 'KVM unavailable: independent reboot remains unverified'; exit 69; }
+              if [[ "$PNM_CI_ARCH" == amd64 ]]; then packages=(qemu-system-x86 seabios); else packages=(qemu-system-arm); fi
+              sudo apt-get install --yes --no-install-recommends "${packages[@]}" e2fsprogs
+          fi
 
       - name: Prepare and verify native boot fixture, then run existing mainflow
         run: |
-          sudo --preserve-env=GITHUB_ACTIONS,RUNNER_ENVIRONMENT,PNM_CI_OS,PNM_CI_ARCH,PNM_CI_SCENARIO,GITHUB_SHA bash -Eeuo pipefail <<'BASH'
+          sudo --preserve-env=GITHUB_ACTIONS,RUNNER_ENVIRONMENT,PNM_CI_OS,PNM_CI_ARCH,PNM_CI_SCENARIO,PNM_CI_BACKEND,GITHUB_SHA bash -Eeuo pipefail <<'BASH'
           umask 077
           source lib/common.sh
           source lib/config.sh
@@ -69,7 +85,7 @@ jobs:
           import json,os,pathlib,platform,sys
           path=pathlib.Path(sys.argv[1])
           path.write_text(json.dumps({'source':os.environ['GITHUB_SHA'],'guest':os.environ['PNM_CI_OS'],
-              'architecture':platform.machine(),'scenario':os.environ['PNM_CI_SCENARIO']},indent=2)+'\n')
+              'architecture':platform.machine(),'scenario':os.environ['PNM_CI_SCENARIO'],'backend':os.environ['PNM_CI_BACKEND']},indent=2)+'\n')
           path.chmod(0o644)
           PY
           case "$(pnm_arch)" in
@@ -90,7 +106,9 @@ jobs:
                   pnm_asset_download_verified "$core" "$version" "$hash" "$work/$generation/$filename"
               done
           done
-          PNM_RUN_GUEST_PREPARE=1 bash tests/integration/prepare_guest_baseline.sh "$PNM_CI_OS" "$work/baseline"
+          kernel=()
+          if [[ "$PNM_CI_BACKEND" == qemu ]]; then kernel=(--with-kernel); fi
+          PNM_RUN_GUEST_PREPARE=1 bash tests/integration/prepare_guest_baseline.sh "$PNM_CI_OS" "$work/baseline" "${kernel[@]}"
           install -m 0644 -- "$work/baseline/template.json" "$public/template.json"
           install -m 0644 -- "$work/baseline/rootfs/opt/pnm-template-packages.txt" "$public/packages.txt"
           nspawn="$(realpath "$(command -v systemd-nspawn)")"
@@ -99,9 +117,16 @@ jobs:
               --boot-only --work-dir "$work"
           previous=()
           if [[ -d "$work/previous" ]]; then previous=(--previous-asset-cache "$work/previous"); fi
+          backend=()
+          if [[ "$PNM_CI_BACKEND" == qemu ]]; then backend=(--vm-reboot); export PNM_RUN_VM_TESTS=1; fi
           PNM_RUN_GUEST_TESTS=1 python3 -B tests/integration/test_guest_mainflow.py \
               --baseline "$work/baseline" --nspawn "$nspawn" --asset-cache "$work/real" \
-              --scenario "$PNM_CI_SCENARIO" --work-dir "$work" "${previous[@]}"
+              "${backend[@]}" --scenario "$PNM_CI_SCENARIO" --work-dir "$work" "${previous[@]}"
+          if [[ "$PNM_CI_BACKEND" == qemu ]]; then
+              result=("$work"/pnm-install-guest.*/vm-result.json)
+              [[ ${#result[@]} == 1 && -f "${result[0]}" ]]
+              install -m 0644 -- "${result[0]}" "$public/vm-result.json"
+          fi
           # Publish only fixed metadata; journals, snapshots and guest logs stay private.
           printf '{"boot_verified":true,"mainflow_passed":true}\n' > "$public/result.json"
           chmod 0644 -- "$public/result.json"
@@ -111,11 +136,12 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: managed-installation-${{ matrix.os }}-${{ matrix.arch }}-${{ github.run_id }}-${{ github.run_attempt }}
+          name: managed-installation-${{ matrix.os }}-${{ matrix.arch }}-${{ matrix.backend }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             ci-evidence/identity.json
             ci-evidence/template.json
             ci-evidence/result.json
             ci-evidence/packages.txt
+            ci-evidence/vm-result.json
           if-no-files-found: ignore
           retention-days: 7
