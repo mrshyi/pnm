@@ -40,6 +40,15 @@ class GuestGuardTests(unittest.TestCase):
         finally:
             os.close(master);os.close(slave)
 
+    def test_vm_mainflow_summary_reports_stage_and_exit_without_private_data(self):
+        from guest_vm_lifecycle import mainflow_failure_summary
+        self.assertEqual(mainflow_failure_summary({'stage':'protected backup and verified restore',
+            'reason':'restore exit=78','checks':['done']*18}),
+            {'stage':'protected backup and verified restore','reason':'restore exit=78','completed_checks':18})
+        summary=mainflow_failure_summary({'stage':'secret-node-password','reason':'vless://private-client-link',
+                                        'checks':'private-key-bytes'})
+        self.assertEqual(summary,{'stage':'other','reason':'assertion','completed_checks':0})
+
     def test_vm_clone_removes_only_regular_owned_container_markers(self):
         spec=importlib.util.spec_from_file_location('pnm_vm_marker_host',DRIVER.with_name('host_vm_reboot.py'))
         module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)

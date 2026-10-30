@@ -19,6 +19,13 @@ class GuestRefusal(RuntimeError):
     """Identity is insufficient to permit serial or power operations."""
 
 
+class GuestAcceptanceFailure(RuntimeError):
+    """An approved action failed; only its bounded public summary is reported."""
+    def __init__(self, summary: dict):
+        super().__init__('approved guest acceptance failed')
+        self.summary=summary
+
+
 @dataclass(frozen=True)
 class VmIdentity:
     instance: str
@@ -238,6 +245,8 @@ def main(*, action: Callable[[],dict] | None=None, scope: str='boot-only',
         result.update({'stage':stage,'error_class':type(error).__name__})
         if isinstance(error,OSError) and type(error.errno) is int:
             result['errno']=error.errno
+        if isinstance(error,GuestAcceptanceFailure):
+            result['acceptance_failure']=error.summary
     finally:
         # This block is reachable only after the independent-guest guard passed.
         path=Path('/var/tmp/pnm-vm-'+('boot' if scope=='boot-only' else scope)+'-result.json')

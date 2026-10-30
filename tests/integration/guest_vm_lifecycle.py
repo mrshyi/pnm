@@ -7,7 +7,7 @@ import re
 import subprocess
 import time
 
-from guest_vm_boot import GuestRefusal, main as boot_main, require_approved_vm, require_vm
+from guest_vm_boot import GuestAcceptanceFailure, GuestRefusal, main as boot_main, require_approved_vm, require_vm
 
 
 BASELINE=Path('/var/tmp/pnm-vm-lifecycle-baseline.json')
@@ -74,6 +74,21 @@ def binding(core: str) -> None:
          and record['SERVICE_INVOCATION_ID']==state['invocation'],'reboot applied binding differs')
 
 
+def mainflow_failure_summary(detail: dict) -> dict:
+    stages={'initial managed-resource baseline','guest source identity','node init and validate',
+            'installation preview','installation apply','actual account and process identity',
+            'applied bindings','production links','Core health diagnostics','repeat installation refusal',
+            'standalone restart xray','standalone restart hysteria2',
+            'desired configuration and apply xray','desired configuration and apply hysteria2',
+            'real installed-node Profile cycle','protected backup and verified restore'}
+    stage=detail.get('stage')
+    reason=detail.get('reason','')
+    safe_reason=reason if isinstance(reason,str) and re.fullmatch(r'[a-z0-9_-]{1,50} exit=[0-9]{1,3}',reason) else 'assertion'
+    checks=detail.get('checks')
+    return {'stage':stage if isinstance(stage,str) and stage in stages else 'other',
+            'reason':safe_reason,'completed_checks':min(len(checks),64) if isinstance(checks,list) else 0}
+
+
 def lifecycle() -> dict:
     identity=require_approved_vm()
     log=Path('/var/tmp/pnm-vm-lifecycle.log')
@@ -98,9 +113,9 @@ def lifecycle() -> dict:
     acquisition_checks=9 if scenario=='deployment-version-failures' else 7
     expected=(31 if update else 24 if evidence else 19+acquisition_checks if acquisition
               else 22 if candidates else 21 if inodes or space or configured else 20 if progress or rename else 19)
-    need(result.returncode==0 and detail.get('passed') is True
-         and detail.get('mainflow_completed') is True and len(detail.get('checks',[]))==expected,
-         'independent VM mainflow/update checks did not pass')
+    if not (result.returncode==0 and detail.get('passed') is True
+            and detail.get('mainflow_completed') is True and len(detail.get('checks',[]))==expected):
+        raise GuestAcceptanceFailure(mainflow_failure_summary(detail))
     for core in UNITS:
         binding(core)
         if update:
