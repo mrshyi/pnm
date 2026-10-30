@@ -274,6 +274,8 @@ def main(*, action: Callable[[],dict] | None=None, scope: str='boot-only',
             'pnm_absent':absent,'independent_boot_id':True,'machine_id_differs_from_host':True})
     except Exception as error:
         result.update({'stage':stage,'error_class':type(error).__name__})
+        if isinstance(error,OSError) and type(error.errno) is int:
+            result['errno']=error.errno
     finally:
         # This block is reachable only after the independent-guest guard passed.
         trace('persist_begin')

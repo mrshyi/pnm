@@ -81,7 +81,7 @@ def run_vm(root, work):
     require(unit.is_file() and not unit.is_symlink(),'owned VM probe unit missing')
     unit.write_text('[Unit]\nDescription=PNM independent VM acceptance\nAfter=basic.target\n'
                     '[Service]\nExecStart=/usr/bin/python3 -B /opt/guest_vm_lifecycle.py\n'
-                    'RuntimeMaxSec=1200\nStandardError=tty\nTTYPath=/dev/'+('ttyS0' if machine=='x86_64' else 'ttyAMA0')+
+                    'RuntimeMaxSec=1200\nStandardInput=tty\nStandardError=tty\nTTYReset=yes\nTTYPath=/dev/'+('ttyS0' if machine=='x86_64' else 'ttyAMA0')+
                     '\n[Install]\nWantedBy=multi-user.target\n')
     for serial in ('ttyS0','ttyAMA0'):
         mask=root/'etc/systemd/system'/('serial-getty@'+serial+'.service')
@@ -212,6 +212,7 @@ def run_vm(root, work):
                         print(json.dumps({'vm_persisted_result':scope,'present':True,
                             'passed':persisted.get('passed') is True,
                             'stage':persisted.get('stage') if persisted.get('stage') in ('host approval','approved PNM acceptance','boot evidence persistence') else 'other',
+                            'errno':persisted.get('errno') if type(persisted.get('errno')) is int else None,
                             'error_class':persisted.get('error_class') if persisted.get('error_class') in ('RuntimeError','GuestRefusal','OSError','TimeoutExpired','FileNotFoundError') else 'other',
                             'acceptance_present':isinstance(persisted.get('acceptance'),dict)}),flush=True)
                     log.flush()
