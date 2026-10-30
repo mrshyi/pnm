@@ -190,6 +190,10 @@ def run_vm(root, work):
                     except subprocess.TimeoutExpired:
                         process.kill();process.wait(timeout=5)
                 if len(result)!=2:
+                    current=disk.stat()
+                    require((current.st_dev,current.st_ino)==(info.st_dev,info.st_ino), 'owned diagnostic disk changed')
+                    replay=subprocess.run(['e2fsck','-p','-E','journal_only',str(disk)],capture_output=True,timeout=30)
+                    print(json.dumps({'vm_owned_disk_journal_replay_exit':replay.returncode}),flush=True)
                     for boot in sorted(approved):
                         probe=subprocess.run(['debugfs','-R','cat /var/tmp/pnm-vm-trace-'+boot,str(disk)],
                                              capture_output=True,timeout=10)
