@@ -9,7 +9,7 @@ firewall management remains manual. Phase 7 local regression/release preparation
 is complete; current amd64/arm64 Ubuntu and Debian userspace CI pass; full real acceptance remains pending. No release
 has been published.**
 
-**Published runtime baseline:** branch `dev`, source commit `3d6ac5b`, VERSION
+**Latest fully exercised runtime baseline:** branch `dev`, source commit `32b68df`, VERSION
 `0.16.0-rc.1`. Includes the dual-Core lifecycle, installed-node Profiles, optional
 resource/status observations, sanitized recovery diagnostics, native architecture
 asset/digest selection and amd64/arm64 CI.
@@ -17,128 +17,82 @@ Earlier records below remain specific to their own sources and execution layers.
 
 ## Continuation checkpoint
 
-- Root evidence from c624081 single dispatch41007557322: first VM lifecycle
-  completion is persisted with passed=true/acceptance present, but no boot-result
-  bytes reach the host before reboot-ready. The lifecycle worker now repeats its
-  completion until an exact instance/boot-ID/scope receipt is received (30-second
-  bound), then permits reboot; the host acknowledges only validated results and
-  accepts identical retransmissions. Other boot-worker callers keep their prior
-  one-message mode. Private PTY regression rejects stale-boot/wrong-scope receipts
-  and observes retransmission before accepting the current receipt. Guards43
-  total/35 executed/8 skipped pass; actual VM rerun pending.
-- Single dispatch41007196357/source62472cc now stops on the first failed
-  guest boot as intended, rather than retrying. Host received no result bytes;
-  read-only disk extraction did not parse a completion record. Add fixed
-  exception-class/worker-line diagnostics from the private serial log and
-  read-result exit/length booleans; never publish raw guest journals or data.
-- Single amd64 VM dispatch41006646409 at sourced10c1a1 still loses completion
-  frames; its fixed-class serial emission diagnostic was not observed. Further
-  diagnosis reads only fixed completion-record paths from the owned stopped
-  ext4 image via read-only debugfs (no host mount), reports fixed booleans/classes,
-  and compares whether serial bytes contain a result marker. Failed guest actions
-  now power off instead of silently rebooting and retrying installation.
-  This remains harness work; no independent reboot acceptance is claimed.
-- VM scope diagnosis at source6c5ca32/run41005735238: eight nspawn jobs
-  again pass, but amd64 VM job123900093647 reports two lifecycle-ready boots
-  and then reboot-ready with zero received boot results. No completion is
-  inferred from these reboots. A private-PTY simulation of the complete worker
-  successfully returns ready/result and persists evidence; this is local
-  protocol evidence only. The worker's previously swallowed emission exception
-  is now reported as a fixed class through the isolated guest's serial stderr
-  so the actual hardware-serial failure can be diagnosed without raw journals.
-  Identity/result requirements remain unchanged; no further production change.
-- Latest executed runtime source `32b68df61e11d560f8cb5e5e67e7913787cf7065`,
-  [managed run41004924644](https://github.com/mrshyi/pnm/actions/runs/41004924644):
-  **all eight native nspawn lifecycle jobs pass19/19**, including actual dual-Core
-  installation, independent restart/apply, five real Profile checks and protected
-  trusted backup/restore. Every job reports profiles_checked=true, unchanged
-  host account/package databases, retired scope and no remaining fixture mounts.
-  Product32-file manifestebcd74c1dcaa3597112078acbf441d83ac05f104fbaa444b9d2a167dcd8798f6.
+### Current bounded execution evidence
 
-  | Guest | amd64 job / result | arm64 job / result |
-  |---|---|---|
-  | Debian12 | 123897547878 / PASS19 | 123897547971 / PASS19 |
-  | Debian13 | 123897547922 / PASS19 | 123897547951 / PASS19 |
-  | Ubuntu22.04 | 123897547849 / PASS19 | 123897547640 / PASS19 |
-  | Ubuntu24.04 | 123897548070 / PASS19 | 123897547884 / PASS19 |
+Runtime source `32b68df61e11d560f8cb5e5e67e7913787cf7065` passes all eight
+native nspawn lifecycle jobs in
+[managed run41004924644](https://github.com/mrshyi/pnm/actions/runs/41004924644).
+Each passes19 checks: actual dual-Core installation, independent restart/apply,
+five real Profile cycle/compensation/refusal checks and protected trusted restore.
+All report profiles_checked=true, unchanged host account/package databases,
+retired scopes and no remaining fixture mounts. The32-file product manifest is
+`ebcd74c1dcaa3597112078acbf441d83ac05f104fbaa444b9d2a167dcd8798f6`.
 
-  This closes this increment's eight-way selfsigned lifecycle/Profile execution;
-  it does not establish every U-01–U-08 item, other TLS/update/failure scenarios,
-  installed wrapper/uninstall or public clients. ARM64 KVM job123897547843 again
-  refuses69 (no /dev/kvm), explicitly BLOCKED rather than PASS. AMD64 KVM
-  job123897547830 still fails the serial scope transition after framing/drain;
-  no reboot PASS is claimed. Added fixed-enum scope/count and prefixed-frame
-  diagnostics without relaxing nonce/process/disk/boot guards. Guards42 total/
-  34 executed/8 skipped pass. [Regular CI41004924654](https://github.com/mrshyi/pnm/actions/runs/41004924654)
-  also passes all eight native jobs at the same32b68df source: check/release each
-  35 suites/477/0, privileged71/0, transport8, preparation42 total/34 executed/
-  8 skipped and standard ShellCheck. All four Ubuntu jobs additionally pass
-  real systemd8 and official-Core10; all Ubuntu78/Debian76 shell summaries have
-  zero failures. Repeated gates are not additional unique coverage. Public
-  dual-protocol acceptance remains separate.
-- Fresh source `bf59fd4728ed9f61b099b0906ff82d3c1a066c27`,
-  [managed run41004000680](https://github.com/mrshyi/pnm/actions/runs/41004000680):
-  Debian12/13 amd64/arm64 all pass the complete19-check lifecycle, including
-  the five real Profile checks and subsequent trusted backup/restore. Jobs
-  123894627899/123894627960 (Debian12 amd64/arm64) and
-  123894627653/123894628030 (Debian13 amd64/arm64) report profiles_checked=true,
-  unchanged host databases, scope not-found and no remaining fixture mounts.
-  Product32-file manifest924a8091ce856aaf57715089f0f7988d3e5c73d7fc587a360f8a19ccadeeaa48.
-  Ubuntu24 amd64/arm64 and Ubuntu22 arm64 also passed19 checks. Ubuntu22
-  amd64 reproduced the post-apply link failure: the status branch indicates an
-  absent listener despite active service and confirmed evidence. Apply now uses
-  the existing bounded runtime-listener wait and rechecks healthy service state
-  before evidence publication; focused Core operations16/0, with new refusal/
-  compensation regression failing against prior source (15/1). This is a real
-  startup interval defect, not justification to retry or weaken readiness tests.
-  AMD64 KVM next received a scope transition without a recorded first result;
-  console framing now begins on a fresh line and drains before guest reboot,
-  with a real private-PTY regression. Guards42 total/34 executed/8 skipped pass.
-  ARM64 KVM remains unavailable. Fresh make release-check exits0:
-  35 suites/477 passed/0 failed, with the ordinary five root-only skips;
-  standard/targeted ShellCheck and diff/Python checks pass. Cloud rerun pending.
-- Current cloud source86dc318 (run41003158328): seven native nspawn jobs
-  passed all five real Profile checks before staged restore refused78. Ubuntu22
-  amd64 stopped earlier at links-readiness after Xray apply; bounded status-only
-  diagnostics are being added before any production change for that failure.
-  Restore's candidate loader had duplicated an older node-key allowlist that
-  excluded PNM_PROFILE. It now reuses the standard node loader; the regression
-  uses real config parsing and fails against the prior source (14/1) while
-  the fixed Core-operation suite passes15/0. ARM64 KVM pilot explicitly refused
-  with69 because that hosted runner exposes no /dev/kvm; independent ARM reboot
-  remains BLOCKED. AMD64 KVM reached a guest boot-result that did not satisfy acceptance;
-  same-disk second boot is not established. Fixed-enum boot-result diagnostics
-  were added for the next run. Fresh local make release-check exits0:35 suites/476 passed/0 failed,
-  with five ordinary root-only skips. Standard and targeted ShellCheck pass;
-  integration guards41 total/33 executed/8 skipped also pass.
-- Eight-way Profile execution (source2ad759e, run40999425408): all eight
-  native combinations prepared/booted and reached real Profile reality after
-  actual installation/restart/apply. The controlled HY2 bind failure then
-  exposed a false-success race on some targets and incomplete restoration of
-  auto-restarting service policy on others; no full matrix/Profile PASS is
-  claimed. Root fixes reuse the existing exact-PID socket attribution helper
-  before recording activation and stop failed/activating/deactivating targets
-  before compensation. The mapped guest grants its own root namespace-scoped
-  ptrace capability for ownership inspection; Core service capability bounds
-  remain unchanged. Focused Profile10 and preflight19 pass; native loopback
-  transport/PID attribution8 pass. A duplicate local helper initially caused a
-  preflight failure in release-check(exit2); it was removed before delivery in
-  favor of the existing helper. Fresh make release-check then exits0:
-  35 suites/476 passed/0 failed, with the existing five root-only skips.
-  Standard ShellCheck0.8.0 and security/release scans also pass.
-- Independent reboot integration (2026-10-30 UTC): added native KVM pilots on
-  Debian13 amd64/arm64, reusing the existing guest VM nonce approval/lifecycle/
-  reboot workers rather than replacing their guarded state checks. Signed guest
-  APT prepares kernel/initrd in the disposable build container; host creates an
-  owned2GiB ext4 file without mount/loop devices, boots via inherited disk FD,
-  verifies process/drive identity and approves each of two distinct guest boots.
-  There is no NIC, host share, monitor, physical disk or software-emulation
-  fallback. ARM64 adds explicit virt/FDT and PL011 identity with native-arch
-  binding. Missing KVM remains an environment failure, not a reboot PASS.
-  Local integration guards41 total/33 executed/8 skipped, Bash/ShellCheck and
-  Python/workflow checks pass; actual reboot is not yet accepted. Public dual-
-  protocol tests are explicitly outside this increment. No development-host
-  installation, privileged container or reboot was performed.
+| Guest | amd64 job / result | arm64 job / result |
+|---|---|---|
+| Debian12 | 123897547878 / PASS19 | 123897547971 / PASS19 |
+| Debian13 | 123897547922 / PASS19 | 123897547951 / PASS19 |
+| Ubuntu22.04 | 123897547849 / PASS19 | 123897547640 / PASS19 |
+| Ubuntu24.04 | 123897548070 / PASS19 | 123897547884 / PASS19 |
+
+[Regular CI41004924654](https://github.com/mrshyi/pnm/actions/runs/41004924654)
+also passes all eight jobs at32b68df. Later
+[CI41008164950](https://github.com/mrshyi/pnm/actions/runs/41008164950), source
+`b1fced18aad89a02ffe127623f1e52f6dec13f56`, passes all eight native jobs with
+unchanged production files: check/release each35 suites/477 passed/0 failed,
+privileged71/0, transport8 and standard ShellCheck. Preparation43 total/35
+executed/8 skipped includes the real private-PTY completion-receipt regression.
+All four Ubuntu jobs additionally pass real systemd8 and pinned official-Core10;
+all Ubuntu78/Debian76 shell summaries have zero failures. Repeated gates are
+not additional unique coverage; five ordinary non-root gate skips remain.
+
+Cloud execution exposed three in-scope defects, all fixed and covered:
+
+- Profile activation could accept an unrelated listener; it now reuses exact-PID
+  socket attribution before recording activation. Compensation stops failed or
+  transitional services before restoring prior policy. All five real Profile
+  checks now pass across the eight combinations.
+- Trusted restore duplicated an obsolete node-key allowlist and rejected
+  PNM_PROFILE. It now reuses the standard loader. Real-parsing regression fails
+  against the previous implementation (14/1) and passes the repaired suite.
+- Standalone apply could publish success before its listener existed, reproduced
+  twice on Ubuntu22 amd64. It now reuses the bounded runtime-listener wait and
+  rechecks service health. Refusal/compensation regression fails against prior
+  code (15/1); the fixed Core-operation suite passes16/0. Latest local full
+  release-check exits0:35 suites/477/0, with standard/targeted ShellCheck passing.
+
+Independent Debian13 amd64 KVM now passes at source
+`381848a2cea99f69dbef610ccfcea8f863581155` in
+[single VM run41012319103](https://github.com/mrshyi/pnm/actions/runs/41012319103),
+job123920730758: same owned disk/process, two independently approved kernel boots,
+19 real lifecycle/Profile checks plus7 reboot checks, exit0 and unchanged host
+account/package databases. The log confirms removal of inherited `.dockerenv`.
+The VM-only clone now removes regular owned container markers, masks console
+gettys and owns its controlling serial TTY; the worker refuses container markers
+and requires systemd-detect-virt --container to report none. Build-container
+metadata and competing console ownership caused the earlier host-approval I/O
+failure. Production/Core permission policies were not weakened.
+
+ARM64 KVM job123897547843 remains BLOCKED (exit69, no /dev/kvm). Other OS/kernel
+reboot combinations remain unexecuted. Read-only debugfs without journal replay
+was insufficient for the earlier diagnostics; missing records did not prove
+missing execution. Temporary stage tracing, stopped-image journal diagnosis
+and the added result-receipt protocol are removed after locating the actual
+cause, restoring the existing per-boot approval/completion protocol. Failed
+guest actions still power off instead of automatically retrying. Minimal
+preparation guards43 total/35 executed/8 skipped pass, including container-marker
+removal with symlink/hardlink/ancestor refusal and the real PTY frame/drain check;
+its fresh VM rerun is pending. No host mount, development-host installation or
+reboot occurred. Duplicate automatic matrix/gate runs for diagnostic commits
+were cancelled, not counted as passes; single-VM runs retain source identities.
+
+This increment's eight-way selfsigned lifecycle/Profile execution is complete.
+It does not establish every U-01–U-08 item, remaining TLS/update/failure scenarios,
+installed CLI wrapper/uninstall or public clients. Public dual-protocol
+acceptance is explicitly separate. No production deployment or release occurred.
+
+## Prior cloud evidence
+
 - Expanded cloud acceptance (2026-10-30 UTC): user authorized the recommended
   next steps, then explicitly separated public dual-protocol acceptance. The
   managed-installation workflow now selects eight native OS/architecture pairs

@@ -223,7 +223,7 @@ def main() -> None:
     reboot=BASELINE.exists()
     boot_main(action=reboot_acceptance if reboot else lifecycle,
               scope='pnm-reboot' if reboot else 'pnm-lifecycle',
-              power_action='poweroff' if reboot else 'reboot', require_result_ack=True)
+              power_action='poweroff' if reboot else 'reboot')
 
 
 if __name__=='__main__':

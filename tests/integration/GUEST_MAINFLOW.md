@@ -227,12 +227,14 @@ storage/process cleanup remain prerequisites.
 19-case CLI lifecycle on an independent kernel. It grants a mode-0600 approval
 record only after the matching live host handshake; the actual cases accept
 the VM route only with that boot's instance/boot ID. The mapped-container guard
-remains unchanged. Lifecycle completion is retransmitted for up to30 seconds
-until a PNM_VM_RECEIPT matching instance, boot ID and scope arrives; the host
-accepts identical duplicates but never different results for a completed boot.
-The first successful guest then requests reboot within the same owned QEMU
-process/disk. Each kernel boot requires its own boot-ID-bound approval; failures
-or missing completion receipts power off instead of retrying installation. Reboot acceptance compares both changed
+remains unchanged. The first successful guest persists and drains its completion
+record before requesting reboot within the same owned QEMU process/disk. Each
+kernel boot requires its own boot-ID-bound approval; failed actions power off
+instead of retrying installation. VM-only clone preparation removes regular,
+owned container markers inherited from the build container and masks console
+gettys; the worker refuses container markers and requires an independent VM
+with systemd-detect-virt --container reporting none. The dedicated probe owns
+its controlling serial TTY. This does not alter the nspawn baseline or Core units. Reboot acceptance compares both changed
 service invocations and persisted resource/applied fingerprints, requires stale
 URIs to remain withheld through ordinary restart, and checks independent apply
 and both real listeners before clean poweroff. Its private records and outputs

@@ -107,40 +107,8 @@ def require_approved_vm() -> VmIdentity:
         raise GuestRefusal('VM mutation requires this boot approval') from error
 
 
-def wait_result_receipt(descriptor: int, emit: Callable, result: dict) -> None:
-    expected={'schema':1,'action':'result-received-'+result['scope'],
-              'instance':result['instance'],'boot_id':result['boot_id']}
-    deadline=time.monotonic()+30
-    next_emit=0.0
-    pending=b''
-    while time.monotonic()<deadline:
-        now=time.monotonic()
-        if now>=next_emit:
-            emit(result)
-            next_emit=now+2
-        if not select.select([descriptor],[],[],0.2)[0]:
-            continue
-        try:
-            pending+=os.read(descriptor,1024)
-        except BlockingIOError:
-            continue
-        if len(pending)>4096:
-            raise RuntimeError('VM result receipt exceeded bound')
-        while b'\n' in pending:
-            line,_,pending=pending.partition(b'\n')
-            if not line.startswith(b'PNM_VM_RECEIPT '):
-                continue
-            try:
-                received=json.loads(line.removeprefix(b'PNM_VM_RECEIPT ').strip())
-            except (ValueError,UnicodeError):
-                continue
-            if isinstance(received,dict) and type(received.get('schema')) is int and received==expected:
-                return
-    raise RuntimeError('VM result receipt was not received')
-
-
 def main(*, action: Callable[[],dict] | None=None, scope: str='boot-only',
-         power_action: str='poweroff', require_result_ack: bool=False) -> None:
+         power_action: str='poweroff') -> None:
     identity=require_vm()
     if (scope not in ('boot-only','pnm-lifecycle','pnm-reboot','deployment-abrupt','deployment-recovery')
             or (action is None)!=(scope=='boot-only') or power_action not in ('poweroff','reboot')):
@@ -150,17 +118,8 @@ def main(*, action: Callable[[],dict] | None=None, scope: str='boot-only',
     emit=None
     result={'schema':1,'kind':'boot-result','instance':identity.instance,
             'boot_id':identity.boot_id,'passed':False,'scope':scope}
-    trace_fd=os.open('/var/tmp/pnm-vm-trace-'+identity.boot_id,
-                     os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600)
-    def trace(label: str) -> None:
-        try:
-            os.write(trace_fd,(label+'\n').encode('ascii'))
-            os.fsync(trace_fd)
-        except OSError:
-            pass  # Temporary diagnostics must not change guest power/control flow.
     stage='serial setup'
     try:
-        trace('serial_setup')
         serial='/dev/ttyS0' if platform.machine()=='x86_64' else '/dev/ttyAMA0'
         serial_device=(4,64) if platform.machine()=='x86_64' else (204,64)
         descriptor=os.open(serial,os.O_RDWR|os.O_NOCTTY|os.O_NONBLOCK|os.O_NOFOLLOW)
@@ -225,7 +184,7 @@ def main(*, action: Callable[[],dict] | None=None, scope: str='boot-only',
                'os_id':os_id,'os_version':os_version,'vm_detected':detected.stdout.strip(),
                'manager_state':manager,'network_only_loopback':True,'pnm_absent':absent,'scope':scope,
                'machine_id_differs_from_host':True,'container_absent':True}
-        trace('ready')
+
         stage='host approval'
         pending=bytearray()
         approved=False
@@ -260,7 +219,7 @@ def main(*, action: Callable[[],dict] | None=None, scope: str='boot-only',
                     continue
         if not approved:
             raise RuntimeError('VM boot approval was not received')
-        trace('approved')
+
         if action is not None:
             stage='approved PNM acceptance'
             proof={'schema':1,'instance':identity.instance,'boot_id':identity.boot_id,
@@ -271,9 +230,7 @@ def main(*, action: Callable[[],dict] | None=None, scope: str='boot-only',
                 json.dump(proof,stream)
                 stream.flush()
                 os.fsync(stream.fileno())
-            trace('action_begin')
             result['acceptance']=action()
-            trace('action_done')
         result.update({'passed':True,'host_approval_seen':True,'kernel_release':identity.kernel_release,
             'root_uuid':identity.root_uuid,'manager_state':manager,'network_only_loopback':True,
             'pnm_absent':absent,'independent_boot_id':True,'machine_id_differs_from_host':True})
@@ -283,7 +240,6 @@ def main(*, action: Callable[[],dict] | None=None, scope: str='boot-only',
             result['errno']=error.errno
     finally:
         # This block is reachable only after the independent-guest guard passed.
-        trace('persist_begin')
         path=Path('/var/tmp/pnm-vm-'+('boot' if scope=='boot-only' else scope)+'-result.json')
         try:
             output=os.open(path,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600)
@@ -296,23 +252,15 @@ def main(*, action: Callable[[],dict] | None=None, scope: str='boot-only',
                 os.fsync(directory)
             finally:
                 os.close(directory)
-            trace('persist_done')
         except OSError as error:
-            trace('persist_error')
             result.update({'passed':False,'stage':'boot evidence persistence',
                            'error_class':type(error).__name__})
         finally:
             try:
                 if emit is not None:
                     try:
-                        trace('emit_begin')
-                        if require_result_ack:
-                            wait_result_receipt(descriptor,emit,result)
-                        else:
-                            emit(result)
-                        trace('emit_done')
+                        emit(result)
                     except (OSError,RuntimeError) as error:
-                        trace('emit_error')
                         result['passed']=False
                         print('PNM_VM_EMIT_ERROR '+type(error).__name__,file=sys.stderr,flush=True)
             finally:
@@ -320,7 +268,6 @@ def main(*, action: Callable[[],dict] | None=None, scope: str='boot-only',
                     if descriptor is not None:
                         os.close(descriptor)
                 finally:
-                    trace('power_begin')
                     subprocess.run(['systemctl','--no-block',power_action if result.get('passed') else 'poweroff'],
                                    capture_output=True,timeout=10)
 

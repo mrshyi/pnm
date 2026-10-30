@@ -70,42 +70,11 @@ class GuestGuardTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):module.remove_container_markers(root)
             self.assertEqual((outside/'container').read_text(),'keep outside')
 
-    def test_vm_completion_requires_receipt_for_this_boot_and_scope(self):
-        import select,threading,tty
-        tree=ast.parse(DRIVER.with_name('guest_vm_boot.py').read_text())
-        function=next(n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name=='wait_result_receipt')
-        master,slave=os.openpty()
-        tty.setraw(slave)
-        sent=[]
-        result={'schema':1,'kind':'boot-result','scope':'pnm-lifecycle','instance':'fixture','boot_id':'this-boot'}
-        receipt={'schema':1,'action':'result-received-pnm-lifecycle','instance':'fixture','boot_id':'this-boot'}
-        def host():
-            if select.select([master],[],[],2)[0]:
-                os.read(master,4096)
-                for record in (dict(receipt,boot_id='previous-boot'),dict(receipt,action='result-received-pnm-reboot')):
-                    os.write(master,b'PNM_VM_RECEIPT '+json.dumps(record).encode()+b'\n')
-                if select.select([master],[],[],3)[0]:
-                    os.read(master,4096)
-                    os.write(master,b'PNM_VM_RECEIPT '+json.dumps(receipt).encode()+b'\n')
-        thread=threading.Thread(target=host)
-        thread.start()
-        try:
-            def emit(record):
-                sent.append(record)
-                os.write(slave,b'PNM_VM '+json.dumps(record).encode()+b'\n')
-            namespace=dict(os=os,json=json,time=time,select=select,Callable=object)
-            exec(compile(ast.Module(body=[function],type_ignores=[]),'<VM receipt>','exec'),namespace)
-            namespace['wait_result_receipt'](slave,emit,result)
-            self.assertEqual(sent,[result,result])
-        finally:
-            thread.join(timeout=3)
-            os.close(master);os.close(slave)
-
     def test_vm_approval_requires_owned_identity_and_independent_second_boot(self):
         from unittest.mock import patch
         spec=importlib.util.spec_from_file_location('pnm_vm_host',DRIVER.with_name('host_vm_reboot.py'))
         module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
-        expected={'kernel_release':'fixture-kernel','root_uuid':'fixture-root','architecture':'x86_64'}
+        expected={'kernel_release':'fixture-kernel','root_uuid':'fixture-root','architecture':'x86_64','container_absent':True}
         first='1'*8+'-'+'1'*4+'-'+'1'*4+'-'+'1'*4+'-'+'1'*12
         second='2'*8+'-'+'2'*4+'-'+'2'*4+'-'+'2'*4+'-'+'2'*12
         ready=dict(expected,schema=1,kind='boot-ready',instance='fixture',scope='pnm-lifecycle',
@@ -115,7 +84,7 @@ class GuestGuardTests(unittest.TestCase):
         self.assertEqual(approval['action'],'approve-pnm-lifecycle')
         reboot=dict(ready,scope='pnm-reboot',boot_id=second,pnm_absent=False)
         self.assertEqual(module.approve_ready(reboot,expected,'fixture','host',first)['boot_id'],second)
-        for bad in (dict(ready,instance='foreign'),dict(ready,network_only_loopback=False),
+        for bad in (dict(ready,instance='foreign'),dict(ready,network_only_loopback=False),dict(ready,container_absent=False),
                     dict(ready,root_uuid='foreign'),dict(reboot,boot_id=first)):
             with self.subTest(bad=bad), self.assertRaises(RuntimeError):
                 module.approve_ready(bad,expected,'fixture','host',first if bad['scope']=='pnm-reboot' else None)

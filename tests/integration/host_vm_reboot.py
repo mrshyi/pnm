@@ -154,12 +154,7 @@ def run_vm(root, work):
                     log.write(data);pending+=data
                     while b'\n' in pending:
                         line,_,pending=pending.partition(b'\n')
-                        if not line.startswith(b'PNM_VM '):
-                            if line.strip() in (b'PNM_VM_EMIT_ERROR OSError',b'PNM_VM_EMIT_ERROR RuntimeError'):
-                                print(line.strip().decode('ascii'),flush=True)
-                            if b'PNM_VM ' in line:
-                                print(json.dumps({'vm_protocol_frame_with_console_prefix':True}),flush=True)
-                            continue
+                        if not line.startswith(b'PNM_VM '): continue
                         message=json.loads(line[7:].strip())
                         require(message.get('instance')==instance,'foreign VM serial message')
                         if message.get('kind')=='boot-ready' and message['boot_id'] not in approved:
@@ -187,16 +182,9 @@ def run_vm(root, work):
                                 'error_class':message.get('error_class') if message.get('error_class') in ('RuntimeError','GuestRefusal','OSError','TimeoutExpired') else 'other'}),flush=True)
                             require(message.get('passed') is True and message.get('host_approval_seen') is True
                                     and message.get('boot_id') in approved,'VM acceptance failed; private evidence retained')
-                            prior=next((item for item in result if item['boot_id']==message['boot_id']),None)
-                            if prior is not None:
-                                require(message==prior,'repeated VM result differs')
-                            else:
-                                require(message.get('scope')==('pnm-lifecycle' if not result else 'pnm-reboot'), 'VM result scope differs')
-                                result.append(message)
-                                previous_boot=message['boot_id']
-                            receipt={'schema':1,'action':'result-received-'+message['scope'],
-                                     'instance':instance,'boot_id':message['boot_id']}
-                            process.stdin.write(b'PNM_VM_RECEIPT '+json.dumps(receipt).encode()+b'\n')
+                            require(message.get('scope')==('pnm-lifecycle' if not result else 'pnm-reboot'), 'VM result scope differs')
+                            result.append(message)
+                            previous_boot=message['boot_id']
                     require(len(pending)<65536,'VM serial line exceeded bound')
                 process.wait(timeout=30)
                 require(process.returncode==0 and len(result)==2 and len(approved)==2,'VM did not complete two verified boots')
@@ -206,45 +194,6 @@ def run_vm(root, work):
                     try: process.wait(timeout=15)
                     except subprocess.TimeoutExpired:
                         process.kill();process.wait(timeout=5)
-                if len(result)!=2:
-                    current=disk.stat()
-                    require((current.st_dev,current.st_ino)==(info.st_dev,info.st_ino), 'owned diagnostic disk changed')
-                    replay=subprocess.run(['e2fsck','-p','-E','journal_only',str(disk)],capture_output=True,timeout=30)
-                    print(json.dumps({'vm_owned_disk_journal_replay_exit':replay.returncode}),flush=True)
-                    for boot in sorted(approved):
-                        probe=subprocess.run(['debugfs','-R','cat /var/tmp/pnm-vm-trace-'+boot,str(disk)],
-                                             capture_output=True,timeout=10)
-                        labels={'serial_setup','ready','approved','action_begin','action_done','persist_begin',
-                                'persist_done','persist_error','emit_begin','emit_done','emit_error','power_begin'}
-                        print(json.dumps({'vm_worker_stages':[n for n in probe.stdout.decode('ascii',errors='replace').splitlines() if n in labels]}),flush=True)
-                    for scope in ('pnm-lifecycle','pnm-reboot'):
-                        probe=subprocess.run(['debugfs','-R','cat /var/tmp/pnm-vm-'+scope+'-result.json',str(disk)],
-                            capture_output=True,timeout=10)
-                        try:
-                            persisted=json.loads(probe.stdout)
-                        except (ValueError,UnicodeError):
-                            print(json.dumps({'vm_persisted_result':scope,'present':False,'bytes':len(probe.stdout),
-                                'read_exit':probe.returncode,'lookup_missing':b'File not found' in probe.stderr}),flush=True)
-                            continue
-                        print(json.dumps({'vm_persisted_result':scope,'present':True,
-                            'passed':persisted.get('passed') is True,
-                            'stage':persisted.get('stage') if persisted.get('stage') in ('host approval','approved PNM acceptance','boot evidence persistence') else 'other',
-                            'errno':persisted.get('errno') if type(persisted.get('errno')) is int else None,
-                            'error_class':persisted.get('error_class') if persisted.get('error_class') in ('RuntimeError','GuestRefusal','OSError','TimeoutExpired','FileNotFoundError') else 'other',
-                            'acceptance_present':isinstance(persisted.get('acceptance'),dict)}),flush=True)
-                    log.flush()
-                    raw=(work/'vm-serial.private.log').read_bytes()
-                    print(json.dumps({'qemu_exit_code':process.returncode,
-                        'qemu_error_categories':[label for label,marker in (
-                            ('kvm_run',b'KVM internal error'),('kvm_entry',b'KVM entry failed'),
-                            ('disk_io',b'Input/output error'),('no_space',b'No space left on device'),
-                            ('signal',b'terminating on signal'),('guest_poweroff',b'Power down'),
-                            ('guest_reboot',b'Restarting system')) if marker in raw],
-                        'vm_serial_has_result':b'boot-result' in raw,
-                        'vm_serial_has_emit_error':b'PNM_VM_EMIT_ERROR' in raw,
-                        'vm_worker_exception_lines':[int(n) for n in re.findall(rb'File "/opt/guest_vm_boot.py", line ([0-9]+)',raw)],
-                        'vm_exception_classes':sorted({n.decode('ascii') for n in re.findall(
-                            rb'\b(NameError|TypeError|ValueError|FileNotFoundError|UnboundLocalError|RuntimeError|PermissionError):',raw)})}),flush=True)
                 require(all(hashlib.sha256(Path(p).read_bytes()).digest()==v for p,v in databases.items()),
                         'VM test changed host account/package databases')
         public={'passed':True,'backend':'qemu-kvm','architecture':machine,'independent_boots':2,
