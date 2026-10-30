@@ -251,8 +251,8 @@ def main(*, action: Callable[[],dict] | None=None, scope: str='boot-only',
                 if emit is not None:
                     try:
                         emit(result)
-                    except (OSError,RuntimeError):
-                        pass
+                    except (OSError,RuntimeError) as error:
+                        print('PNM_VM_EMIT_ERROR '+type(error).__name__,file=sys.stderr,flush=True)
             finally:
                 try:
                     if descriptor is not None:

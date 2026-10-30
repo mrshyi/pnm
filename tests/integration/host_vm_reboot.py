@@ -81,7 +81,8 @@ def run_vm(root, work):
     require(unit.is_file() and not unit.is_symlink(),'owned VM probe unit missing')
     unit.write_text('[Unit]\nDescription=PNM independent VM acceptance\nAfter=basic.target\n'
                     '[Service]\nExecStart=/usr/bin/python3 -B /opt/guest_vm_lifecycle.py\n'
-                    'RuntimeMaxSec=1200\n[Install]\nWantedBy=multi-user.target\n')
+                    'RuntimeMaxSec=1200\nStandardError=tty\nTTYPath=/dev/'+('ttyS0' if machine=='x86_64' else 'ttyAMA0')+
+                    '\n[Install]\nWantedBy=multi-user.target\n')
     for serial in ('ttyS0','ttyAMA0'):
         mask=root/'etc/systemd/system'/('serial-getty@'+serial+'.service')
         require(not mask.exists() and not mask.is_symlink(),'VM console mask occupied')
@@ -137,6 +138,8 @@ def run_vm(root, work):
                     while b'\n' in pending:
                         line,_,pending=pending.partition(b'\n')
                         if not line.startswith(b'PNM_VM '):
+                            if line.strip() in (b'PNM_VM_EMIT_ERROR OSError',b'PNM_VM_EMIT_ERROR RuntimeError'):
+                                print(line.strip().decode('ascii'),flush=True)
                             if b'PNM_VM ' in line:
                                 print(json.dumps({'vm_protocol_frame_with_console_prefix':True}),flush=True)
                             continue

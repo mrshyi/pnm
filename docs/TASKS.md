@@ -17,6 +17,15 @@ Earlier records below remain specific to their own sources and execution layers.
 
 ## Continuation checkpoint
 
+- VM scope diagnosis at source6c5ca32/run41005735238: eight nspawn jobs
+  again pass, but amd64 VM job123900093647 reports two lifecycle-ready boots
+  and then reboot-ready with zero received boot results. No completion is
+  inferred from these reboots. A private-PTY simulation of the complete worker
+  successfully returns ready/result and persists evidence; this is local
+  protocol evidence only. The worker's previously swallowed emission exception
+  is now reported as a fixed class through the isolated guest's serial stderr
+  so the actual hardware-serial failure can be diagnosed without raw journals.
+  Identity/result requirements remain unchanged; no further production change.
 - Latest executed runtime source `32b68df61e11d560f8cb5e5e67e7913787cf7065`,
   [managed run41004924644](https://github.com/mrshyi/pnm/actions/runs/41004924644):
   **all eight native nspawn lifecycle jobs pass19/19**, including actual dual-Core
@@ -39,8 +48,13 @@ Earlier records below remain specific to their own sources and execution layers.
   job123897547830 still fails the serial scope transition after framing/drain;
   no reboot PASS is claimed. Added fixed-enum scope/count and prefixed-frame
   diagnostics without relaxing nonce/process/disk/boot guards. Guards42 total/
-  34 executed/8 skipped pass. Regular CI remains pending; public dual-protocol
-  acceptance remains separate.
+  34 executed/8 skipped pass. [Regular CI41004924654](https://github.com/mrshyi/pnm/actions/runs/41004924654)
+  also passes all eight native jobs at the same32b68df source: check/release each
+  35 suites/477/0, privileged71/0, transport8, preparation42 total/34 executed/
+  8 skipped and standard ShellCheck. All four Ubuntu jobs additionally pass
+  real systemd8 and official-Core10; all Ubuntu78/Debian76 shell summaries have
+  zero failures. Repeated gates are not additional unique coverage. Public
+  dual-protocol acceptance remains separate.
 - Fresh source `bf59fd4728ed9f61b099b0906ff82d3c1a066c27`,
   [managed run41004000680](https://github.com/mrshyi/pnm/actions/runs/41004000680):
   Debian12/13 amd64/arm64 all pass the complete19-check lifecycle, including
