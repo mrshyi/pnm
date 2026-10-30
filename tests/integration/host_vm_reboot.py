@@ -190,6 +190,12 @@ def run_vm(root, work):
                     except subprocess.TimeoutExpired:
                         process.kill();process.wait(timeout=5)
                 if len(result)!=2:
+                    for boot in sorted(approved):
+                        probe=subprocess.run(['debugfs','-R','cat /var/tmp/pnm-vm-trace-'+boot,str(disk)],
+                                             capture_output=True,timeout=10)
+                        labels={'serial_setup','ready','approved','action_begin','action_done','persist_begin',
+                                'persist_done','persist_error','emit_begin','emit_done','emit_error','power_begin'}
+                        print(json.dumps({'vm_worker_stages':[n for n in probe.stdout.decode('ascii',errors='replace').splitlines() if n in labels]}),flush=True)
                     for scope in ('pnm-lifecycle','pnm-reboot'):
                         probe=subprocess.run(['debugfs','-R','cat /var/tmp/pnm-vm-'+scope+'-result.json',str(disk)],
                             capture_output=True,timeout=10)

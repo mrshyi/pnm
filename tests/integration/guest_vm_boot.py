@@ -148,8 +148,17 @@ def main(*, action: Callable[[],dict] | None=None, scope: str='boot-only',
     emit=None
     result={'schema':1,'kind':'boot-result','instance':identity.instance,
             'boot_id':identity.boot_id,'passed':False,'scope':scope}
+    trace_fd=os.open('/var/tmp/pnm-vm-trace-'+identity.boot_id,
+                     os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600)
+    def trace(label: str) -> None:
+        try:
+            os.write(trace_fd,(label+'\n').encode('ascii'))
+            os.fsync(trace_fd)
+        except OSError:
+            pass  # Temporary diagnostics must not change guest power/control flow.
     stage='serial setup'
     try:
+        trace('serial_setup')
         serial='/dev/ttyS0' if platform.machine()=='x86_64' else '/dev/ttyAMA0'
         serial_device=(4,64) if platform.machine()=='x86_64' else (204,64)
         descriptor=os.open(serial,os.O_RDWR|os.O_NOCTTY|os.O_NONBLOCK|os.O_NOFOLLOW)
@@ -211,6 +220,7 @@ def main(*, action: Callable[[],dict] | None=None, scope: str='boot-only',
                'os_id':os_id,'os_version':os_version,'vm_detected':detected.stdout.strip(),
                'manager_state':manager,'network_only_loopback':True,'pnm_absent':absent,'scope':scope,
                'machine_id_differs_from_host':True}
+        trace('ready')
         stage='host approval'
         pending=bytearray()
         approved=False
@@ -245,6 +255,7 @@ def main(*, action: Callable[[],dict] | None=None, scope: str='boot-only',
                     continue
         if not approved:
             raise RuntimeError('VM boot approval was not received')
+        trace('approved')
         if action is not None:
             stage='approved PNM acceptance'
             proof={'schema':1,'instance':identity.instance,'boot_id':identity.boot_id,
@@ -255,7 +266,9 @@ def main(*, action: Callable[[],dict] | None=None, scope: str='boot-only',
                 json.dump(proof,stream)
                 stream.flush()
                 os.fsync(stream.fileno())
+            trace('action_begin')
             result['acceptance']=action()
+            trace('action_done')
         result.update({'passed':True,'host_approval_seen':True,'kernel_release':identity.kernel_release,
             'root_uuid':identity.root_uuid,'manager_state':manager,'network_only_loopback':True,
             'pnm_absent':absent,'independent_boot_id':True,'machine_id_differs_from_host':True})
@@ -263,6 +276,7 @@ def main(*, action: Callable[[],dict] | None=None, scope: str='boot-only',
         result.update({'stage':stage,'error_class':type(error).__name__})
     finally:
         # This block is reachable only after the independent-guest guard passed.
+        trace('persist_begin')
         path=Path('/var/tmp/pnm-vm-'+('boot' if scope=='boot-only' else scope)+'-result.json')
         try:
             output=os.open(path,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600)
@@ -275,18 +289,23 @@ def main(*, action: Callable[[],dict] | None=None, scope: str='boot-only',
                 os.fsync(directory)
             finally:
                 os.close(directory)
+            trace('persist_done')
         except OSError as error:
+            trace('persist_error')
             result.update({'passed':False,'stage':'boot evidence persistence',
                            'error_class':type(error).__name__})
         finally:
             try:
                 if emit is not None:
                     try:
+                        trace('emit_begin')
                         if require_result_ack:
                             wait_result_receipt(descriptor,emit,result)
                         else:
                             emit(result)
+                        trace('emit_done')
                     except (OSError,RuntimeError) as error:
+                        trace('emit_error')
                         result['passed']=False
                         print('PNM_VM_EMIT_ERROR '+type(error).__name__,file=sys.stderr,flush=True)
             finally:
@@ -294,6 +313,7 @@ def main(*, action: Callable[[],dict] | None=None, scope: str='boot-only',
                     if descriptor is not None:
                         os.close(descriptor)
                 finally:
+                    trace('power_begin')
                     subprocess.run(['systemctl','--no-block',power_action if result.get('passed') else 'poweroff'],
                                    capture_output=True,timeout=10)
 
