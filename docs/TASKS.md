@@ -1,6 +1,6 @@
 # PNM Current Tasks
 
-**Updated:** 2026-10-29. **Phase 3 bounded Debian/Ubuntu acceptance remains pending.
+**Updated:** 2026-10-30. **Phase 3 bounded Debian/Ubuntu acceptance remains pending.
 Phase 4 installed-node Profile main flow is implemented; its bounded real
 systemd cycle/compensation/refusal checks pass on all eight native combinations. Phase 5 local observability is implemented with passing
 local gates; optional external checks remain deferred.
@@ -9,7 +9,7 @@ firewall management remains manual. Phase 7 local regression/release preparation
 is complete; current amd64/arm64 Ubuntu and Debian userspace CI pass; full real acceptance remains pending. No release
 has been published.**
 
-**Latest fully exercised runtime baseline:** branch `dev`, source commit `32b68df`, VERSION
+**Latest fully exercised runtime baseline:** branch `dev`, source commit `a814ce3`, VERSION
 `0.16.0-rc.1`. Includes the dual-Core lifecycle, installed-node Profiles, optional
 resource/status observations, sanitized recovery diagnostics, native architecture
 asset/digest selection and amd64/arm64 CI.
@@ -19,32 +19,35 @@ Earlier records below remain specific to their own sources and execution layers.
 
 ### Current bounded execution evidence
 
-Runtime source `32b68df61e11d560f8cb5e5e67e7913787cf7065` passes all eight
-native nspawn lifecycle jobs in
-[managed run41004924644](https://github.com/mrshyi/pnm/actions/runs/41004924644).
-Each passes19 checks: actual dual-Core installation, independent restart/apply,
-five real Profile cycle/compensation/refusal checks and protected trusted restore.
-All report profiles_checked=true, unchanged host account/package databases,
-retired scopes and no remaining fixture mounts. The32-file product manifest is
-`ebcd74c1dcaa3597112078acbf441d83ac05f104fbaa444b9d2a167dcd8798f6`.
+Current runtime/harness source `a814ce3e9f7e1ad6bc735342c6df00f648a7f4b0`
+passes all nine jobs in
+[managed run41047351721](https://github.com/mrshyi/pnm/actions/runs/41047351721):
+eight native nspawn lifecycle combinations plus the Debian13 amd64 KVM pilot.
+Each nspawn job passes19 checks: actual dual-Core installation, independent
+restart/apply, five real Profile cycle/compensation/refusal checks and protected
+trusted restore. All report profiles_checked=true, unchanged host account/package
+databases, retired scopes and no remaining fixture mounts. The32-file product
+manifest is `ebcd74c1dcaa3597112078acbf441d83ac05f104fbaa444b9d2a167dcd8798f6`.
+Production files are unchanged from32b68df (verified by git diff); each cloud
+result still verifies its own staged source identity.
 
-| Guest | amd64 job / result | arm64 job / result |
+| Guest | amd64 nspawn job / result | arm64 nspawn job / result |
 |---|---|---|
-| Debian12 | 123897547878 / PASS19 | 123897547971 / PASS19 |
-| Debian13 | 123897547922 / PASS19 | 123897547951 / PASS19 |
-| Ubuntu22.04 | 123897547849 / PASS19 | 123897547640 / PASS19 |
-| Ubuntu24.04 | 123897548070 / PASS19 | 123897547884 / PASS19 |
+| Debian12 | 124034582121 / PASS19 | 124034581954 / PASS19 |
+| Debian13 | 124034581884 / PASS19 | 124034581935 / PASS19 |
+| Ubuntu22.04 | 124034581701 / PASS19 | 124034581785 / PASS19 |
+| Ubuntu24.04 | 124034581902 / PASS19 | 124034582026 / PASS19 |
 
-[Regular CI41004924654](https://github.com/mrshyi/pnm/actions/runs/41004924654)
-also passes all eight jobs at32b68df. Later
-[CI41008164950](https://github.com/mrshyi/pnm/actions/runs/41008164950), source
-`b1fced18aad89a02ffe127623f1e52f6dec13f56`, passes all eight native jobs with
-unchanged production files: check/release each35 suites/477 passed/0 failed,
-privileged71/0, transport8 and standard ShellCheck. Preparation43 total/35
-executed/8 skipped includes the real private-PTY completion-receipt regression.
-All four Ubuntu jobs additionally pass real systemd8 and pinned official-Core10;
-all Ubuntu78/Debian76 shell summaries have zero failures. Repeated gates are
-not additional unique coverage; five ordinary non-root gate skips remain.
+Fresh [CI41047351670](https://github.com/mrshyi/pnm/actions/runs/41047351670)
+passes all eight native OS/architecture jobs at the same a814ce3 source.
+Each check/release gate reports35 suites/477 passed/0 failed; privileged suites
+pass71/0, transport8 and standard ShellCheck. Preparation44 total/36 executed/
+8 skipped includes marker-path safety, private-PTY framing and failure-summary
+redaction. Ubuntu jobs additionally pass real systemd8 and pinned official-Core10;
+all Ubuntu78/Debian76 shell summaries have zero failures. Repeated gates are not
+additional unique coverage; five ordinary non-root gate skips remain explicit.
+Local standard/targeted ShellCheck, syntax/security scanning and
+./tests/release-scan.sh pass; VERSION remains0.16.0-rc.1.
 
 Cloud execution exposed three in-scope defects, all fixed and covered:
 
@@ -61,35 +64,58 @@ Cloud execution exposed three in-scope defects, all fixed and covered:
   code (15/1); the fixed Core-operation suite passes16/0. Latest local full
   release-check exits0:35 suites/477/0, with standard/targeted ShellCheck passing.
 
-Independent Debian13 amd64 KVM now passes at source
-`381848a2cea99f69dbef610ccfcea8f863581155` in
-[single VM run41012319103](https://github.com/mrshyi/pnm/actions/runs/41012319103),
-job123920730758: same owned disk/process, two independently approved kernel boots,
-19 real lifecycle/Profile checks plus7 reboot checks, exit0 and unchanged host
-account/package databases. The log confirms removal of inherited `.dockerenv`.
-The VM-only clone now removes regular owned container markers, masks console
-gettys and owns its controlling serial TTY; the worker refuses container markers
-and requires systemd-detect-virt --container to report none. Build-container
-metadata and competing console ownership caused the earlier host-approval I/O
-failure. Production/Core permission policies were not weakened.
+Independent native amd64 KVM passes on all four supported releases. Each
+successful row verifies the same owned disk/process through two distinct,
+separately approved kernel boots,19 lifecycle/Profile checks and7 reboot checks,
+exit0 and unchanged host account/package databases. OS/kernel/package identities
+are retained with the workflow artifacts; no container restart substitutes for
+kernel reboot.
 
-ARM64 KVM job123897547843 remains BLOCKED (exit69, no /dev/kvm). Other OS/kernel
-reboot combinations remain unexecuted. Read-only debugfs without journal replay
-was insufficient for the earlier diagnostics; missing records did not prove
-missing execution. Temporary stage tracing, stopped-image journal diagnosis
-and the added result-receipt protocol are removed after locating the actual
-cause, restoring the existing per-boot approval/completion protocol. Failed
-guest actions still power off instead of automatically retrying. Minimal
-preparation guards43 total/35 executed/8 skipped pass, including container-marker
-removal with symlink/hardlink/ancestor refusal and the real PTY frame/drain check;
-its fresh VM rerun is pending. No host mount, development-host installation or
-reboot occurred. Duplicate automatic matrix/gate runs for diagnostic commits
-were cancelled, not counted as passes; single-VM runs retain source identities.
+| Guest | Source | Run / job | Result |
+|---|---|---|---|
+| Debian12 amd64 | bffbb70 | [41014561192](https://github.com/mrshyi/pnm/actions/runs/41014561192) / 123927833456 | PASS19+7 |
+| Debian13 amd64 | a814ce3 | [41047351721](https://github.com/mrshyi/pnm/actions/runs/41047351721) / 124034581852 | PASS19+7 |
+| Ubuntu22.04 amd64 | a814ce3 | [41047634170](https://github.com/mrshyi/pnm/actions/runs/41047634170) / 124035533638 | PASS19+7 |
+| Ubuntu24.04 amd64 | bffbb70 | [41014570286](https://github.com/mrshyi/pnm/actions/runs/41014570286) / 123927881207 | PASS19+7 |
+
+Two fixture defects were repaired without changing production validators:
+- Docker export retained .dockerenv (Ubuntu also retained run/systemd/container),
+  interfering with native VM/console behavior. VM-only clone preparation removes
+  regular owned markers, rejects symlink/hardlink/ancestor escapes, masks console
+  gettys and claims its controlling serial TTY. Guest and host refuse container
+  identity before permitting PNM operations.
+- Ubuntu22's kernel/firmware adds about1.66GB. Two2GiB runs completed18 checks but
+  restore returned73; the owned lifecycle image is now4GiB. The fresh Ubuntu22
+  run passes the full restore and actual reboot without production code changes.
+  Dedicated bounded storage-fault fixtures retain their original2GiB limits.
+
+Temporary stage tracing, stopped-image journal diagnosis and the added result-
+receipt protocol were removed after locating the cause. The existing per-boot
+approval/completion protocol passes in the minimal implementation; failures power
+off instead of silently retrying. The retained failure path emits only approved
+stage names, command exit codes and completed-check counts, with a redaction
+regression. Raw guest logs/configurations/credentials remain private.
+
+ARM64 KVM remains BLOCKED: observed hosted ARM64 pilots lack /dev/kvm and refuse69
+(e.g. job123897547843); no software/foreign-architecture fallback is allowed.
+Automatic execution is eight nspawn combinations plus the supported amd64 KVM
+pilot. ARM64 KVM remains dispatch-only pending suitable authorized hardware;
+removing its known unsupported automatic pilot does not count as acceptance.
+No host mount, development-host installation or reboot occurred. Cancelled
+superseded diagnostic runs are not counted as passes.
 
 This increment's eight-way selfsigned lifecycle/Profile execution is complete.
 It does not establish every U-01–U-08 item, remaining TLS/update/failure scenarios,
 installed CLI wrapper/uninstall or public clients. Public dual-protocol
 acceptance is explicitly separate. No production deployment or release occurred.
+
+Next execution priorities stay finite: U-03 external-ca/mismatch and U-04
+external-restart subcases; U-05 distinct approved-version update/rollback and
+the four U-07 failure/retry cases; then the Debian native protocol-traffic slice
+and installed CLI wrapper/uninstall. Reuse the existing harness and fresh owned
+clones. ARM64 kernel reboot awaits suitable authorized KVM hardware; public
+Xray/HY2 connectivity stays a separate acceptance by user instruction. Do not
+add new features or fault combinations to close these known items.
 
 ## Prior cloud evidence
 
@@ -540,18 +566,18 @@ acceptance is explicitly separate. No production deployment or release occurred.
   are not available in the checked session. Do not infer the whole host's service
   state from this namespace. Recheck capabilities before choosing integration work.
 - This is a Linux L1 development workspace. Supported deployments remain Debian
-  12/13 and Ubuntu22.04/24.04 amd64 with systemd.
+  12/13 and Ubuntu22.04/24.04 amd64/arm64 with systemd.
 - ShellCheck0.8.0 was approved, downloaded from the configured Ubuntu repository
   and extracted to `/tmp/pnm-cloud-fix.v5LWBeoD/shellcheck-tool`. It was not
   installed system-wide. This temporary path must be rechecked before reuse.
-- No deployment target or external clients have been supplied for G-01/L3.
-  Historical WSL storage limits, host paths and private VM assets are not cloud
-  prerequisites or transferred fixtures.
+- Disposable CI now supplies native systemd deployment fixtures and an independent
+  amd64 KVM guests for all four releases. External clients and production comparison targets
+  remain unsupplied. Historical WSL paths/private assets are not prerequisites.
 
 For development setup and gate commands, use [CONTRIBUTING](../CONTRIBUTING.md).
 For test IDs and closure rules, use [ACCEPTANCE_PLAN](ACCEPTANCE_PLAN.md).
-Continue Ubuntu validation in stages, committing validated work and recording
-exact source identity before moving on. CI uses disposable hosted runners;
+Continue only the finite remaining acceptance below, committing validated work
+and recording source identity. CI uses disposable hosted runners;
 production access, deployment and package installation on the development host
 remain outside scope.
 
@@ -565,12 +591,12 @@ scope. **验收挂起** means specified evidence or an authorized fixture is mis
 
 | Item | Development disposition / source anchors | Remaining acceptance |
 |---|---|---|
-| G-01 runtime/config/link state | 验收挂起; dual-Core runtime/applied/InvocationID gates exist in `lib/node.sh` and `lib/render.sh`; no new implementation gap confirmed | U-02/U-04/U-08: verify installed source identity and runtime/link evidence on the disposable Ubuntu targets. Any separate existing deployment stays unverified until supplied |
-| G-02 deployment recovery | 开发完成; `lib/deploy.sh` and `lib/transaction.sh` implement common commit/compensation, metadata/directory/account receipts and uncertainty guards | 验收挂起: U-02/U-03/U-07/U-08; full CLI installation and the selected compensation/reboot checks |
-| G-03 Core update/rollback | 开发完成; `lib/core-ops.sh` pairs current/previous binaries and version metadata and isolates the peer Core | 验收挂起: U-05/U-07/U-08; distinct approved versions, selected startup failure and persisted state |
-| G-04 backup/restore | 开发完成; `lib/core-ops.sh` validates trusted archives, bounds parsing and compensates resource metadata; D-009 remains binding | 验收挂起: U-06/U-07/U-08; trusted round trip, rejected archive and selected restore failure |
-| G-05 dependency preflight | 开发完成; `lib/preflight.sh` and `adapters/assets.sh`; recorded real curl/TLS7-case transport checks include503 retry counts | 验收挂起: U-01/U-07; actual install missing-tool refusal before managed changes |
-| G-06 HY2 TLS/account access | 开发完成; `lib/tls.sh`, `lib/accounts.sh`, `lib/check.sh`; recorded privileged access8/8 and isolated real-Core TLS/traffic | 验收挂起: U-02/U-03/U-07; actual managed accounts, self-signed/external certificate loading and compensation |
+| G-01 runtime/config/link state | 开发完成; runtime/applied/InvocationID gates in `lib/node.sh` and `lib/render.sh`; eight lifecycle jobs and four native amd64 VMs pass | 验收挂起: explicit external-restart subcase, ARM64 kernel reboot combinations and separately supplied deployed-node comparisons |
+| G-02 deployment recovery | 开发完成; common transaction/metadata/directory/account recovery; real Profile compensation passes all eight combinations | 验收挂起: U-03 external-ca branches and U-07 selected first-install/update/restore failures |
+| G-03 Core update/rollback | 开发完成; current/previous binaries and metadata remain paired and peer-isolated | 验收挂起: U-05 distinct-version real update/rollback and its U-07 startup failure; no current-source cloud PASS is claimed |
+| G-04 backup/restore | 开发完成; eight real trusted round trips/damaged-archive refusals pass after fixing the Profile field loader; D-009 remains binding | 验收挂起: U-07 restore startup failure and remaining ARM64 U-08 kernel combinations |
+| G-05 dependency preflight | 开发完成; normal/privileged checks and real transport8 pass, including PID attribution and503 retry counts | 验收挂起: Debian selected native protocol-traffic integration and U-07 missing-openssl refusal |
+| G-06 HY2 TLS/account access | 开发完成; actual managed accounts, selfsigned TLS ownership/readability and real service health pass in all eight lifecycle jobs | 验收挂起: U-03 external-ca/mismatched-key branches and selected U-07 compensation; public clients remain separate |
 
 **必须修复 queue: no newly confirmed item in this closeout review.** This is a
 targeted source/evidence reconciliation, not a claim of an exhaustive defect-free
@@ -578,37 +604,52 @@ audit. If U-01–U-08 reproduce a security, correctness, recovery or compatibili
 failure, record its source, command, expected/actual state and minimal fix here;
 do not turn an untested combination into a new implementation task by default.
 
-**明确延期:** Debian12/13 acceptance; public external-client T-27 and separately
-supplied deployed-node comparisons; physical media/power-loss faults, exhaustive
-storage/commit/concurrency combinations, alternative NSS providers, other HTTP
-retry statuses/Retry-After and upstream DNS/PKI outage campaigns. Retain these
-limits for supported-platform/production readiness; they do not automatically
-expand the bounded Ubuntu closeout. Basic Ubuntu reboot and selected rollback
-failures remain required below, not deferred.
+**明确延期 / separate scope:** public external-client T-27 by user instruction,
+separately supplied production comparisons, physical media/power-loss faults,
+exhaustive storage/commit/concurrency combinations, alternative NSS providers,
+other HTTP retry statuses/Retry-After and upstream DNS/PKI outage campaigns.
+Debian is included in the bounded platform matrix and is no longer a blanket
+deferral. Remaining U-01–U-08 subcases below are unexecuted, not implicitly waived.
 
-The finite execution contract is [U-01–U-08](ACCEPTANCE_PLAN.md#ubuntu-closeout).
-All eight must have evidence on Ubuntu22.04 and24.04 before Ubuntu closeout is
-declared. The recorded32423be CI satisfies only the U-01 layer for that
-source; U-02–U-08 remain pending. No target, assets or installation/reboot
-authorization is inferred from this checklist. Phase3 remains acceptance-pending;
-closure requires the bounded results and an explicit disposition of residuals,
-not merely this document edit. Phase4 development is now separately authorized;
-its implementation does not change these Phase3 acceptance dispositions.
+The finite contract remains [U-01–U-08](ACCEPTANCE_PLAN.md#platform-closeout).
+The current eight-way lifecycle and four amd64 kernel reboots are concrete
+progress, not complete Phase3/platform/release acceptance. Each pair below is
+**amd64 / arm64**; exact source/run evidence is in the continuation checkpoint.
+PASS applies only to the stated layer/scenario. BLOCKED means required subcases
+are still unexecuted or their environment is unavailable, not an inferred failure.
 
-| Closeout ID | Ubuntu22.04 | Ubuntu24.04 |
-|---|---|---|
-| U-01 | PASS at32423be, run40894062624 | PASS at32423be, same run |
-| U-02 | BLOCKED | BLOCKED |
-| U-03 | BLOCKED | BLOCKED |
-| U-04 | BLOCKED | BLOCKED |
-| U-05 | BLOCKED | BLOCKED |
-| U-06 | BLOCKED | BLOCKED |
-| U-07 | BLOCKED | BLOCKED |
-| U-08 | BLOCKED | BLOCKED |
+| ID | Debian12 | Debian13 | Ubuntu22.04 | Ubuntu24.04 |
+|---|---|---|---|---|
+| U-01 | BLOCKED / BLOCKED | BLOCKED / BLOCKED | PASS / PASS | PASS / PASS |
+| U-02 | PASS / PASS | PASS / PASS | PASS / PASS | PASS / PASS |
+| U-03 | BLOCKED / BLOCKED | BLOCKED / BLOCKED | BLOCKED / BLOCKED | BLOCKED / BLOCKED |
+| U-04 | BLOCKED / BLOCKED | BLOCKED / BLOCKED | BLOCKED / BLOCKED | BLOCKED / BLOCKED |
+| U-05 | BLOCKED / BLOCKED | BLOCKED / BLOCKED | BLOCKED / BLOCKED | BLOCKED / BLOCKED |
+| U-06 | PASS / PASS | PASS / PASS | PASS / PASS | PASS / PASS |
+| U-07 | BLOCKED / BLOCKED | BLOCKED / BLOCKED | BLOCKED / BLOCKED | BLOCKED / BLOCKED |
+| U-08 | PASS / BLOCKED | PASS / BLOCKED | PASS / BLOCKED | PASS / BLOCKED |
 
-BLOCKED here is a pre-execution disposition: authorized disposable full-flow/boot
-fixtures and the required verified assets have not been established. No new
-attempt or failure is implied. Existing hosted service/Core CI is not that fixture.
+- U-01: all eight repository/userspace gates pass; Ubuntu adds the existing
+  test-systemd/test-real-cores native integration. Debian actual managed services
+  now run, but its separately required native protocol-traffic slice is not yet
+  executed and is not replaced by listening sockets or userspace CI.
+- U-02/U-06: selfsigned source-CLI installation and trusted backup/restore pass in
+  all eight native nspawn environments. Installed wrapper/uninstall are separate
+  delivery checks and remain unexecuted.
+- U-03/U-04: repeated-install refusal and each ordinary CLI restart/apply pass;
+  external-ca/mismatched-key and explicit external-restart subcases remain pending.
+- U-05/U-07: the existing distinct-version and four fixed failure scenarios remain
+  the finite next execution set. Profile bind-failure compensation does not replace
+  first-install/update/restore compensation.
+- U-08: all four native amd64 KVM releases pass19+7 checks. ARM64 lacks hosted KVM;
+  its kernel reboot combinations remain unexecuted. ARM64 KVM remains available as
+  an explicit dispatch that refuses unsupported hardware; automatic execution is
+  eight nspawn combinations plus the supported amd64 KVM pilot.
+
+No newly reproduced production defect remains in the must-fix queue. Phase3
+closure still needs the remaining bounded evidence and explicit residual
+settlement. Phase4's scoped real Profile cycle is accepted on all eight managed
+environments; this does not waive Phase3, delivery or public-client requirements.
 
 Current source, historical observations and fresh Ubuntu checks have separate
 evidence below; selected CI integration does not establish the full L2 matrix.
