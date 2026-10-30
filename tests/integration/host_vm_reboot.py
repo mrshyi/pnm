@@ -206,7 +206,13 @@ def run_vm(root, work):
                             'acceptance_present':isinstance(persisted.get('acceptance'),dict)}),flush=True)
                     log.flush()
                     raw=(work/'vm-serial.private.log').read_bytes()
-                    print(json.dumps({'vm_serial_has_result':b'boot-result' in raw,
+                    print(json.dumps({'qemu_exit_code':process.returncode,
+                        'qemu_error_categories':[label for label,marker in (
+                            ('kvm_run',b'KVM internal error'),('kvm_entry',b'KVM entry failed'),
+                            ('disk_io',b'Input/output error'),('no_space',b'No space left on device'),
+                            ('signal',b'terminating on signal'),('guest_poweroff',b'Power down'),
+                            ('guest_reboot',b'Restarting system')) if marker in raw],
+                        'vm_serial_has_result':b'boot-result' in raw,
                         'vm_serial_has_emit_error':b'PNM_VM_EMIT_ERROR' in raw,
                         'vm_worker_exception_lines':[int(n) for n in re.findall(rb'File "/opt/guest_vm_boot.py", line ([0-9]+)',raw)],
                         'vm_exception_classes':sorted({n.decode('ascii') for n in re.findall(
