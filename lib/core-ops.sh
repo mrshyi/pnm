@@ -298,7 +298,9 @@ pnm_core_apply_config_locked() {
         pnm_tx_close
         return "$rc"
     fi
-    if pnm_systemd_unit_healthy "$PNM_CORE_UNIT"; then
+    if pnm_systemd_unit_healthy "$PNM_CORE_UNIT" &&
+        pnm_core_runtime_listener_ready "$core" "$PNM_CORE_CONFIG" &&
+        pnm_systemd_unit_healthy "$PNM_CORE_UNIT"; then
         :
     else
         rc=$?

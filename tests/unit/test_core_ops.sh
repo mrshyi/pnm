@@ -52,6 +52,7 @@ pnm_test_apply_setup() {
     PNM_TEST_APPLY_RESTART_FAIL=0
     PNM_TEST_APPLY_HEALTH_CHECKS=0
     PNM_TEST_APPLY_HEALTH_FAIL=0
+    PNM_TEST_APPLY_LISTENER_RC=0
     PNM_TX_ACTIVE=0
     pnm_load_node_config apply_old_node || return 1
     pnm_load_reality_secret apply_old_secret || return 1
@@ -93,6 +94,7 @@ pnm_systemctl() {
     ((PNM_TEST_APPLY_RESTARTS += 1))
     if ((PNM_TEST_APPLY_RESTART_FAIL == 1 && PNM_TEST_APPLY_RESTARTS == 1)); then return 1; fi
 }
+pnm_core_runtime_listener_ready() { return "${PNM_TEST_APPLY_LISTENER_RC:-0}"; }
 pnm_systemd_unit_healthy() {
     ((PNM_TEST_APPLY_HEALTH_CHECKS += 1))
     if ((PNM_TEST_APPLY_HEALTH_FAIL == 1 && PNM_TEST_APPLY_HEALTH_CHECKS == 1)); then return 1; fi
@@ -178,6 +180,19 @@ test_xray_apply_health_failure_restores_previous_config_and_service() {
     assert_eq 1 "$rc" || { pnm_test_apply_cleanup; return 1; }
     assert_eq "$original" "$(<"$PNM_XRAY_CONFIG")" || { pnm_test_apply_cleanup; return 1; }
     assert_eq 2 "$PNM_TEST_APPLY_RESTARTS" || { pnm_test_apply_cleanup; return 1; }
+    pnm_test_apply_cleanup
+}
+
+test_xray_apply_listener_failure_restores_previous_config_and_service() {
+    local original rc
+    pnm_test_apply_setup || return 1
+    original="$(<"$PNM_XRAY_CONFIG")"
+    PNM_TEST_APPLY_LISTENER_RC=70
+    if pnm_core_apply_config xray; then rc=0; else rc=$?; fi
+    assert_eq 70 "$rc" || { pnm_test_apply_cleanup; return 1; }
+    assert_eq "$original" "$(<"$PNM_XRAY_CONFIG")" || { pnm_test_apply_cleanup; return 1; }
+    assert_eq 2 "$PNM_TEST_APPLY_RESTARTS" || { pnm_test_apply_cleanup; return 1; }
+    [[ ! -e "$PNM_STATE_DIR/cores/xray/applied.env" ]] || { pnm_test_apply_cleanup; return 1; }
     pnm_test_apply_cleanup
 }
 
@@ -355,6 +370,7 @@ run_test 'invalid Xray candidate leaves current runtime config untouched' test_x
 run_test 'Xray apply candidates support the Core auto-format loader' test_xray_apply_supports_core_auto_format
 run_test 'Xray restart failure restores previous config and service' test_xray_apply_restart_failure_restores_previous_config_and_service
 run_test 'Xray health-check failure restores previous config and service' test_xray_apply_health_failure_restores_previous_config_and_service
+run_test 'apply refuses an active Core without its listener and restores prior state' test_xray_apply_listener_failure_restores_previous_config_and_service
 run_test 'repeated Xray apply produces stable runtime config' test_xray_apply_is_stable_when_repeated
 run_test 'successful Xray apply records the exact applied configuration digest' test_successful_apply_records_the_exact_runtime_config_digest
 run_test 'Hysteria2 apply rejects invalid TLS before changing runtime config' test_hysteria_apply_rejects_unreadable_tls_before_apply

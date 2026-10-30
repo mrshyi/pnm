@@ -20,6 +20,26 @@ DRIVER=Path(__file__).with_name('test_guest_mainflow.py')
 
 
 class GuestGuardTests(unittest.TestCase):
+    def test_vm_serial_frames_start_on_a_new_line_and_drain_before_power_action(self):
+        import select,termios
+        from unittest.mock import Mock
+        tree=ast.parse(DRIVER.with_name('guest_vm_boot.py').read_text())
+        function=next(n for n in ast.walk(tree) if isinstance(n,ast.FunctionDef) and n.name=='emit')
+        master,slave=os.openpty()
+        try:
+            drain=Mock(wraps=termios.tcdrain)
+            namespace=dict(os=os,json=json,time=time,select=select,descriptor=slave,
+                           termios=type('Serial',(),{'tcdrain':staticmethod(drain)}))
+            exec(compile(ast.Module(body=[function],type_ignores=[]),'<VM serial emit>','exec'),namespace)
+            namespace['emit']({'kind':'boot-result','passed':True})
+            self.assertTrue(select.select([master],[],[],1)[0])
+            frame=os.read(master,4096).replace(b'\r\n',b'\n')
+            self.assertTrue(frame.startswith(b'\nPNM_VM '))
+            self.assertEqual(json.loads(frame.split(b'PNM_VM ',1)[1]),{'kind':'boot-result','passed':True})
+            drain.assert_called_once_with(slave)
+        finally:
+            os.close(master);os.close(slave)
+
     def test_vm_approval_requires_owned_identity_and_independent_second_boot(self):
         from unittest.mock import patch
         spec=importlib.util.spec_from_file_location('pnm_vm_host',DRIVER.with_name('host_vm_reboot.py'))

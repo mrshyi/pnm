@@ -132,7 +132,7 @@ def main(*, action: Callable[[],dict] | None=None, scope: str='boot-only',
         termios.tcsetattr(descriptor,termios.TCSANOW,attributes)
 
         def emit(record: dict) -> None:
-            message=('PNM_VM '+json.dumps(record,sort_keys=True)+'\n').encode()
+            message=('\nPNM_VM '+json.dumps(record,sort_keys=True)+'\n').encode()
             if len(message)>2048:
                 raise RuntimeError('bounded VM protocol record exceeded')
             deadline=time.monotonic()+3
@@ -146,6 +146,7 @@ def main(*, action: Callable[[],dict] | None=None, scope: str='boot-only',
                         message=message[sent:]
                     except BlockingIOError:
                         pass
+            termios.tcdrain(descriptor)
 
         stage='fresh managed-resource absence'
         absent=not any(Path(name).exists() or Path(name).is_symlink()

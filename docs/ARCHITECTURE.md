@@ -22,7 +22,7 @@ isolated synthetic sandbox behavior and standalone Core operations retain their
 existing interfaces. Version queries execute the explicitly approved programs;
 they do not sandbox arbitrary bytes or authenticate a self-declared checksum.
 
-Startup and recovered-generation listener checks may request up to26 probes,
+Startup, standalone apply and recovered-generation listener checks may request up to26 probes,
 with25 waits of0.2 seconds. This covers the `Type=simple` interval between a
 successful systemd start and the real Core binding its configured socket. The
 startup gate then independently collects its full service/configuration/TLS/

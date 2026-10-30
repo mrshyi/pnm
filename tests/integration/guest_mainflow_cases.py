@@ -654,7 +654,7 @@ try:
     def links_ready(label):
         data=json.loads(call(label,['--json','node','links','--address','203.0.113.10']).stdout)
         if data['xray_status']!='ready' or data['hysteria2_status']!='ready':
-            allowed={'ready','drift','inactive','damaged','unknown','disabled'}
+            allowed={'ready','drift','inactive','damaged','unknown','unavailable'}
             statuses=[data[key] if data.get(key) in allowed else 'other'
                       for key in ('xray_status','hysteria2_status')]
             raise RuntimeError('post-operation links not ready: xray='+statuses[0]+',hy2='+statuses[1])

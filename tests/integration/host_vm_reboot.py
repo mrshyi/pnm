@@ -102,7 +102,7 @@ def run_vm(root, work):
         args=[str(qemu),'-nodefaults','-no-user-config','-machine',board+',accel=kvm,dump-guest-core=off',
               '-cpu','host','-m','1024','-smp','2','-display','none','-monitor','none','-serial','stdio',
               '-nic','none','-kernel',str(kernel),'-initrd',str(initrd),'-append',
-              'root=UUID='+root_uuid+' rootfstype=ext4 rw console='+console+' systemd.show_status=no',
+              'root=UUID='+root_uuid+' rootfstype=ext4 rw console='+console+' quiet loglevel=3 systemd.show_status=no',
               '-add-fd',f'fd={fd},set=1,opaque=pnm-{instance}',
               '-blockdev','driver=file,filename=/dev/fdset/1,node-name=pnm-file,read-only=off,auto-read-only=off',
               '-blockdev','driver=raw,file=pnm-file,node-name=pnm-disk',

@@ -17,6 +17,27 @@ Earlier records below remain specific to their own sources and execution layers.
 
 ## Continuation checkpoint
 
+- Fresh source `bf59fd4728ed9f61b099b0906ff82d3c1a066c27`,
+  [managed run41004000680](https://github.com/mrshyi/pnm/actions/runs/41004000680):
+  Debian12/13 amd64/arm64 all pass the complete19-check lifecycle, including
+  the five real Profile checks and subsequent trusted backup/restore. Jobs
+  123894627899/123894627960 (Debian12 amd64/arm64) and
+  123894627653/123894628030 (Debian13 amd64/arm64) report profiles_checked=true,
+  unchanged host databases, scope not-found and no remaining fixture mounts.
+  Product32-file manifest924a8091ce856aaf57715089f0f7988d3e5c73d7fc587a360f8a19ccadeeaa48.
+  Ubuntu24 amd64/arm64 and Ubuntu22 arm64 also passed19 checks. Ubuntu22
+  amd64 reproduced the post-apply link failure: the status branch indicates an
+  absent listener despite active service and confirmed evidence. Apply now uses
+  the existing bounded runtime-listener wait and rechecks healthy service state
+  before evidence publication; focused Core operations16/0, with new refusal/
+  compensation regression failing against prior source (15/1). This is a real
+  startup interval defect, not justification to retry or weaken readiness tests.
+  AMD64 KVM next received a scope transition without a recorded first result;
+  console framing now begins on a fresh line and drains before guest reboot,
+  with a real private-PTY regression. Guards42 total/34 executed/8 skipped pass.
+  ARM64 KVM remains unavailable. Fresh make release-check exits0:
+  35 suites/477 passed/0 failed, with the ordinary five root-only skips;
+  standard/targeted ShellCheck and diff/Python checks pass. Cloud rerun pending.
 - Current cloud source86dc318 (run41003158328): seven native nspawn jobs
   passed all five real Profile checks before staged restore refused78. Ubuntu22
   amd64 stopped earlier at links-readiness after Xray apply; bounded status-only
