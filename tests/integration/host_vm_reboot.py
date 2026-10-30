@@ -23,8 +23,9 @@ def require(condition, label):
 def approve_ready(record, expected, instance, host_boot, previous_boot):
     scope='pnm-reboot' if previous_boot else 'pnm-lifecycle'
     require(record.get('schema')==1 and record.get('kind')=='boot-ready'
-            and record.get('instance')==instance and record.get('scope')==scope,
-            'VM serial identity/scope differs')
+            and record.get('instance')==instance, 'VM serial identity differs')
+    received=record.get('scope') if record.get('scope') in ('pnm-lifecycle','pnm-reboot','boot-only') else 'other'
+    require(received==scope,'VM serial scope differs: expected='+scope+' received='+received)
     boot=record.get('boot_id','')
     require(re.fullmatch(r'[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}',boot) and boot not in (host_boot,previous_boot),
             'VM did not establish a new independent kernel boot')
@@ -135,7 +136,10 @@ def run_vm(root, work):
                     log.write(data);pending+=data
                     while b'\n' in pending:
                         line,_,pending=pending.partition(b'\n')
-                        if not line.startswith(b'PNM_VM '): continue
+                        if not line.startswith(b'PNM_VM '):
+                            if b'PNM_VM ' in line:
+                                print(json.dumps({'vm_protocol_frame_with_console_prefix':True}),flush=True)
+                            continue
                         message=json.loads(line[7:].strip())
                         require(message.get('instance')==instance,'foreign VM serial message')
                         if message.get('kind')=='boot-ready' and message['boot_id'] not in approved:
@@ -150,6 +154,8 @@ def run_vm(root, work):
                                 except FileNotFoundError: continue
                                 disk_seen |= (candidate.st_dev,candidate.st_ino)==(info.st_dev,info.st_ino)
                             require(disk_seen,'QEMU does not own approved disk')
+                            print(json.dumps({'vm_ready':True,'approved_boots':len(approved),'results':len(result),
+                                'scope':message.get('scope') if message.get('scope') in ('pnm-lifecycle','pnm-reboot','boot-only') else 'other'}),flush=True)
                             approval=approve_ready(message,expected_ready,instance,host_boot,previous_boot)
                             process.stdin.write(b'PNM_VM_APPROVE '+json.dumps(approval).encode()+b'\n')
                             approved.add(message['boot_id'])

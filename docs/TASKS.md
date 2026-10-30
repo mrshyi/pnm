@@ -1,8 +1,8 @@
 # PNM Current Tasks
 
 **Updated:** 2026-10-29. **Phase 3 bounded Debian/Ubuntu acceptance remains pending.
-Phase 4 installed-node Profile main flow is basically complete; real systemd
-acceptance is pending. Phase 5 local observability is implemented with passing
+Phase 4 installed-node Profile main flow is implemented; its bounded real
+systemd cycle/compensation/refusal checks pass on all eight native combinations. Phase 5 local observability is implemented with passing
 local gates; optional external checks remain deferred.
 Phase 6's scoped recovery diagnostics are implemented with passing local gates;
 firewall management remains manual. Phase 7 local regression/release preparation
@@ -17,6 +17,30 @@ Earlier records below remain specific to their own sources and execution layers.
 
 ## Continuation checkpoint
 
+- Latest executed runtime source `32b68df61e11d560f8cb5e5e67e7913787cf7065`,
+  [managed run41004924644](https://github.com/mrshyi/pnm/actions/runs/41004924644):
+  **all eight native nspawn lifecycle jobs pass19/19**, including actual dual-Core
+  installation, independent restart/apply, five real Profile checks and protected
+  trusted backup/restore. Every job reports profiles_checked=true, unchanged
+  host account/package databases, retired scope and no remaining fixture mounts.
+  Product32-file manifestebcd74c1dcaa3597112078acbf441d83ac05f104fbaa444b9d2a167dcd8798f6.
+
+  | Guest | amd64 job / result | arm64 job / result |
+  |---|---|---|
+  | Debian12 | 123897547878 / PASS19 | 123897547971 / PASS19 |
+  | Debian13 | 123897547922 / PASS19 | 123897547951 / PASS19 |
+  | Ubuntu22.04 | 123897547849 / PASS19 | 123897547640 / PASS19 |
+  | Ubuntu24.04 | 123897548070 / PASS19 | 123897547884 / PASS19 |
+
+  This closes this increment's eight-way selfsigned lifecycle/Profile execution;
+  it does not establish every U-01–U-08 item, other TLS/update/failure scenarios,
+  installed wrapper/uninstall or public clients. ARM64 KVM job123897547843 again
+  refuses69 (no /dev/kvm), explicitly BLOCKED rather than PASS. AMD64 KVM
+  job123897547830 still fails the serial scope transition after framing/drain;
+  no reboot PASS is claimed. Added fixed-enum scope/count and prefixed-frame
+  diagnostics without relaxing nonce/process/disk/boot guards. Guards42 total/
+  34 executed/8 skipped pass. Regular CI remains pending; public dual-protocol
+  acceptance remains separate.
 - Fresh source `bf59fd4728ed9f61b099b0906ff82d3c1a066c27`,
   [managed run41004000680](https://github.com/mrshyi/pnm/actions/runs/41004000680):
   Debian12/13 amd64/arm64 all pass the complete19-check lifecycle, including
