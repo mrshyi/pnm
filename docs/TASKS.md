@@ -17,6 +17,13 @@ Earlier records below remain specific to their own sources and execution layers.
 
 ## Continuation checkpoint
 
+- Single amd64 VM dispatch41006646409 at sourced10c1a1 still loses completion
+  frames; its fixed-class serial emission diagnostic was not observed. Further
+  diagnosis reads only fixed completion-record paths from the owned stopped
+  ext4 image via read-only debugfs (no host mount), reports fixed booleans/classes,
+  and compares whether serial bytes contain a result marker. Failed guest actions
+  now power off instead of silently rebooting and retrying installation.
+  This remains harness work; no independent reboot acceptance is claimed.
 - VM scope diagnosis at source6c5ca32/run41005735238: eight nspawn jobs
   again pass, but amd64 VM job123900093647 reports two lifecycle-ready boots
   and then reboot-ready with zero received boot results. No completion is

@@ -182,6 +182,24 @@ def run_vm(root, work):
                     try: process.wait(timeout=15)
                     except subprocess.TimeoutExpired:
                         process.kill();process.wait(timeout=5)
+                if len(result)!=2:
+                    for scope in ('pnm-lifecycle','pnm-reboot'):
+                        probe=subprocess.run(['debugfs','-R','cat /var/tmp/pnm-vm-'+scope+'-result.json',str(disk)],
+                            capture_output=True,timeout=10)
+                        try:
+                            persisted=json.loads(probe.stdout)
+                        except (ValueError,UnicodeError):
+                            print(json.dumps({'vm_persisted_result':scope,'present':False}),flush=True)
+                            continue
+                        print(json.dumps({'vm_persisted_result':scope,'present':True,
+                            'passed':persisted.get('passed') is True,
+                            'stage':persisted.get('stage') if persisted.get('stage') in ('host approval','approved PNM acceptance','boot evidence persistence') else 'other',
+                            'error_class':persisted.get('error_class') if persisted.get('error_class') in ('RuntimeError','GuestRefusal','OSError','TimeoutExpired','FileNotFoundError') else 'other',
+                            'acceptance_present':isinstance(persisted.get('acceptance'),dict)}),flush=True)
+                    log.flush()
+                    raw=(work/'vm-serial.private.log').read_bytes()
+                    print(json.dumps({'vm_serial_has_result':b'boot-result' in raw,
+                                      'vm_serial_has_emit_error':b'PNM_VM_EMIT_ERROR' in raw}),flush=True)
                 require(all(hashlib.sha256(Path(p).read_bytes()).digest()==v for p,v in databases.items()),
                         'VM test changed host account/package databases')
         public={'passed':True,'backend':'qemu-kvm','architecture':machine,'independent_boots':2,

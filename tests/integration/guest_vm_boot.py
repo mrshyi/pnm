@@ -258,7 +258,8 @@ def main(*, action: Callable[[],dict] | None=None, scope: str='boot-only',
                     if descriptor is not None:
                         os.close(descriptor)
                 finally:
-                    subprocess.run(['systemctl','--no-block',power_action],capture_output=True,timeout=10)
+                    subprocess.run(['systemctl','--no-block',power_action if result.get('passed') else 'poweroff'],
+                                   capture_output=True,timeout=10)
 
 
 if __name__=='__main__':
