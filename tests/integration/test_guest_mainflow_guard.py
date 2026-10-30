@@ -1134,6 +1134,7 @@ with tempfile.TemporaryDirectory(prefix='pnm-asset-guard.') as directory:
                 if not condition:
                     raise RuntimeError(label)
             namespace={'os':os,'json':json,'signal':signal,'subprocess':Commands,
+                       'sanitized_failure':lambda _: {},
                        'logs':Path(directory),'env':dict(os.environ),'check':check,
                        'scenario':'lifecycle'}
             exec(compile(ast.Module(body=[function],type_ignores=[]),str(DRIVER),'exec'),namespace)
