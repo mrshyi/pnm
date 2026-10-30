@@ -36,8 +36,8 @@ class GuestGuardTests(unittest.TestCase):
                 'time\tROLLED_BACK\tprivate-key-DO-NOT-PRINT\n')
             report=namespace['sanitized_failure'](
                 b'Staged Xray version does not match the approved manifest. private-key-DO-NOT-PRINT '
-                b'hysteria2 post-health failed at hysteria_tls_permissions (FAIL)',root)
-            self.assertEqual(report['error_categories'],['xray_version_mismatch'])
+                b'hysteria2 post-health failed at hysteria_tls_permissions (FAIL) Failed at step LIMITS',root)
+            self.assertEqual(report['error_categories'],['xray_version_mismatch','systemd_limits'])
             self.assertIn({'event':'STEP_FAILED','step':'stage_assets','rc':78},report['transaction_events'])
             self.assertEqual(report['health_checks'],[{'core':'hysteria2','check':'hysteria_tls_permissions','status':'FAIL'}])
             self.assertNotIn('private-key-DO-NOT-PRINT',json.dumps(report))

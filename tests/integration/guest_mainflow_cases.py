@@ -47,6 +47,12 @@ def sanitized_failure(stderr: bytes, state: Path = Path('/var/lib/pnm')) -> dict
         'permission_denied': b'Permission denied',
         'xray_post_health': b'post-health failed for Xray;',
         'hy2_post_health': b'post-health failed for Hysteria2;',
+        'systemd_limits': b'Failed at step LIMITS',
+        'systemd_namespace': b'Failed at step NAMESPACE',
+        'systemd_mount_namespace': b'Failed to set up mount namespacing',
+        'systemd_capabilities': b'Failed at step CAPABILITIES',
+        'systemd_user': b'Failed at step USER',
+        'systemd_exec': b'Failed at step EXEC',
     }
     steps={'ensure_service_accounts','prepare_root','prepare_dirs','stage_assets',
            'stage_tls','write_secrets','render_configs','install_units','validate',
@@ -121,6 +127,7 @@ def call(label,args,accepted=(0,),*,process_slot=None):
                     '-u','xray.service','-u','hysteria-server.service'],
                     capture_output=True,timeout=10)
                 (logs/(label+'.service-journal')).write_bytes(diagnostic.stdout)
+                failure_diagnostics=sanitized_failure(stderr+b'\n'+diagnostic.stdout)
             except (OSError,subprocess.TimeoutExpired):
                 pass # Diagnostics cannot replace the original command failure.
         check(not timed_out,label+' command timed out')
