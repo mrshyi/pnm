@@ -223,13 +223,16 @@ refuses77 before serial/power controls, covered by the host guard suite. This
 worker alone is not a VM launcher; trusted tools, image preparation and owned
 storage/process cleanup remain prerequisites.
 
-`guest_vm_lifecycle.py` reuses that guarded serial handshake and the existing
-14-case CLI lifecycle on an independent kernel. It grants a mode-0600 approval
+`guest_vm_lifecycle.py` reuses that guarded serial handshake and the shared
+19-case CLI lifecycle on an independent kernel. It grants a mode-0600 approval
 record only after the matching live host handshake; the actual cases accept
 the VM route only with that boot's instance/boot ID. The mapped-container guard
-remains unchanged. The first guest requests reboot; the owner retains the same
-anonymous disk while QEMU exits on -no-reboot, then explicitly launches the
-second kernel with a fresh nonce. Reboot acceptance compares both changed
+remains unchanged. Lifecycle completion is retransmitted for up to30 seconds
+until a PNM_VM_RECEIPT matching instance, boot ID and scope arrives; the host
+accepts identical duplicates but never different results for a completed boot.
+The first successful guest then requests reboot within the same owned QEMU
+process/disk. Each kernel boot requires its own boot-ID-bound approval; failures
+or missing completion receipts power off instead of retrying installation. Reboot acceptance compares both changed
 service invocations and persisted resource/applied fingerprints, requires stale
 URIs to remain withheld through ordinary restart, and checks independent apply
 and both real listeners before clean poweroff. Its private records and outputs

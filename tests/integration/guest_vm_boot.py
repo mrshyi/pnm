@@ -105,8 +105,40 @@ def require_approved_vm() -> VmIdentity:
         raise GuestRefusal('VM mutation requires this boot approval') from error
 
 
+def wait_result_receipt(descriptor: int, emit: Callable, result: dict) -> None:
+    expected={'schema':1,'action':'result-received-'+result['scope'],
+              'instance':result['instance'],'boot_id':result['boot_id']}
+    deadline=time.monotonic()+30
+    next_emit=0.0
+    pending=b''
+    while time.monotonic()<deadline:
+        now=time.monotonic()
+        if now>=next_emit:
+            emit(result)
+            next_emit=now+2
+        if not select.select([descriptor],[],[],0.2)[0]:
+            continue
+        try:
+            pending+=os.read(descriptor,1024)
+        except BlockingIOError:
+            continue
+        if len(pending)>4096:
+            raise RuntimeError('VM result receipt exceeded bound')
+        while b'\n' in pending:
+            line,_,pending=pending.partition(b'\n')
+            if not line.startswith(b'PNM_VM_RECEIPT '):
+                continue
+            try:
+                received=json.loads(line.removeprefix(b'PNM_VM_RECEIPT ').strip())
+            except (ValueError,UnicodeError):
+                continue
+            if isinstance(received,dict) and type(received.get('schema')) is int and received==expected:
+                return
+    raise RuntimeError('VM result receipt was not received')
+
+
 def main(*, action: Callable[[],dict] | None=None, scope: str='boot-only',
-         power_action: str='poweroff') -> None:
+         power_action: str='poweroff', require_result_ack: bool=False) -> None:
     identity=require_vm()
     if (scope not in ('boot-only','pnm-lifecycle','pnm-reboot','deployment-abrupt','deployment-recovery')
             or (action is None)!=(scope=='boot-only') or power_action not in ('poweroff','reboot')):
@@ -250,8 +282,12 @@ def main(*, action: Callable[[],dict] | None=None, scope: str='boot-only',
             try:
                 if emit is not None:
                     try:
-                        emit(result)
+                        if require_result_ack:
+                            wait_result_receipt(descriptor,emit,result)
+                        else:
+                            emit(result)
                     except (OSError,RuntimeError) as error:
+                        result['passed']=False
                         print('PNM_VM_EMIT_ERROR '+type(error).__name__,file=sys.stderr,flush=True)
             finally:
                 try:

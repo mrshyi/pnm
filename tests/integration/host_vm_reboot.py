@@ -170,9 +170,16 @@ def run_vm(root, work):
                                 'error_class':message.get('error_class') if message.get('error_class') in ('RuntimeError','GuestRefusal','OSError','TimeoutExpired') else 'other'}),flush=True)
                             require(message.get('passed') is True and message.get('host_approval_seen') is True
                                     and message.get('boot_id') in approved,'VM acceptance failed; private evidence retained')
-                            require(message.get('scope')==('pnm-lifecycle' if not result else 'pnm-reboot'), 'VM result scope differs')
-                            result.append(message)
-                            previous_boot=message['boot_id']
+                            prior=next((item for item in result if item['boot_id']==message['boot_id']),None)
+                            if prior is not None:
+                                require(message==prior,'repeated VM result differs')
+                            else:
+                                require(message.get('scope')==('pnm-lifecycle' if not result else 'pnm-reboot'), 'VM result scope differs')
+                                result.append(message)
+                                previous_boot=message['boot_id']
+                            receipt={'schema':1,'action':'result-received-'+message['scope'],
+                                     'instance':instance,'boot_id':message['boot_id']}
+                            process.stdin.write(b'PNM_VM_RECEIPT '+json.dumps(receipt).encode()+b'\n')
                     require(len(pending)<65536,'VM serial line exceeded bound')
                 process.wait(timeout=30)
                 require(process.returncode==0 and len(result)==2 and len(approved)==2,'VM did not complete two verified boots')

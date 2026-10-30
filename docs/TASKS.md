@@ -17,6 +17,15 @@ Earlier records below remain specific to their own sources and execution layers.
 
 ## Continuation checkpoint
 
+- Root evidence from c624081 single dispatch41007557322: first VM lifecycle
+  completion is persisted with passed=true/acceptance present, but no boot-result
+  bytes reach the host before reboot-ready. The lifecycle worker now repeats its
+  completion until an exact instance/boot-ID/scope receipt is received (30-second
+  bound), then permits reboot; the host acknowledges only validated results and
+  accepts identical retransmissions. Other boot-worker callers keep their prior
+  one-message mode. Private PTY regression rejects stale-boot/wrong-scope receipts
+  and observes retransmission before accepting the current receipt. Guards43
+  total/35 executed/8 skipped pass; actual VM rerun pending.
 - Single dispatch41007196357/source62472cc now stops on the first failed
   guest boot as intended, rather than retrying. Host received no result bytes;
   read-only disk extraction did not parse a completion record. Add fixed
