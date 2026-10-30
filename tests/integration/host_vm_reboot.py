@@ -81,7 +81,7 @@ def run_vm(root, work):
     require(unit.is_file() and not unit.is_symlink(),'owned VM probe unit missing')
     unit.write_text('[Unit]\nDescription=PNM independent VM acceptance\nAfter=basic.target\n'
                     '[Service]\nExecStart=/usr/bin/python3 -B /opt/guest_vm_lifecycle.py\n'
-                    'RuntimeMaxSec=1200\nStandardInput=tty\nStandardError=tty\nTTYReset=yes\nTTYPath=/dev/'+('ttyS0' if machine=='x86_64' else 'ttyAMA0')+
+                    'RuntimeMaxSec=1200\nStandardInput=tty-force\nStandardError=tty\nTTYReset=yes\nTTYPath=/dev/'+('ttyS0' if machine=='x86_64' else 'ttyAMA0')+
                     '\n[Install]\nWantedBy=multi-user.target\n')
     for serial in ('ttyS0','ttyAMA0'):
         mask=root/'etc/systemd/system'/('serial-getty@'+serial+'.service')
