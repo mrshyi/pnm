@@ -20,6 +20,22 @@ def require(condition, label):
         raise RuntimeError(label)
 
 
+def remove_container_markers(root):
+    removed=[]
+    for name in ('.dockerenv','run/.containerenv','run/systemd/container'):
+        path=root/name
+        require(path.parent.resolve()==path.parent,'unsafe guest container marker parent')
+        try:
+            info=path.lstat()
+        except FileNotFoundError:
+            continue
+        require(stat.S_ISREG(info.st_mode) and info.st_uid==root.stat().st_uid
+                and info.st_nlink==1,'unsafe guest container marker')
+        path.unlink()
+        removed.append(name)
+    return removed
+
+
 def approve_ready(record, expected, instance, host_boot, previous_boot):
     scope='pnm-reboot' if previous_boot else 'pnm-lifecycle'
     require(record.get('schema')==1 and record.get('kind')=='boot-ready'
@@ -49,6 +65,7 @@ def run_vm(root, work):
     require(root==root.resolve() and root.is_dir() and work==work.resolve()
             and stat.S_IMODE(work.stat().st_mode)==0o700 and work.stat().st_uid==0,
             'private owned VM paths required')
+    print(json.dumps({'vm_removed_container_markers':remove_container_markers(root)}),flush=True)
     with open('/dev/kvm','r+b',buffering=0) as kvm:
         require(fcntl.ioctl(kvm,0xAE00)==12,'KVM API unavailable')
         descriptor=fcntl.ioctl(kvm,0xAE01,0)
@@ -83,8 +100,8 @@ def run_vm(root, work):
                     '[Service]\nExecStart=/usr/bin/python3 -B /opt/guest_vm_lifecycle.py\n'
                     'RuntimeMaxSec=1200\nStandardInput=tty-force\nStandardError=tty\nTTYReset=yes\nTTYPath=/dev/'+('ttyS0' if machine=='x86_64' else 'ttyAMA0')+
                     '\n[Install]\nWantedBy=multi-user.target\n')
-    for serial in ('ttyS0','ttyAMA0'):
-        mask=root/'etc/systemd/system'/('serial-getty@'+serial+'.service')
+    for name in ('serial-getty@ttyS0.service','serial-getty@ttyAMA0.service','console-getty.service'):
+        mask=root/'etc/systemd/system'/name
         require(not mask.exists() and not mask.is_symlink(),'VM console mask occupied')
         mask.symlink_to('/dev/null')
     modules=root/'etc/modules-load.d'
@@ -118,7 +135,7 @@ def run_vm(root, work):
         os_file=(root/'etc/os-release').resolve()
         require(os_file.is_relative_to(root),'unsafe VM OS metadata')
         os_release=dict(line.split('=',1) for line in os_file.read_text().splitlines() if '=' in line)
-        expected_ready={'kernel_release':release,'root_uuid':root_uuid,'architecture':machine,
+        expected_ready={'container_absent':True,'kernel_release':release,'root_uuid':root_uuid,'architecture':machine,
                         'os_id':os_release['ID'].strip(chr(34)),'os_version':os_release['VERSION_ID'].strip(chr(34))}
         with (work/'vm-serial.private.log').open('xb') as log, subprocess.Popen(
                 args,stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,

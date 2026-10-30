@@ -41,7 +41,9 @@ def require_vm() -> VmIdentity:
     message='VM worker requires the approved independent guest'
     firmware=Path('/sys/firmware/qemu_fw_cfg/by_name/opt/pnm')
     if (sys.platform!='linux' or os.geteuid()!=0 or sys.flags.optimize
-            or 'microsoft' in platform.release().lower() or not (firmware/'instance/raw').is_file()):
+            or 'microsoft' in platform.release().lower() or not (firmware/'instance/raw').is_file()
+            or any(Path(p).exists() or Path(p).is_symlink() for p in
+                   ('/.dockerenv','/run/.containerenv','/run/systemd/container'))):
         raise GuestRefusal(message)
     try:
         expected_path=Path('/opt/pnm-vm-expected.json')
@@ -200,6 +202,9 @@ def main(*, action: Callable[[],dict] | None=None, scope: str='boot-only',
         detected=subprocess.run(['systemd-detect-virt','--vm'],capture_output=True,text=True,timeout=10)
         if detected.returncode or detected.stdout.strip() not in ('kvm','qemu'):
             raise RuntimeError('independent guest hypervisor not detected')
+        container=subprocess.run(['systemd-detect-virt','--container'],capture_output=True,text=True,timeout=10)
+        if container.returncode!=1 or container.stdout.strip()!='none':
+            raise RuntimeError('independent guest is still identified as a container')
         stage='service manager readiness'
         deadline=time.monotonic()+30
         manager='starting'
@@ -219,7 +224,7 @@ def main(*, action: Callable[[],dict] | None=None, scope: str='boot-only',
                'kernel_release':identity.kernel_release,'root_uuid':identity.root_uuid,'architecture':platform.machine(),
                'os_id':os_id,'os_version':os_version,'vm_detected':detected.stdout.strip(),
                'manager_state':manager,'network_only_loopback':True,'pnm_absent':absent,'scope':scope,
-               'machine_id_differs_from_host':True}
+               'machine_id_differs_from_host':True,'container_absent':True}
         trace('ready')
         stage='host approval'
         pending=bytearray()

@@ -40,6 +40,36 @@ class GuestGuardTests(unittest.TestCase):
         finally:
             os.close(master);os.close(slave)
 
+    def test_vm_clone_removes_only_regular_owned_container_markers(self):
+        spec=importlib.util.spec_from_file_location('pnm_vm_marker_host',DRIVER.with_name('host_vm_reboot.py'))
+        module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+        with tempfile.TemporaryDirectory(prefix='pnm-vm-markers.') as directory:
+            root=Path(directory)/'root'
+            (root/'run/systemd').mkdir(parents=True)
+            for name in ('.dockerenv','run/.containerenv','run/systemd/container'):
+                (root/name).write_text('container metadata')
+            sentinel=root/'sentinel'
+            sentinel.write_text('keep')
+            self.assertEqual(len(module.remove_container_markers(root)),3)
+            self.assertEqual(module.remove_container_markers(root),[])
+            marker=root/'.dockerenv'
+            marker.symlink_to(sentinel)
+            with self.assertRaises(RuntimeError):module.remove_container_markers(root)
+            self.assertTrue(marker.is_symlink())
+            self.assertEqual(sentinel.read_text(),'keep')
+            marker.unlink()
+            os.link(sentinel,marker)
+            with self.assertRaises(RuntimeError):module.remove_container_markers(root)
+            self.assertEqual(sentinel.read_text(),'keep')
+            marker.unlink()
+            outside=Path(directory)/'outside'
+            outside.mkdir()
+            (outside/'container').write_text('keep outside')
+            (root/'run/systemd').rmdir()
+            (root/'run/systemd').symlink_to(outside,target_is_directory=True)
+            with self.assertRaises(RuntimeError):module.remove_container_markers(root)
+            self.assertEqual((outside/'container').read_text(),'keep outside')
+
     def test_vm_completion_requires_receipt_for_this_boot_and_scope(self):
         import select,threading,tty
         tree=ast.parse(DRIVER.with_name('guest_vm_boot.py').read_text())
