@@ -42,7 +42,7 @@ configurations, snapshots, credentials and share links are never uploaded.
 The nspawn backend does not establish VM/kernel reboot or public connectivity.
 The `qemu` backend is currently a lifecycle-only pilot: guest kernel/initrd
 packages are acquired by signed APT inside the owned build container; the host
-controller populates one owned2GiB ext4 file using mkfs.ext4 -d without host mounts.
+controller populates one owned4GiB ext4 file using mkfs.ext4 -d without host mounts.
 It requires actual native KVM, refuses software/cross-architecture fallback,
 passes only that disk FD to QEMU and supplies no NIC, host shares or monitor.
 The existing guest_vm_boot/lifecycle workers retain their nonce/boot-ID/kernel/

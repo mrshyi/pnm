@@ -111,11 +111,12 @@ def run_vm(root, work):
     disk=work/'owned-vm.raw'
     fd=os.open(disk,os.O_RDWR|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600)
     try:
-        os.ftruncate(fd,2*1024**3)
+        # Leave room for Ubuntu kernel/firmware and restore staging.
+        os.ftruncate(fd,4*1024**3)
         subprocess.run(['mkfs.ext4','-q','-F','-U',root_uuid,'-d',str(root),str(disk)],check=True,timeout=180)
         info=os.fstat(fd)
         require(stat.S_ISREG(info.st_mode) and info.st_uid==0 and info.st_nlink==1
-                and info.st_size==2*1024**3,'owned disk identity changed')
+                and info.st_size==4*1024**3,'owned disk identity changed')
         console='ttyS0' if machine=='x86_64' else 'ttyAMA0'
         board='q35' if machine=='x86_64' else 'virt,gic-version=host'
         args=[str(qemu),'-nodefaults','-no-user-config','-machine',board+',accel=kvm,dump-guest-core=off',
