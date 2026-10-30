@@ -653,7 +653,11 @@ try:
         check(record['SERVICE_INVOCATION_ID']==show(units[core],'InvocationID'),'lifecycle applied invocation mismatch')
     def links_ready(label):
         data=json.loads(call(label,['--json','node','links','--address','203.0.113.10']).stdout)
-        check(data['xray_status']=='ready' and data['hysteria2_status']=='ready','post-operation links not ready')
+        if data['xray_status']!='ready' or data['hysteria2_status']!='ready':
+            allowed={'ready','drift','inactive','damaged','unknown','disabled'}
+            statuses=[data[key] if data.get(key) in allowed else 'other'
+                      for key in ('xray_status','hysteria2_status')]
+            raise RuntimeError('post-operation links not ready: xray='+statuses[0]+',hy2='+statuses[1])
     stage='repeat installation refusal'
     baseline={c:core_state(c) for c in units}
     fixed={p:fingerprint(p) for p in ('/etc/pnm/node.conf','/etc/pnm/versions.conf','/etc/passwd','/etc/group','/etc/shadow','/etc/gshadow')}

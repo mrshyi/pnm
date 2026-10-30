@@ -17,6 +17,20 @@ Earlier records below remain specific to their own sources and execution layers.
 
 ## Continuation checkpoint
 
+- Current cloud source86dc318 (run41003158328): seven native nspawn jobs
+  passed all five real Profile checks before staged restore refused78. Ubuntu22
+  amd64 stopped earlier at links-readiness after Xray apply; bounded status-only
+  diagnostics are being added before any production change for that failure.
+  Restore's candidate loader had duplicated an older node-key allowlist that
+  excluded PNM_PROFILE. It now reuses the standard node loader; the regression
+  uses real config parsing and fails against the prior source (14/1) while
+  the fixed Core-operation suite passes15/0. ARM64 KVM pilot explicitly refused
+  with69 because that hosted runner exposes no /dev/kvm; independent ARM reboot
+  remains BLOCKED. AMD64 KVM reached a guest boot-result that did not satisfy acceptance;
+  same-disk second boot is not established. Fixed-enum boot-result diagnostics
+  were added for the next run. Fresh local make release-check exits0:35 suites/476 passed/0 failed,
+  with five ordinary root-only skips. Standard and targeted ShellCheck pass;
+  integration guards41 total/33 executed/8 skipped also pass.
 - Eight-way Profile execution (source2ad759e, run40999425408): all eight
   native combinations prepared/booted and reached real Profile reality after
   actual installation/restart/apply. The controlled HY2 bind failure then

@@ -284,20 +284,10 @@ AmbientCapabilities=
 EOF
     PNM_TEST_RESTORE_XRAY_INVALID=1
     PNM_TEST_RESTORE_HY2_CALLS=0
-    pnm_config_load() {
-        local file="$1" target_name="$2"
-        local -n target="$target_name"
-        target=()
-        case "$file" in
-            */node.conf) target[HY2_TLS_MODE]=selfsigned-pin ;;
-            */versions.conf) target[XRAY_VERSION]=v1.8.24 target[HY2_VERSION]=v2.13.0 ;;
-            */reality.env) target[XRAY_UUID]=fixture ;;
-            */hysteria.env)
-                target[HY2_TLS_CERT_PATH]=/etc/hysteria/tls/server.crt
-                target[HY2_TLS_KEY_PATH]=/etc/hysteria/tls/server.key
-                ;;
-        esac
-    }
+    cp -- "$TEST_ROOT/fixtures/config-secrets/node.conf" "$temp_dir/etc/pnm/node.conf"
+    printf 'PNM_PROFILE=dual\n' >>"$temp_dir/etc/pnm/node.conf"
+    cp -- "$TEST_ROOT/fixtures/config-secrets/versions.conf" "$temp_dir/etc/pnm/versions.conf"
+    cp -- "$TEST_ROOT/fixtures/config-secrets/secrets/"*.env "$temp_dir/etc/pnm/secrets/"
     pnm_validate_node_config() { return 0; }
     pnm_validate_versions_config() { return 0; }
     pnm_validate_reality_secret_config() { return 0; }
@@ -305,7 +295,7 @@ EOF
     pnm_unit_validate_text() { return 0; }
     pnm_systemd_validate_unit_file() { return 0; }
     pnm_systemd_validate_unit_file() { return 0; }
-    pnm_binary_version_number() { [[ "$2" == xray ]] && printf '1.8.24\n' || printf '2.13.0\n'; }
+    pnm_binary_version_number() { [[ "$2" == xray ]] && printf '1.0.0\n' || printf '2.0.0\n'; }
     pnm_capture() { [[ "$PNM_TEST_RESTORE_XRAY_INVALID" != 1 ]]; }
     pnm_hysteria_config_validate_candidate() { ((PNM_TEST_RESTORE_HY2_CALLS += 1)); }
     pnm_tls_validate_pair() { return 0; }

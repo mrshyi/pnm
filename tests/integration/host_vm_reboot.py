@@ -154,6 +154,11 @@ def run_vm(root, work):
                             process.stdin.write(b'PNM_VM_APPROVE '+json.dumps(approval).encode()+b'\n')
                             approved.add(message['boot_id'])
                         elif message.get('kind')=='boot-result':
+                            print(json.dumps({'vm_boot_result':True,'passed':message.get('passed') is True,
+                                'host_approval_seen':message.get('host_approval_seen') is True,
+                                'scope':message.get('scope') if message.get('scope') in ('pnm-lifecycle','pnm-reboot') else 'other',
+                                'stage':message.get('stage') if message.get('stage') in ('serial setup','host approval','approved PNM acceptance','boot evidence persistence') else 'other',
+                                'error_class':message.get('error_class') if message.get('error_class') in ('RuntimeError','GuestRefusal','OSError','TimeoutExpired') else 'other'}),flush=True)
                             require(message.get('passed') is True and message.get('host_approval_seen') is True
                                     and message.get('boot_id') in approved,'VM acceptance failed; private evidence retained')
                             require(message.get('scope')==('pnm-lifecycle' if not result else 'pnm-reboot'), 'VM result scope differs')

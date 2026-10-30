@@ -756,7 +756,7 @@ pnm_core_restore_validate_staged() {
     chmod 0755 -- "$staging/usr/local/bin/xray" "$staging/usr/local/bin/hysteria" || return "$PNM_EXIT_NOPERM"
     chmod 0600 -- "$staging/etc/hysteria/tls/server.key" "$staging/etc/pnm/secrets/reality.env" \
         "$staging/etc/pnm/secrets/hysteria.env" || return "$PNM_EXIT_NOPERM"
-    pnm_config_load "$staging/etc/pnm/node.conf" PNM_RESTORE_NODE SCHEMA_VERSION NODE_REGION NODE_ADDRESS TIMEZONE PNM_CONFIGURED XRAY_PORT XRAY_SERVER_NAME XRAY_TARGET HY2_PORT HY2_TLS_MODE HY2_TLS_SERVER_NAME || return "$PNM_EXIT_CONFIG"
+    PNM_CONFIG_DIR="$staging/etc/pnm" pnm_load_node_config PNM_RESTORE_NODE || return "$PNM_EXIT_CONFIG"
     pnm_validate_node_config PNM_RESTORE_NODE || return "$PNM_EXIT_CONFIG"
     pnm_config_load "$staging/etc/pnm/versions.conf" PNM_RESTORE_VERSIONS SCHEMA_VERSION XRAY_VERSION XRAY_SHA256 HY2_VERSION HY2_SHA256 APPROVED || return "$PNM_EXIT_CONFIG"
     pnm_validate_versions_config PNM_RESTORE_VERSIONS || return "$PNM_EXIT_CONFIG"
