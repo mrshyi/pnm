@@ -17,6 +17,46 @@ Earlier records below remain specific to their own sources and execution layers.
 
 ## Continuation checkpoint
 
+- Cloud failure investigation (2026-10-29): continuing the authorized isolated
+  CI pilot after source751634a failed install apply78. The retired runner's
+  private logs are unavailable, so the existing guest call wrapper now adds
+  only fixed error categories and allowlisted transaction steps/exit codes to
+  its bounded public result. No raw stderr/journal, credentials, config, paths
+  or links are emitted. The final assertion distinguishes boot from selected
+  mainflow failure; isolation/production validators remain unchanged. Rerun the
+  same Debian13 amd64/lifecycle pilot before broadening scope; no development-
+  host installation or production mutation is part of this investigation.
+- Online verification (2026-10-29), exact source
+  `751634ac7bd0bb5dfb23eb8c6cc65947f6da33d6`: regular
+  [CI40973033072](https://github.com/mrshyi/pnm/actions/runs/40973033072)
+  completed successfully on all eight native OS/architecture jobs. Each job
+  passes check/release separately35 suites/475/0 and privileged70/0, ShellCheck,
+  preparation38 total/30 executed/8 skipped and transport7. All four Ubuntu
+  jobs additionally pass temporary real systemd8 and pinned real-Core10; all
+  Ubuntu78 / Debian76 shell summaries have zero failures. Repeated gates do
+  not increase unique coverage; the five ordinary root-only skips remain explicit.
+- The separate [managed-installation pilot40973033155](https://github.com/mrshyi/pnm/actions/runs/40973033155),
+  job123794195597, completed FAILURE. Official Debian13 amd64 template
+  acquisition/package setup/export succeeded. The boot-only clone passed real
+  systemd startup, mapped non-host-root UID, namespace/machine/root identity,
+  live unified cgroup scope/payload approval and safe shutdown. A second clone
+  passed the same isolation boundary, fresh-resource baseline, actual node
+  initialization/validation and installation preview. Actual install apply
+  then returned78; guest result passed=false at stage "installation apply".
+  No complete managed installation, subsequent lifecycle, compensation/retry,
+  Profiles, reboot or public clients are accepted from this run. The driver's
+  final generic "guest boot was not confirmed" assertion does not negate the
+  separately successful boot-only result or identify the install root cause.
+- Both clone reports confirm host account/package databases unchanged,
+  scope_after=not-found, no remaining fixture mounts and nspawn exit0. The
+  workflow correctly failed instead of emitting public success metadata.
+  Its private install stdout/stderr/service journal were intentionally not
+  uploaded; the public artifact contains only identity, template and packages.
+  Exit78's specific validator/failure cause cannot be determined from available
+  online evidence. Next action: capture a bounded sanitized failure phase/code
+  through the existing harness, then rerun this exact lifecycle pilot before
+  broadening combinations. Do not dump private journals/configuration/links.
+  No implementation change or Git commit/push accompanied this verification.
 - Automated environment preparation (2026-10-29, delivery candidate based on3d6ac5b):
   the user authorized preparing disposable environments through existing CI/
   harness facilities. A separate managed-installation workflow prepares an
@@ -61,7 +101,7 @@ Earlier records below remain specific to their own sources and execution layers.
   |---|---|---|---|---|
   | Debian12 | amd64 | PASS | BLOCKED | BLOCKED |
   | Debian12 | arm64 | PASS | BLOCKED | BLOCKED |
-  | Debian13 | amd64 | PASS | BLOCKED | BLOCKED |
+  | Debian13 | amd64 | PASS | Boot/isolation PASS; selected Core suite pending | FAIL: first install78; remaining stages unexecuted |
   | Debian13 | arm64 | PASS | BLOCKED | BLOCKED |
   | Ubuntu22.04 | amd64 | PASS | PASS | BLOCKED |
   | Ubuntu22.04 | arm64 | PASS | PASS | BLOCKED |

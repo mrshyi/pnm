@@ -389,7 +389,7 @@ print(json.dumps(outcome),flush=True)
 assert outcome['host_databases_unchanged'] and outcome['scope_after']=='not-found' and not outcome['remaining_fixture_mounts']
 assert interrupted_signal==0, 'guest test interrupted; owned resources retired'
 
-assert outcome['guest'].get('passed') is True and outcome.get('live_cgroup_boundary') is True and outcome['nspawn_exit']==0, 'guest boot was not confirmed'
+assert outcome['guest'].get('passed') is True and outcome.get('live_cgroup_boundary') is True and outcome['nspawn_exit']==0, 'guest boot or selected mainflow did not pass; inspect guest stage/result'
 
 if options.boot_only:
     # Persist success only after live host/guest isolation and exit checks above.

@@ -20,6 +20,26 @@ DRIVER=Path(__file__).with_name('test_guest_mainflow.py')
 
 
 class GuestGuardTests(unittest.TestCase):
+    def test_failure_summary_keeps_step_codes_and_redacts_private_data(self):
+        import re
+        tree=ast.parse(DRIVER.with_name('guest_mainflow_cases.py').read_text())
+        function=next(n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name=='sanitized_failure')
+        namespace={'Path':Path,'re':re}
+        exec(compile(ast.Module(body=[function],type_ignores=[]),'<safe failure summary>','exec'),namespace)
+        with tempfile.TemporaryDirectory(prefix='pnm-safe-failure.') as directory:
+            root=Path(directory)
+            tx=root/'transactions/tx-fixture';tx.mkdir(parents=True)
+            (tx/'journal.tsv').write_text('time\tSTEP_BEGIN\tstage_assets\n'
+                'time\tWRITE\tprivate-key-DO-NOT-PRINT\n'
+                'time\tSTEP_FAILED\tstage_assets rc=78\n'
+                'time\tSTEP_FAILED\tprivate-key-DO-NOT-PRINT rc=78\n'
+                'time\tROLLED_BACK\tprivate-key-DO-NOT-PRINT\n')
+            report=namespace['sanitized_failure'](
+                b'Staged Xray version does not match the approved manifest. private-key-DO-NOT-PRINT',root)
+            self.assertEqual(report['error_categories'],['xray_version_mismatch'])
+            self.assertIn({'event':'STEP_FAILED','step':'stage_assets','rc':78},report['transaction_events'])
+            self.assertNotIn('private-key-DO-NOT-PRINT',json.dumps(report))
+
     def test_cgroup_view_is_confined_to_owned_scope_on_both_layouts(self):
         tree=ast.parse(DRIVER.read_text())
         function=next(n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name=='verify_cgroup_mounts')

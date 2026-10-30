@@ -28,6 +28,7 @@ passed=[]
 stage='initial managed-resource baseline'
 result={}
 source_identity=None
+failure_diagnostics={}
 ports={'xray':443,'hysteria2':8443}
 default_sockets=[]
 reused_accounts={}
@@ -35,7 +36,46 @@ env={'PATH':'/usr/sbin:/usr/bin:/sbin:/bin','LANG':'C.UTF-8','TZ':'UTC'}
 def check(condition,label):
     if not condition:
         raise RuntimeError(label)
+def sanitized_failure(stderr: bytes, state: Path = Path('/var/lib/pnm')) -> dict:
+    """Emit fixed categories and transaction step codes, never raw diagnostic data."""
+    messages={
+        'xray_version_mismatch': b'Staged Xray version does not match the approved manifest.',
+        'hy2_version_mismatch': b'Staged Hysteria2 version does not match the approved manifest.',
+        'hy2_candidate_invalid': b'Generated Hysteria2 configuration failed PNM candidate validation;',
+        'tls_check_failed': b'Hysteria2 TLS certificate check returned ',
+        'exec_format': b'Exec format error',
+        'permission_denied': b'Permission denied',
+    }
+    steps={'ensure_service_accounts','prepare_root','prepare_dirs','stage_assets',
+           'stage_tls','write_secrets','render_configs','install_units','validate',
+           'daemon_reload','enable','start','health'}
+    events=[]
+    try:
+        for journal in sorted((state/'transactions').glob('*/journal.tsv'))[-4:]:
+            if journal.is_symlink() or not journal.is_file():
+                continue
+            with journal.open('rb') as stream:
+                data=stream.read(65536)
+            for line in data.decode('utf-8',errors='replace').splitlines():
+                columns=line.split('\t',2)
+                if len(columns)!=3:
+                    continue
+                event,detail=columns[1:]
+                if event in ('STEP_BEGIN','STEP_DONE') and detail in steps:
+                    events.append({'event':event,'step':detail})
+                elif event=='STEP_FAILED':
+                    match=re.fullmatch(r'([a-z_]+) rc=([0-9]{1,3})',detail)
+                    if match and match[1] in steps:
+                        events.append({'event':event,'step':match[1],'rc':int(match[2])})
+                elif event in ('COMMIT','ROLLED_BACK','RECOVERY_REQUIRED'):
+                    events.append({'event':event})
+    except OSError:
+        events.append({'event':'DIAGNOSTICS_UNAVAILABLE'})
+    return {'error_categories':[key for key,value in messages.items() if value in stderr],
+            'transaction_events':events[-12:]}
+
 def call(label,args,accepted=(0,),*,process_slot=None):
+    global failure_diagnostics
     (logs/'operation.json').write_text(json.dumps({'label':label,'state':'started'}))
     command=['bash','/opt/pnm/bin/pnm']+args
     if label=='install-apply' and scenario=='deployment-progress-readonly':
@@ -66,6 +106,7 @@ def call(label,args,accepted=(0,),*,process_slot=None):
         (logs/(label+'.stderr')).write_bytes(stderr)
         (logs/'operation.json').write_text(json.dumps({'label':label,'state':'timeout' if timed_out else 'finished'}))
         if timed_out or process.returncode not in accepted:
+            failure_diagnostics=sanitized_failure(stderr)
             # Journal entries may contain private configuration details. Retain
             # them only in this mode-0700 guest evidence directory, never stdout.
             try:
@@ -766,6 +807,8 @@ except Exception as error:
         result['reason']=str(error)
 finally:
     result['source_identity']=source_identity
+    if not result.get('passed') and failure_diagnostics:
+        result['failure_diagnostics']=failure_diagnostics
     for fixture in default_sockets:
         fixture.close()
     path=Path('/var/tmp/pnm-install-result.json')
