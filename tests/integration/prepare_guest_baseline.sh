@@ -71,6 +71,10 @@ docker export "$container" | tar --extract --numeric-owner --directory "$baselin
 python3 - "$baseline" "$os_id" "$version" "$arch" "$image_id" "$digest" <<'PY'
 import json, os, pathlib, stat, sys, uuid
 base=pathlib.Path(sys.argv[1]); root=base/'rootfs'
+# Docker export need not include a root-directory entry; guest users need search access.
+root_mode_before=stat.S_IMODE(root.stat().st_mode)
+root.chmod(0o755)
+print(f'Template root mode normalized: {root_mode_before:04o} -> 0755',flush=True)
 for name in ('etc','opt','var/lib','var/lib/dbus','var/tmp','etc/systemd/system',
              'etc/systemd/system/multi-user.target.wants'):
     path=root/name
@@ -101,7 +105,8 @@ link=root/'etc/systemd/system/multi-user.target.wants/pnm-boot-probe.service'
 assert not link.exists() and not link.is_symlink()
 link.symlink_to('../pnm-boot-probe.service')
 # A source/architecture receipt is not a boot-success receipt.
-(base/'template.json').write_text(json.dumps(dict(zip(
-    ('os','version','architecture','image_id','image_digest'),sys.argv[2:])),indent=2)+'\n')
+receipt=dict(zip(('os','version','architecture','image_id','image_digest'),sys.argv[2:]))
+receipt.update(root_mode_before=f'{root_mode_before:04o}',root_mode='0755')
+(base/'template.json').write_text(json.dumps(receipt,indent=2)+'\n')
 PY
 printf 'Prepared native template; boot verification still required: %s\n' "$baseline"

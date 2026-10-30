@@ -1,5 +1,5 @@
 from pathlib import Path
-import hashlib,json,os,subprocess,sys,time
+import hashlib,json,os,stat,subprocess,sys,time
 if sys.flags.optimize:
     raise SystemExit('enabled assertions required')
 os.umask(0o077)
@@ -22,6 +22,9 @@ try:
     stage='root mount identity'
     result['observed_root']=[os.stat('/').st_dev,os.stat('/').st_ino]
     assert (os.stat('/').st_dev,os.stat('/').st_ino)==tuple(expected['root_identity'])
+    stage='guest root traversal permissions'
+    root_mode=stat.S_IMODE(os.stat('/').st_mode)
+    assert root_mode==0o755
     stage='container type'
     virtual=subprocess.run(['systemd-detect-virt','--container'],capture_output=True,text=True,timeout=5)
     assert Path('/run/host/container-manager').read_text().strip()=='systemd-nspawn'
@@ -41,7 +44,7 @@ try:
             allowed=({'/sys/fs/cgroup'} if unified
                      else {'/sys/fs/cgroup/systemd','/sys/fs/cgroup/unified'})
             assert set(writable)==allowed
-            result={'passed':True,'writable_cgroups':writable,'controllers_checked':len(paths)-1,'manager_state':state,'identity_guards':True,'uid_base':mapping[1],'native_marker':'systemd-nspawn','detected_container':virtual.stdout.strip()}
+            result={'passed':True,'writable_cgroups':writable,'controllers_checked':len(paths)-1,'manager_state':state,'root_mode':f'{root_mode:04o}','identity_guards':True,'uid_base':mapping[1],'native_marker':'systemd-nspawn','detected_container':virtual.stdout.strip()}
             ready=Path('/var/tmp/pnm-integration-ready.json')
             with ready.open('x') as stream:
                 json.dump(result,stream)

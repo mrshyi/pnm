@@ -61,6 +61,25 @@ class GuestGuardTests(unittest.TestCase):
             with self.subTest(mounts=mounts), self.assertRaises(AssertionError):
                 verify(mounts,scope)
 
+    def test_exported_template_root_is_searchable_but_parent_stays_private(self):
+        source=DRIVER.with_name('prepare_guest_baseline.sh').read_text()
+        program=source.split("<<'PY'\n",1)[1].split('\nPY\n',1)[0]
+        with tempfile.TemporaryDirectory(prefix='pnm-template-mode.') as directory:
+            baseline=Path(directory);root=baseline/'rootfs'
+            (root/'etc').mkdir(parents=True)
+            root.chmod(0o700)
+            (root/'etc/os-release').write_text('ID=debian\nVERSION_ID="13"\n')
+            for name in ('passwd','group','shadow','gshadow'):
+                (root/'etc'/name).write_text('')
+            result=subprocess.run([sys.executable,'-B','-c',program,str(baseline),
+                'debian','13','amd64','sha256:fixture','debian@sha256:fixture'],
+                capture_output=True,timeout=5)
+            self.assertEqual(result.returncode,0,result.stderr.decode())
+            self.assertEqual(stat.S_IMODE(root.stat().st_mode),0o755)
+            self.assertEqual(stat.S_IMODE(baseline.stat().st_mode),0o700)
+            receipt=json.loads((baseline/'template.json').read_text())
+            self.assertEqual((receipt['root_mode_before'],receipt['root_mode']),('0700','0755'))
+
     def test_template_preparation_refuses_without_ci_opt_in(self):
         env=dict(os.environ,PNM_RUN_GUEST_PREPARE='0')
         result=subprocess.run(['bash',str(DRIVER.with_name('prepare_guest_baseline.sh'))],
