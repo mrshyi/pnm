@@ -4,8 +4,10 @@
 
 `.github/workflows/guest-mainflow.yml` adds a separate managed-installation job.
 Pushes touching the workflow/runtime/integration harness select eight native
-Debian12/13 and Ubuntu22/24 amd64/arm64 combinations, with at most four concurrent. Two additional Debian13 native KVM pilots
-(amd64/arm64) test independent kernel reboot. This defines the execution matrix, not eight completed deployment acceptance records.
+Debian12/13 and Ubuntu22/24 amd64/arm64 combinations, with at most four concurrent.
+One additional Debian13 amd64 KVM pilot tests independent kernel reboot. ARM64
+KVM remains dispatch-only and unaccepted while the hosted runner lacks /dev/kvm;
+its capability refusal remains required. Defined jobs are not completed acceptance.
 `workflow_dispatch` declares OS choices debian12/debian13/ubuntu22/ubuntu24,
 native amd64/arm64 runner selection (or all) and the eight existing bounded scenarios:
 lifecycle, external-ca, external-ca-mismatch, core-update, dependency-refusal,

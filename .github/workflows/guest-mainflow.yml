@@ -44,7 +44,7 @@ jobs:
       matrix:
         os: ${{ inputs.os && inputs.os != 'all' && fromJSON(format('["{0}"]', inputs.os)) || fromJSON('["debian12","debian13","ubuntu22","ubuntu24"]') }}
         backend: ${{ fromJSON(format('["{0}"]', inputs.backend || 'nspawn')) }}
-        include: ${{ inputs.backend && fromJSON('[]') || fromJSON('[{"os":"debian13","arch":"amd64","backend":"qemu"},{"os":"debian13","arch":"arm64","backend":"qemu"}]') }}
+        include: ${{ inputs.backend && fromJSON('[]') || fromJSON('[{"os":"debian13","arch":"amd64","backend":"qemu"}]') }}
         arch: ${{ inputs.arch && inputs.arch != 'all' && fromJSON(format('["{0}"]', inputs.arch)) || fromJSON('["amd64","arm64"]') }}
     runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     timeout-minutes: 45

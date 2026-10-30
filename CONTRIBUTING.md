@@ -48,8 +48,10 @@ The separate [managed-installation workflow](.github/workflows/guest-mainflow.ym
 prepares an official-image native rootfs inside a normal disposable build
 container, then boots a mapped-user, private-network systemd-nspawn clone through
 the existing harness. Automatic lifecycle jobs cover all eight supported native OS/architecture pairs,
-including real Profiles. Two additional Debian13 native KVM pilots attempt an
-independent same-disk reboot; manual inputs select existing bounded scenarios. Rootfs metadata is never treated as boot success:
+including real Profiles. One additional Debian13 amd64 KVM pilot tests an
+independent same-disk reboot. ARM64 KVM is dispatch-only while hosted ARM64
+runners lack /dev/kvm; its acceptance remains blocked, and the capability guard
+still refuses unsupported runners. Manual inputs select existing bounded scenarios. Rootfs metadata is never treated as boot success:
 a verified boot-only invocation precedes any managed operation. See
 [guest mainflow](tests/integration/GUEST_MAINFLOW.md#automated-disposable-ci-preparation).
 Only disposable GitHub-hosted runners prepare dependencies/images; ordinary L1
