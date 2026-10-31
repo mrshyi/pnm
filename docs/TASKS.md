@@ -18,6 +18,41 @@ Earlier records below remain specific to their own sources and execution layers.
 
 ## Continuation checkpoint
 
+### GitHub-cloud-only ARM64 KVM verification (2026-10-31)
+
+User requested GitHub CI cloud execution specifically. Source84d30d6 extends
+the closed official host-image list to all three standard Linux ARM64 labels;
+automatic/default ARM64 host remains ubuntu-24.04-arm. No product file or VERSION
+changed. Workflow YAML/host default checks, preparation48 total/40 executed/
+8 explicit skips and diff checks pass. The configuration-only commit skips the
+unchanged product matrix and is tested by three actual workflow dispatches.
+
+| GitHub-hosted image | Run / job | Actual kernel | Result |
+|---|---|---|---|
+| ubuntu-22.04-arm | [41201285863](https://github.com/mrshyi/pnm/actions/runs/41201285863) / 124537438932 | 6.8.0-1070-azure | BLOCKED69 |
+| ubuntu-24.04-arm | [41201294942](https://github.com/mrshyi/pnm/actions/runs/41201294942) / 124537464980 | 7.0.0-1017-azure | BLOCKED69 |
+| ubuntu-26.04-arm | [41201298476](https://github.com/mrshyi/pnm/actions/runs/41201298476) / 124537475741 | 7.0.0-1017-azure | BLOCKED69 |
+
+Each fresh run reports aarch64 and no kernel-registered KVM device after the
+existing explicit kmod/udev preparation. No guest installation, native guest
+suite or independent ARM64 reboot executed. These are failed prerequisites,
+not passing functional tests. No x86/TCG/HVF or container result substitutes.
+
+Current repository metadata is User-owned/public; its runner API reports0
+self-hosted runners. GitHub's [standard runner reference](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)
+lists the three tested Linux ARM64 images. Its [larger runner reference](https://docs.github.com/en/actions/reference/runners/larger-runners)
+describes ARM64 VM sizes but does not establish a working KVM device for this
+repo. Selecting more CPUs or a different image is not hardware acceptance.
+
+To continue within GitHub CI, a schedulable ARM64 KVM-capable runner pool is
+required, together with an admission path that preserves the dedicated/disposable
+host and actual KVM guards. This repository currently has no such pool. The
+requested native systemd8 + Core10 + lifecycle19 + real reboot7 four-OS ARM64
+acceptance remains BLOCKED; repeating the three known-ineligible standard images
+without an environment change will not close it. Existing ARM64 CI/nspawn results
+retain their original layers and source references below.
+
+
 ### ARM64 KVM host alignment follow-up (2026-10-30)
 
 User requested parity with amd64: all four ARM64 guest OS releases must pass
