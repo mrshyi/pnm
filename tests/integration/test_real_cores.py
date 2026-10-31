@@ -268,6 +268,12 @@ class Harness:
         manifest = load_core_manifest()
         for core, binary, argument in (("xray", self.xray, "version"), ("hysteria2", self.hy2, "version")):
             version = run(self.offline + [str(binary), argument])
+            if version.returncode != 0 or manifest[core]["version"].lstrip("v").encode() not in version.stdout:
+                # Report only fixed identity/exit/permission facts, never Core output.
+                print(f"# version_probe {core} rc={version.returncode} "
+                      f"noexec={int(bool(os.statvfs(binary).f_flag & os.ST_NOEXEC))} "
+                      f"denied={int(b'Permission denied' in version.stderr)} "
+                      f"refused={int(b'Operation not permitted' in version.stderr)}", flush=True)
             require(version.returncode == 0 and manifest[core]["version"].lstrip("v").encode() in version.stdout,
                     "actual binary version mismatch")
         self.check("verified official binary versions run as nobody")

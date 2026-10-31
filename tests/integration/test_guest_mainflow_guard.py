@@ -64,7 +64,7 @@ class GuestGuardTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix='pnm-native-summary.') as directory:
             logs=Path(directory)
             (logs/'native-cores.stderr').write_text('not ok - preflight: approved failure\nnot ok - private: secret-password\n')
-            (logs/'native-cores.stdout').write_text('# passed=3 failed=1\n')
+            (logs/'native-cores.stdout').write_text('# version_probe xray rc=126 noexec=1 denied=1 refused=0\n# passed=3 failed=1\n')
             def run(label,*_args):
                 if label=='native-systemd':
                     return subprocess.CompletedProcess([],0,b'# passed=8 failed=0',b'')
@@ -75,6 +75,7 @@ class GuestGuardTests(unittest.TestCase):
             summary=caught.exception.summary
             self.assertEqual(summary['core_errors'],['approved failure'])
             self.assertEqual(summary['core_counts'],[3,1])
+            self.assertEqual(summary['version_probe'],['xray','126','1','1','0'])
             self.assertNotIn('secret-password',json.dumps(summary))
 
     def test_recovery_fingerprint_supports_python310_hashlib(self):

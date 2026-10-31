@@ -75,6 +75,8 @@ def native_integrations(env, logs, check, passed):
                     if any(line.endswith(': '+label) for line in stderr.decode(errors='replace').splitlines()))
                 counts=re.findall(rb'# passed=([0-9]{1,2}) failed=([01])',stdout)
                 summary['core_counts']=[int(value) for value in counts[-1]] if counts else None
+                probes=re.findall(rb'^# version_probe (xray|hysteria2) rc=(-?[0-9]{1,3}) noexec=([01]) denied=([01]) refused=([01])$',stdout,re.MULTILINE)
+                summary['version_probe']=[value.decode() for value in probes[-1]] if probes else None
             raise GuestAcceptanceFailure(summary) from None
         passed.append(label+' existing private integration checks '+str(count)+'/0')
 
@@ -111,10 +113,13 @@ def observe(call, core_state, check, label):
     for core in documents['status']['cores']:
         check(core['desired_enabled']==(core['id'] in enabled),'status reports the wrong desired Core policy')
     check(not documents['recovery']['writes_blocked'],'completed transactions still block writes')
-    for tx in documents['recovery']['transactions']:
-        result=call(label+'-inspect-'+tx['id'],['--json','recovery','inspect',tx['id']])
+    selected={tx['state']:tx['id'] for tx in documents['recovery']['transactions']}
+    for state,transaction in selected.items():
+        result=call(label+'-inspect-'+transaction,['--json','recovery','inspect',transaction])
         check(not any(secret in result.stdout+result.stderr for secret in private),'recovery inspect exposes credentials')
-        json.loads(result.stdout)
+        inspected=json.loads(result.stdout)['transactions']
+        check(len(inspected)==1 and inspected[0]['id']==transaction and inspected[0]['state']==state
+              and inspected[0]['valid'] is True,'recovery inspect differs from its listed receipt')
     for item in documents['check']['checks']:
         if before['xray']['active']=='inactive' and item['id'].startswith('xray'):
             check(item['status']!='FAIL','disabled Xray falsely fails diagnostics')
