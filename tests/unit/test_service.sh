@@ -66,8 +66,32 @@ test_rendered_units_validate_with_real_systemd() (
     done
 )
 
+test_restore_units_use_staged_executables() (
+    local temp_dir unit binary original candidate
+    temp_dir="$(mktemp -d)"
+    trap 'pnm_cleanup; rm -rf -- "$temp_dir"' EXIT
+    candidate="$temp_dir/"'candidate space%$\\'
+    mkdir -p "$candidate/usr/local/bin" || return 1
+    for target in basic.target sysinit.target shutdown.target network-online.target; do
+        printf '[Unit]\nDescription=PNM offline fixture\nDefaultDependencies=no\n' >"$temp_dir/$target" || return 1
+    done
+    pnm_render_xray_unit >"$temp_dir/xray.service" || return 1
+    pnm_render_hysteria_unit >"$temp_dir/hysteria-server.service" || return 1
+    for unit in xray.service hysteria-server.service; do
+        binary=xray; [[ "$unit" == xray.service ]] || binary=hysteria
+        printf '#!/bin/sh\nexit 99\n' >"$candidate/usr/local/bin/$binary" || return 1
+        chmod 0700 "$candidate/usr/local/bin/$binary" || return 1
+        original="$(cat "$temp_dir/$unit")"
+        SYSTEMD_UNIT_PATH="$temp_dir" pnm_systemd_validate_unit_file "$temp_dir/$unit" "$candidate" || return 1
+        assert_eq "$original" "$(cat "$temp_dir/$unit")" || return 1
+        chmod 0600 "$candidate/usr/local/bin/$binary" || return 1
+        if SYSTEMD_UNIT_PATH="$temp_dir" pnm_systemd_validate_unit_file "$temp_dir/$unit" "$candidate"; then return 1; fi
+    done
+)
+
 run_test 'Xray unit has isolated service policy' test_xray_unit_policy
 run_test 'Hysteria2 unit has isolated service policy' test_hysteria_unit_policy
 run_test 'systemd unit installation is atomic and mode 644' test_unit_install_is_atomic
 run_test 'generated units pass the real systemd verifier and reject non-executable Core fixtures' test_rendered_units_validate_with_real_systemd
+run_test 'restore unit verification uses only staged executable availability' test_restore_units_use_staged_executables
 finish_tests

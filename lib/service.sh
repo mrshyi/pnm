@@ -95,9 +95,29 @@ pnm_systemd_install_unit() {
 }
 
 pnm_systemd_validate_unit_file() {
-    local unit_file="${1:?unit file required}"
+    local unit_file="${1:?unit file required}" staged_root="${2-}" verify_dir
 
     [[ -f "$unit_file" && ! -L "$unit_file" ]] || return "$PNM_EXIT_CONFIG"
     pnm_command_exists systemd-analyze || return "$PNM_EXIT_UNAVAILABLE"
+    if [[ -n "$staged_root" ]]; then
+        TMPDIR=/tmp pnm_make_temp_dir verify_dir || return $?
+        # Private aliases avoid systemd executable-path metacharacters in TMPDIR.
+        python3 - "$unit_file" "$staged_root" "$verify_dir" <<'PYTHON' || return "$PNM_EXIT_CONFIG"
+import pathlib, sys
+unit, root, directory = map(pathlib.Path, sys.argv[1:])
+text = unit.read_text()
+names = {"xray.service": "xray", "hysteria-server.service": "hysteria"}
+binary = names[unit.name]
+executable = root / "usr/local/bin" / binary
+prefix = "ExecStart=/usr/local/bin/" + binary + " "
+if text.count(prefix) != 1 or executable.is_symlink() or not executable.is_file():
+    raise SystemExit(1)
+alias = directory / binary
+alias.symlink_to(executable)
+text = text.replace(prefix, "ExecStart=" + str(alias) + " ", 1)
+(directory / unit.name).write_text(text)
+PYTHON
+        unit_file="$verify_dir/${unit_file##*/}"
+    fi
     systemd-analyze verify "$unit_file" >/dev/null 2>&1
 }

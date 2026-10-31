@@ -58,6 +58,25 @@ class GuestGuardTests(unittest.TestCase):
                 'reason':'native-systemd incomplete checks','completed_suites':0,
                 'error_categories':[],'failed_cases':[]})
 
+    def test_native_core_failure_reports_only_literal_source_labels(self):
+        import guest_release_cases as cases
+        from guest_vm_boot import GuestAcceptanceFailure
+        with tempfile.TemporaryDirectory(prefix='pnm-native-summary.') as directory:
+            logs=Path(directory)
+            (logs/'native-cores.stderr').write_text('not ok - preflight: approved failure\nnot ok - private: secret-password\n')
+            (logs/'native-cores.stdout').write_text('# passed=3 failed=1\n')
+            def run(label,*_args):
+                if label=='native-systemd':
+                    return subprocess.CompletedProcess([],0,b'# passed=8 failed=0',b'')
+                raise RuntimeError('native-cores exit=1')
+            with patch.object(cases,'run_private',side_effect=run), patch.object(cases.Path,'read_text',return_value='require(False,"approved failure")'):
+                with self.assertRaises(GuestAcceptanceFailure) as caught:
+                    cases.native_integrations({},logs,lambda condition,label: None,[])
+            summary=caught.exception.summary
+            self.assertEqual(summary['core_errors'],['approved failure'])
+            self.assertEqual(summary['core_counts'],[3,1])
+            self.assertNotIn('secret-password',json.dumps(summary))
+
     def test_recovery_fingerprint_supports_python310_hashlib(self):
         import guest_recovery_cases as cases
         from types import SimpleNamespace

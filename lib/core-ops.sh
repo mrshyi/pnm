@@ -770,8 +770,8 @@ pnm_core_restore_validate_staged() {
         "$xray_unit_text" == *$'AmbientCapabilities=CAP_NET_BIND_SERVICE'* ]] || return "$PNM_EXIT_CONFIG"
     [[ "$hysteria_unit_text"$'\n' == *$'\nCapabilityBoundingSet=\n'* &&
         "$hysteria_unit_text"$'\n' == *$'\nAmbientCapabilities=\n'* ]] || return "$PNM_EXIT_CONFIG"
-    pnm_systemd_validate_unit_file "$staging/etc/systemd/system/xray.service" &&
-        pnm_systemd_validate_unit_file "$staging/etc/systemd/system/hysteria-server.service" || return "$PNM_EXIT_CONFIG"
+    pnm_systemd_validate_unit_file "$staging/etc/systemd/system/xray.service" "$staging" &&
+        pnm_systemd_validate_unit_file "$staging/etc/systemd/system/hysteria-server.service" "$staging" || return "$PNM_EXIT_CONFIG"
     # Validate the complete candidate set while it is still isolated. Never
     # apply archive contents and then discover that their config/binaries do
     # not agree.

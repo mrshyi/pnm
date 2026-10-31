@@ -284,6 +284,14 @@ bytes and permissions are not normalized or changed. Shared lock bookkeeping is
 the only write associated with the diagnostic command. Firewall policy remains
 operator-managed; there is no firewall rule producer or ownership-adoption path.
 
+Restore's systemd unit verification uses private executable aliases to the staged
+candidate binaries. It checks their actual executable permissions without requiring
+a previously installed Core to exist. Only temporary verification copies of the
+units change; archived/live units and binaries remain untouched before APPLY.
+The private aliases also avoid systemd's executable-name restrictions when the
+staging parent contains spaces or metacharacters. Candidate syntax, versions,
+TLS, archive provenance and the existing transaction checks still apply.
+
 The Core operations include per-Core restart/log/apply/update/rollback and backup/restore/uninstall routes (`lib/core-ops.sh`). Updates use pinned versions and checksums. Restore stages and validates archive contents before applying. Feature presence in source is not by itself proof that every rollback/failure path is verified; consult `docs/TASKS.md` for current acceptance status.
 
 Update/rollback retain the existing exclusive PNM lock from preparation through transaction completion and compensation. Argument validation/root checks precede this boundary; pending deployments are checked under the lock before preparation. Version pins, service state, current/previous binaries and configuration baselines are then read while cooperating PNM writers are excluded. The existing transaction lock is reentrant, and each wrapper releases only its own lock level, including early failures. Asset download remains inside this global boundary, so other writers and consistency-sensitive readers may report contention during preparation. This does not coordinate arbitrary privileged writers that ignore the PNM lock.

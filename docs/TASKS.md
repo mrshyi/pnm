@@ -19,6 +19,31 @@ Earlier records below remain specific to their own sources and execution layers.
 
 ### Non-public release acceptance continuation (2026-10-30)
 
+The user authorized commit/push and continued cloud execution. Harness dc5f817
+was published, followed by bounded VM failure summaries in58bad30. At dc5f817,
+Debian13 restore-failure passes22 checks (run41151664632); Ubuntu22 dependency
+passes39 on both architectures (41151669287), and startup-failure passes22 on both
+(41151673308), including actual recovery list/inspect. The old failures below
+remain historical, not outstanding test failures at this newer source.
+
+The release-acceptance pilot41151660288 reaches27 successful checks: actual
+installer/wrapper, Profiles, external restart, diagnostics and Xray uninstall.
+Trusted restore between the uninstall subcases refuses78. Source review and
+an offline real-systemd regression reproduce a restore prevalidation defect:
+unit verification checks /usr/local/bin/xray after uninstall removed that file,
+although the approved candidate binary is present in staging. The minimal local
+fix verifies temporary unit copies against private aliases to staged executables;
+canonical/archive units remain unchanged. The regression fails against prior
+code and passes5/0 with the fix, including absent/non-executable candidates and
+staging path metacharacters. Cloud confirmation is pending.
+
+Debian12 KVM58bad30 run41152094473 completes the8-check native systemd suite,
+then fails in the private real-Core suite. Bounded diagnostics are being refined
+to identify only literal source-defined failure labels and numeric counters;
+private configurations/logs remain unexported. Fresh ARM64 KVM run41151734429
+refuses69 for missing /dev/kvm; it remains BLOCKED, with no emulation fallback.
+
+
 User scope: execute the existing release checklist except C-01 public REALITY/HY2
 client connectivity. This is acceptance work, not release/tag/version approval.
 The remote candidate is clean `374c9ad066aafc5be4cb3b4ca1f96a41efa5757a`,

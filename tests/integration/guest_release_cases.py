@@ -1,5 +1,6 @@
 """Finite release checks; called only after the mainflow guest approval guards."""
 from pathlib import Path
+import ast
 import hashlib
 import json
 import re
@@ -64,6 +65,16 @@ def native_integrations(env, logs, check, passed):
                 labels=re.findall(r"^run_test '([^']+)'",Path(command[-1]).read_text(),re.MULTILINE)
                 summary['failed_cases']=[i+1 for i,name in enumerate(labels)
                     if ('not ok - '+name).encode() in stdout+stderr]
+            else:
+                tree=ast.parse(Path(command[-1]).read_text())
+                labels={node.args[1].value for node in ast.walk(tree)
+                    if isinstance(node,ast.Call) and isinstance(node.func,ast.Name) and node.func.id=='require'
+                    and len(node.args)>1 and isinstance(node.args[1],ast.Constant) and isinstance(node.args[1].value,str)}
+                labels.update({'FileNotFoundError','PermissionError','ValueError','KeyError','TimeoutExpired'})
+                summary['core_errors']=sorted(label for label in labels
+                    if any(line.endswith(': '+label) for line in stderr.decode(errors='replace').splitlines()))
+                counts=re.findall(rb'# passed=([0-9]{1,2}) failed=([01])',stdout)
+                summary['core_counts']=[int(value) for value in counts[-1]] if counts else None
             raise GuestAcceptanceFailure(summary) from None
         passed.append(label+' existing private integration checks '+str(count)+'/0')
 
