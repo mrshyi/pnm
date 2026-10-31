@@ -423,7 +423,7 @@ class Harness:
             print(f"# setup identity requires inspection={self.root}", file=sys.stderr)
             return False
         info = self.root.lstat()
-        require(self.root.parent == Path("/run") and self.root.name.startswith("pnm-realcore.")
+        require(self.root.parent == Path("/opt") and self.root.name.startswith("pnm-realcore.")
                 and stat.S_ISDIR(info.st_mode) and info.st_uid == 0
                 and (info.st_dev, info.st_ino) == self.identity, "fixture identity changed")
         if success and okay:
