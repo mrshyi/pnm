@@ -51,8 +51,12 @@ class GuestGuardTests(unittest.TestCase):
             cases.native_integrations({},Path('/unused'),check,passed)
         self.assertEqual(len(passed),2)
         with patch.object(cases,'run_private',return_value=subprocess.CompletedProcess([],0,b'# passed=7 failed=0',b'')):
-            with self.assertRaisesRegex(RuntimeError,'incomplete'):
+            from guest_vm_boot import GuestAcceptanceFailure
+            with patch.object(cases.Path,'read_text',return_value="run_test 'fixture' test_fixture\n"), self.assertRaises(GuestAcceptanceFailure) as caught:
                 cases.native_integrations({},Path('/unused'),check,[])
+            self.assertEqual(caught.exception.summary,{'stage':'native-systemd',
+                'reason':'native-systemd incomplete checks','completed_suites':0,
+                'error_categories':[],'failed_cases':[]})
 
     def test_recovery_fingerprint_supports_python310_hashlib(self):
         import guest_recovery_cases as cases

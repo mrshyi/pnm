@@ -46,8 +46,25 @@ def native_integrations(env, logs, check, passed):
     for label,command,variable,count in (
         ('native-systemd',['bash','/opt/pnm-native-suite/tests/integration/test_systemd_lifecycle.sh'],'PNM_RUN_SYSTEMD_TESTS',8),
         ('native-cores',['python3','-B','/opt/pnm-native-suite/tests/integration/test_real_cores.py'],'PNM_RUN_REAL_CORE_TESTS',10)):
-        result=run_private(label,command,dict(env,**{variable:'1'},PNM_REAL_CORE_ASSETS='/opt/pnm-native-assets'),logs,check)
-        check(('# passed='+str(count)+' failed=0').encode() in result.stdout,label+' incomplete checks')
+        try:
+            result=run_private(label,command,dict(env,**{variable:'1'},PNM_REAL_CORE_ASSETS='/opt/pnm-native-assets'),logs,check)
+            check(('# passed='+str(count)+' failed=0').encode() in result.stdout,label+' incomplete checks')
+        except RuntimeError as error:
+            from guest_vm_boot import GuestAcceptanceFailure
+            reason=str(error)
+            if re.fullmatch(r'native-(systemd|cores) (exit=[0-9]{1,3}|incomplete checks)',reason) is None:
+                reason='native suite assertion'
+            summary={'stage':label,'reason':reason,'completed_suites':len(passed)}
+            stdout=(logs/(label+'.stdout')).read_bytes() if (logs/(label+'.stdout')).exists() else b''
+            stderr=(logs/(label+'.stderr')).read_bytes() if (logs/(label+'.stderr')).exists() else b''
+            summary['error_categories']=[name for name,marker in (
+                ('missing_file',b'No such file or directory'),('permission_denied',b'Permission denied'),
+                ('missing_command',b'command not found'),('unbound_variable',b'unbound variable')) if marker in stderr]
+            if label=='native-systemd':
+                labels=re.findall(r"^run_test '([^']+)'",Path(command[-1]).read_text(),re.MULTILINE)
+                summary['failed_cases']=[i+1 for i,name in enumerate(labels)
+                    if ('not ok - '+name).encode() in stdout+stderr]
+            raise GuestAcceptanceFailure(summary) from None
         passed.append(label+' existing private integration checks '+str(count)+'/0')
 
 
