@@ -9,10 +9,28 @@ One additional Debian13 amd64 KVM pilot tests independent kernel reboot. ARM64
 KVM remains dispatch-only and unaccepted while the hosted runner lacks /dev/kvm;
 its capability refusal remains required. Defined jobs are not completed acceptance.
 `workflow_dispatch` declares OS choices debian12/debian13/ubuntu22/ubuntu24,
-native amd64/arm64 runner selection (or all) and the eight existing bounded scenarios:
+native amd64/arm64 runner selection (or all) and the bounded scenarios:
 lifecycle, external-ca, external-ca-mismatch, core-update, dependency-refusal,
-deployment-startup-failure, core-update-failure and restore-failure. Dispatch
+deployment-startup-failure, core-update-failure, restore-failure, runtime-evidence
+and release-acceptance. Dispatch
 availability and job success must be checked in GitHub, not inferred from YAML.
+
+`release-acceptance` is nspawn-only. It installs the staged, SHA-pinned candidate
+with `install.sh`, checks the delivered runtime hashes/version and uses the actual
+`pnm` wrapper for the lifecycle. It observes status/check/resources/profile and
+recovery diagnostics during the existing Profile cycle, runs the existing external-
+restart evidence cases, and finishes with normal per-Core uninstall. The trusted
+pre-uninstall archive restores the dual-Core baseline between the two uninstall
+cases; each must preserve its peer and produce an identifiable private backup.
+It adds no uninstall fault injection. The four selected failure scenarios also
+inspect their real completed receipts without changing them or exposing credentials.
+
+The KVM lifecycle additionally runs the existing8-check systemd fixture and10-check
+pinned real-Core/private-network suite before installation. Their results remain
+separate from the19 lifecycle and7 reboot checks; nspawn success does not substitute
+for this native kernel layer. All new entry points need successful execution at
+the recorded source before they count as acceptance; local syntax/guard checks
+alone do not establish a guest PASS.
 
 Only the disposable runner installs systemd-container prerequisites. The guarded
 `prepare_guest_baseline.sh` requires explicit PNM_RUN_GUEST_PREPARE=1,

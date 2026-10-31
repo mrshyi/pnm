@@ -10,7 +10,10 @@ def fingerprint(path: Path) -> tuple:
     info=path.lstat()
     require(stat.S_ISREG(info.st_mode),'unexpected recovery resource type')
     with path.open('rb') as stream:
-        digest=hashlib.file_digest(stream,'sha256').hexdigest()
+        digest=hashlib.sha256()
+        for chunk in iter(lambda: stream.read(1048576),b''):
+            digest.update(chunk)
+        digest=digest.hexdigest()
     return digest,info.st_mode,info.st_uid,info.st_gid,info.st_dev,info.st_ino,info.st_mtime_ns
 
 

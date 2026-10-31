@@ -4,7 +4,7 @@ import json
 import socket
 
 
-def profile_cycle(call, core_state, binding, resources, fingerprint, check, passed):
+def profile_cycle(call, core_state, binding, resources, fingerprint, check, passed, observer=None):
     units={'xray':'xray.service','hysteria2':'hysteria-server.service'}
     files={path:fingerprint(path) for paths in resources.values() for path in paths}
     policies={'dual':set(units),'reality':{'xray'},'hy2':{'hysteria2'}}
@@ -23,6 +23,8 @@ def profile_cycle(call, core_state, binding, resources, fingerprint, check, pass
                 check(before[core]==after,'Profile changed an unchanged peer')
             if active:
                 binding(core)
+        if observer is not None:
+            observer(target)
         passed.append('real Profile '+target+' preserves credentials and unchanged peers')
         if target=='reality':
             # Own one UDP socket in this approved private guest; force real HY2 bind failure.

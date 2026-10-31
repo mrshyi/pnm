@@ -30,7 +30,7 @@ on:
       scenario:
         description: Existing bounded mainflow scenario
         type: choice
-        options: [lifecycle, external-ca, external-ca-mismatch, core-update, dependency-refusal, deployment-startup-failure, core-update-failure, restore-failure]
+        options: [lifecycle, external-ca, external-ca-mismatch, core-update, dependency-refusal, deployment-startup-failure, core-update-failure, restore-failure, runtime-evidence, release-acceptance]
         default: lifecycle
 
 permissions:

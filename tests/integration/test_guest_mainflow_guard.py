@@ -20,6 +20,52 @@ DRIVER=Path(__file__).with_name('test_guest_mainflow.py')
 
 
 class GuestGuardTests(unittest.TestCase):
+    def test_installed_cli_runtime_rejects_changed_bytes_and_symlinks(self):
+        from guest_release_cases import verify_runtime
+        with tempfile.TemporaryDirectory(prefix='pnm-cli-delivery.') as directory:
+            root=Path(directory)
+            runtime=root/'runtime';runtime.mkdir()
+            (runtime/'VERSION').write_text('fixture')
+            wrapper=root/'pnm';wrapper.write_text('wrapper');wrapper.chmod(0o755)
+            manifest=root/'hashes.json'
+            manifest.write_text(json.dumps({'install.sh':'installer',
+                'VERSION':hashlib.sha256(b'fixture').hexdigest()}))
+            verify_runtime(runtime,manifest,wrapper)
+            (runtime/'VERSION').write_text('wrong')
+            with self.assertRaisesRegex(RuntimeError,'differs'):
+                verify_runtime(runtime,manifest,wrapper)
+            (runtime/'VERSION').unlink();(runtime/'VERSION').symlink_to(wrapper)
+            with self.assertRaisesRegex(RuntimeError,'symlink'):
+                verify_runtime(runtime,manifest,wrapper)
+
+    def test_native_release_checks_require_both_complete_suite_summaries(self):
+        import guest_release_cases as cases
+        from unittest.mock import patch
+        def check(condition,label):
+            if not condition: raise RuntimeError(label)
+        def result(label, *_args):
+            count=8 if label=='native-systemd' else 10
+            return subprocess.CompletedProcess([],0,('# passed='+str(count)+' failed=0').encode(),b'')
+        passed=[]
+        with patch.object(cases,'run_private',side_effect=result):
+            cases.native_integrations({},Path('/unused'),check,passed)
+        self.assertEqual(len(passed),2)
+        with patch.object(cases,'run_private',return_value=subprocess.CompletedProcess([],0,b'# passed=7 failed=0',b'')):
+            with self.assertRaisesRegex(RuntimeError,'incomplete'):
+                cases.native_integrations({},Path('/unused'),check,[])
+
+    def test_recovery_fingerprint_supports_python310_hashlib(self):
+        import guest_recovery_cases as cases
+        from types import SimpleNamespace
+        with tempfile.TemporaryDirectory(prefix='pnm-recovery-hash.') as directory:
+            path=Path(directory)/'fixture'
+            data=b'fixture'*(1048576//7+1)
+            path.write_bytes(data)
+            with patch.object(cases,'hashlib',SimpleNamespace(sha256=hashlib.sha256)):
+                result=cases.fingerprint(path)
+            self.assertEqual(result[0],hashlib.sha256(data).hexdigest())
+            self.assertEqual(result[1],path.stat().st_mode)
+
     def test_vm_serial_frames_start_on_a_new_line_and_drain_before_power_action(self):
         import select,termios
         from unittest.mock import Mock
@@ -1237,7 +1283,7 @@ with tempfile.TemporaryDirectory(prefix='pnm-asset-guard.') as directory:
             namespace={'os':os,'json':json,'signal':signal,'subprocess':Commands,
                        'sanitized_failure':lambda _: {},
                        'logs':Path(directory),'env':dict(os.environ),'check':check,
-                       'scenario':'lifecycle'}
+                       'scenario':'lifecycle','cli':['bash','/opt/pnm/bin/pnm']}
             exec(compile(ast.Module(body=[function],type_ignores=[]),str(DRIVER),'exec'),namespace)
             try:
                 with self.assertRaisesRegex(RuntimeError,'command timed out'):

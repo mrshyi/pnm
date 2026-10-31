@@ -91,6 +91,12 @@ def mainflow_failure_summary(detail: dict) -> dict:
 
 def lifecycle() -> dict:
     identity=require_approved_vm()
+    from guest_release_cases import native_integrations
+    evidence=Path('/var/tmp/pnm-native-evidence')
+    evidence.mkdir(mode=0o700)
+    native_checks=[]
+    native_integrations({'PATH':'/usr/sbin:/usr/bin:/sbin:/bin','LANG':'C.UTF-8','TZ':'UTC'},
+                        evidence,need,native_checks)
     log=Path('/var/tmp/pnm-vm-lifecycle.log')
     with log.open('xb') as output:
         result=subprocess.run(['/usr/bin/python3','-B','/opt/pnm-install-cases.py'],
@@ -133,7 +139,7 @@ def lifecycle() -> dict:
         json.dump(baseline,stream)
         stream.flush()
         os.fsync(stream.fileno())
-    return {'mainflow_checks':19,'update_checks':12 if update else 0,
+    return {'native_systemd_checks':8,'native_core_checks':10,'mainflow_checks':19,'update_checks':12 if update else 0,
             'runtime_evidence_checks':5 if evidence else 0,
             'configured_port_checks':2 if configured else 0,
             'committed_progress_refusal_checks':1 if progress else 0,

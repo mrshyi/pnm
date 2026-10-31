@@ -22,7 +22,7 @@ parser.add_argument('--asset-cache',type=Path,required=True,help='verified pinne
 parser.add_argument('--vm-reboot',action='store_true',help='run the existing independent-kernel two-boot worker')
 parser.add_argument('--boot-only',action='store_true',help='verify a fresh template clone without running PNM operations')
 parser.add_argument('--scenario',choices=('lifecycle','external-ca','external-ca-mismatch','deployment-failure','core-update','core-update-failure',
-    'configured-ports','runtime-evidence','restore-failure','restore-publication','startup-readiness',
+    'configured-ports','runtime-evidence','release-acceptance','restore-failure','restore-publication','startup-readiness',
     'core-recovery-failure-xray','core-recovery-failure-hysteria2','restore-recovery-failure','tls-access',
     'account-reuse','account-creation-failure','core-interruption','core-interruption-hysteria2','restart-readiness',
     'dependency-refusal','deployment-startup-failure','deployment-listener-failure',
@@ -121,6 +121,8 @@ dest.mkdir(mode=0o755)
 for name in ('bin','lib','adapters'):
     shutil.copytree(repo/name,dest/name,symlinks=True)
 shutil.copyfile(repo/'VERSION',dest/'VERSION')
+if options.scenario=='release-acceptance':
+    shutil.copyfile(repo/'install.sh',dest/'install.sh')
 hashes={}
 for path in dest.rglob('*'):
     assert not path.is_symlink()
@@ -138,6 +140,27 @@ for core,extension in (('xray','zip'),('hysteria2','bin')):
     path.chmod(0o600)
 write_clone_file(root/'opt/pnm-test-versions.json',json.dumps(manifest))
 write_clone_file(root/'opt/pnm-test-scenario',options.scenario)
+if options.scenario=='release-acceptance':
+    candidate=subprocess.check_output(['git','rev-parse','HEAD'],cwd=repo,text=True).strip()
+    write_clone_file(root/'opt/pnm-candidate-ref',candidate)
+if options.vm_reboot:
+    native=root/'opt/pnm-native-suite'
+    native.mkdir(mode=0o755)
+    shutil.copyfile(dest/'VERSION',native/'VERSION')
+    for name in ('lib','adapters'):
+        shutil.copytree(dest/name,native/name)
+    (native/'tests/integration').mkdir(parents=True,mode=0o755)
+    shutil.copytree(repo/'tests/fixtures/config-secrets',native/'tests/fixtures/config-secrets')
+    shutil.copyfile(repo/'tests/testlib.sh',native/'tests/testlib.sh')
+    for name in ('test_systemd_lifecycle.sh','test_real_cores.py','render_real_core_fixtures.sh',
+                 'real_core_versions.json','real_core_versions_arm64.json'):
+        shutil.copyfile(repo/'tests/integration'/name,native/'tests/integration'/name)
+    native_assets=root/'opt/pnm-native-assets'
+    native_assets.mkdir(mode=0o700)
+    for core in ('xray','hysteria2'):
+        path=native_assets/manifest[core]['filename']
+        path.write_bytes(assets[core])
+        path.chmod(0o600)
 if is_update:
     update_assets=root/'opt/pnm-update-assets'
     assert not update_assets.exists() and not update_assets.is_symlink()
@@ -160,7 +183,8 @@ print('install_fixture='+str(base)+' source_files='+str(len(hashes)),flush=True)
 # Only the newly created clone is writable; no host directory is bind-mounted.
 for name,target in (('guest_mainflow_cases.py','pnm-install-cases.py'),
                     ('guest_mainflow_worker.py','pnm-boot-worker.py'),
-                    ('guest_profile_cases.py','guest_profile_cases.py')):
+                    ('guest_profile_cases.py','guest_profile_cases.py'),
+                    ('guest_release_cases.py','guest_release_cases.py')):
     destination=root/'opt'/target
     assert not destination.is_symlink()
     shutil.copyfile(repo/'tests/integration'/name,destination)

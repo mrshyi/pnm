@@ -199,6 +199,8 @@ def run_vm(root, work):
                         'VM test changed host account/package databases')
         public={'passed':True,'backend':'qemu-kvm','architecture':machine,'independent_boots':2,
                 'lifecycle_checks':result[0]['acceptance']['mainflow_checks'],
+                'native_systemd_checks':result[0]['acceptance']['native_systemd_checks'],
+                'native_core_checks':result[0]['acceptance']['native_core_checks'],
                 'reboot_checks':result[1]['acceptance']['reboot_checks'],'host_databases_unchanged':True}
         (work/'vm-result.json').write_text(json.dumps(public,indent=2)+'\n')
         print(json.dumps(public),flush=True)

@@ -17,6 +17,87 @@ Earlier records below remain specific to their own sources and execution layers.
 
 ## Continuation checkpoint
 
+### Non-public release acceptance continuation (2026-10-30)
+
+User scope: execute the existing release checklist except C-01 public REALITY/HY2
+client connectivity. This is acceptance work, not release/tag/version approval.
+The remote candidate is clean `374c9ad066aafc5be4cb3b4ca1f96a41efa5757a`,
+VERSION0.16.0-rc.1. Runtime files are unchanged from a814ce3/32b68df; the staged32-file
+manifest remains ebcd74c1dcaa3597112078acbf441d83ac05f104fbaa444b9d2a167dcd8798f6.
+Current/previous native asset versions and hashes are pinned in the four existing
+`tests/integration/{real,previous}_core_versions{,_arm64}.json` manifests:
+Xray v26.10.21/v26.9.30 and HY2 v2.13.0/v2.12.3. No floating production deployment
+or public endpoint preparation was performed.
+
+Seven fresh Debian13 amd64/nspawn pilots were executed at374c9ad. Six PASS:
+external-ca [41072539509](https://github.com/mrshyi/pnm/actions/runs/41072539509),
+external-ca-mismatch [41072548634](https://github.com/mrshyi/pnm/actions/runs/41072548634),
+core-update [41072557241](https://github.com/mrshyi/pnm/actions/runs/41072557241),
+dependency-refusal [41072567217](https://github.com/mrshyi/pnm/actions/runs/41072567217),
+deployment-startup-failure [41072576301](https://github.com/mrshyi/pnm/actions/runs/41072576301)
+and core-update-failure [41072590352](https://github.com/mrshyi/pnm/actions/runs/41072590352).
+Restore-failure [41072599274](https://github.com/mrshyi/pnm/actions/runs/41072599274)
+is FAIL after19 ordinary checks: fixture expected exit1, actual CLI exit70.
+Source maps restore restart failure to70 and the transaction shows ROLLED_BACK;
+that does not establish all subsequent compensation assertions passed. The local
+fixture now requires70 and the corresponding diagnostic; cloud rerun is pending.
+
+The six successful pilot scenarios were then dispatched across all eight native
+Debian12/13 and Ubuntu22/24 amd64/arm64 nspawn combinations, each in a fresh owned
+clone. Repeated lifecycle assertions are not additional unique coverage.
+
+| Scenario / release item | Run | Result at last observation |
+|---|---|---|
+| external-ca / U-03 | [41075115906](https://github.com/mrshyi/pnm/actions/runs/41075115906) | PASS8/8,19 checks each |
+| external-ca-mismatch / U-03 | [41075136904](https://github.com/mrshyi/pnm/actions/runs/41075136904) | PASS8/8,19 checks each |
+| core-update / U-05 | [41075145210](https://github.com/mrshyi/pnm/actions/runs/41075145210) | PASS8/8,31 checks each |
+| dependency-refusal / U-07 | [41075154719](https://github.com/mrshyi/pnm/actions/runs/41075154719) | PASS6/8,38 checks; Ubuntu22 both FAIL |
+| deployment-startup-failure / U-07 | [41075162810](https://github.com/mrshyi/pnm/actions/runs/41075162810) | PASS6/8,21 checks; Ubuntu22 both FAIL |
+| core-update-failure / U-07 | [41075170367](https://github.com/mrshyi/pnm/actions/runs/41075170367) | PASS8/8,35 checks each |
+
+All48 jobs are completed:44 PASS and4 FAIL. Every result, including failures,
+records unchanged host account/package databases, retired scopes, no remaining
+fixture mounts and the same32-file candidate manifest. The four failed jobs are
+124129256785/124129256900 (dependency) and124129284636/124129284654 (startup).
+No cloud job remains running from this batch.
+
+The four Ubuntu22 failures are AttributeError in the shared test recovery
+fingerprint: hashlib.file_digest requires Python3.11, whereas Ubuntu22 supplies
+Python3.10. The local helper now hashes in bounded1MiB chunks. The pre-fix function
+reproduces the missing API failure; the new regression passes on the actual
+Python3.10.12 ARM64 development host. This changes only test support, preserves
+production permissions and does not turn the failed cloud jobs into PASS.
+
+Prepared locally, **cloud validation pending**:
+- nspawn `release-acceptance`: actual install.sh/installed wrapper/source hashes/
+  version (R-02), status/resources/Profile observations and real recovery list/
+  inspect with receipt metadata and credential checks (O-01), existing external-
+  restart/runtime binding subcases (U-04), and normal per-Core uninstall with
+  protected backups and unchanged peer (X-01). A trusted restore resets the dual
+  baseline between uninstall cases; no new fault campaign is added.
+- The four selected failure scenarios additionally inspect their actual completed
+  receipts without rewriting them. Ordinary lifecycle counts are preserved.
+- KVM lifecycle reuses the existing8 systemd and10 pinned private-network Core
+  integration checks before installation, recorded separately from19+7. This is
+  the outstanding native Debian R-01 slice; nspawn is not a substitute. ARM64
+  hardware capabilities remain enforced.
+
+Fresh local worktree checks: release-check exit0 (including check/security and
+release scan), ShellCheck0.8.0 exit0, preparation47 total/39 executed/8 explicit
+root-only skips, Python3.10 syntax and diff checks exit0. L1 ran as UID1001 on
+Ubuntu22 ARM64, PID1 codex, with private temporary fixtures; no host integration,
+installation, account/service work, mount or reboot occurred. Production files,
+VERSION and CLI interfaces are unchanged. The user explicitly authorized commit/
+push and continuing the remaining cloud acceptance on2026-10-30; the new workflow
+choices must be published before Actions can execute them.
+
+Remaining finite work: run Debian13 amd64 release-
+acceptance and repaired restore pilots, then their eight-combination nspawn
+matrices; repeat the repaired Ubuntu22 failure cases with O-01 receipts; execute
+Debian12/13 amd64 KVM native integration plus real reboot; inspect actual exits,
+skips and cleanup before closure. ARM64 KVM remains BLOCKED by absent /dev/kvm.
+C-01 is explicitly excluded, not PASS. No formal-release decision is justified yet.
+
 ### Current bounded execution evidence
 
 Current runtime/harness source `a814ce3e9f7e1ad6bc735342c6df00f648a7f4b0`

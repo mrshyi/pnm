@@ -29,6 +29,7 @@ stage='initial managed-resource baseline'
 result={}
 source_identity=None
 failure_diagnostics={}
+cli=['bash','/opt/pnm/bin/pnm']
 ports={'xray':443,'hysteria2':8443}
 default_sockets=[]
 reused_accounts={}
@@ -90,7 +91,7 @@ def sanitized_failure(stderr: bytes, state: Path = Path('/var/lib/pnm')) -> dict
 def call(label,args,accepted=(0,),*,process_slot=None):
     global failure_diagnostics
     (logs/'operation.json').write_text(json.dumps({'label':label,'state':'started'}))
-    command=['bash','/opt/pnm/bin/pnm']+args
+    command=cli+args
     if label=='install-apply' and scenario=='deployment-progress-readonly':
         command=['/usr/bin/unshare','--mount','--propagation','private',*command]
     # A CLI descendant can retain PIPE fds after Bash exits. Own a separate
@@ -315,12 +316,12 @@ def restore_start_failure_case(core_state, binding, links_ready, all_paths, arch
         context=start_fault('hysteria2')
     with context as fault:
         result=call('restore-publication-failure' if publication_fault else 'restore-start-failure',
-                    ['restore',str(archive)],accepted=(73 if publication_fault else 1,))
+                    ['restore',str(archive)],accepted=(73 if publication_fault else 70,))
         (logs/'restore-start-failure-state.json').write_text(json.dumps({
             'fault':fault,'services':{core:{field:show(unit,field) for field in
                 ('ActiveState','SubState','Result','MainPID','UnitFileState')}
                 for core,unit in (('xray','xray.service'),('hysteria2','hysteria-server.service'))}}))
-        error='Core restore failed (rc='+('73' if publication_fault else '1')+'); prior resources and service policy were restored.'
+        error='Core restore failed (rc='+('73' if publication_fault else '70')+'); prior resources and service policy were restored.'
         check(error.encode() in result.stderr,
               'restore failure or recovery cause differs from fixture')
         if not publication_fault:
@@ -456,7 +457,7 @@ try:
     publication_cases=('core-publication-previous','core-publication-metadata','core-publication-applied')
     account_deletions=('account-deletion-userdel','account-deletion-groupdel')
     check(scenario in ('lifecycle','external-ca','external-ca-mismatch','deployment-failure','core-update','core-update-failure','configured-ports','restore-publication',
-          'runtime-evidence','restore-failure','startup-readiness','core-recovery-failure-xray',
+          'runtime-evidence','release-acceptance','restore-failure','startup-readiness','core-recovery-failure-xray',
           'core-recovery-failure-hysteria2','restore-recovery-failure','tls-access','account-reuse',
           'core-interruption','core-interruption-hysteria2','restart-readiness','dependency-refusal',
           'deployment-startup-failure','deployment-listener-failure','deployment-term',
@@ -465,6 +466,11 @@ try:
           'deployment-inode-full',
           'deployment-acquisition-failures','deployment-version-failures',
           'account-creation-failure')+update_interruptions+restore_interruptions+publication_cases+account_deletions,'unknown guest scenario')
+    if scenario=='release-acceptance':
+        from guest_release_cases import prepare, observe
+        prepare(env,logs,check,passed)
+        cli=['/usr/local/bin/pnm']
+        absent()
     if scenario=='account-reuse':
         from guest_account_cases import prepare_accounts, require_preserved
         reused_accounts=prepare_accounts()
@@ -719,7 +725,9 @@ try:
         passed.append('actual '+core+' apply activates desired change and preserves peer Core')
     stage='real installed-node Profile cycle'
     from guest_profile_cases import profile_cycle
-    profile_cycle(call,core_state,binding,resources,fingerprint,check,passed)
+    profile_cycle(call,core_state,binding,resources,fingerprint,check,passed,
+        observer=(lambda target: observe(call,core_state,check,'profile-'+target))
+        if scenario=='release-acceptance' else None)
     stage='protected backup and verified restore'
     all_paths=('/etc/pnm/node.conf','/etc/pnm/versions.conf')+tuple(p for c in units for p in resources[c])
     backup_resources={p:fingerprint(p) for p in all_paths}
@@ -774,7 +782,7 @@ try:
         check(len(default_sockets)==2 and all(fixture.fileno()>=0 and fixture.getsockname()==('127.0.0.1',port)
               for fixture,port in zip(default_sockets,(443,8443))), 'unrelated default listeners changed')
         passed.append('unrelated default listeners survive the complete custom-port lifecycle')
-    if scenario=='runtime-evidence':
+    if scenario in ('runtime-evidence','release-acceptance'):
         stage='external restart and real consistency lock'
         runtime_evidence_cases(core_state,binding,links_ready)
     if scenario in ('restore-failure','restore-publication'):
@@ -811,6 +819,15 @@ try:
         from guest_signal_cases import run_restore_interruptions
         run_restore_interruptions(logs,call,core_state,binding,links_ready,all_paths,archive,
             backup_resources,passed,hard_core=scenario.rsplit('-',1)[-1] if '-sigkill-' in scenario else None)
+    if scenario in ('dependency-refusal','deployment-startup-failure','core-update-failure','restore-failure'):
+        stage='completed failure recovery diagnostics'
+        from guest_release_cases import observe
+        observe(call,core_state,check,'failure-recovery')
+        passed.append('completed failure recovery list and inspect are read-only and redact credentials')
+    if scenario=='release-acceptance':
+        stage='installed CLI diagnostics and normal Core uninstall'
+        from guest_release_cases import finish
+        finish(call,core_state,binding,check,passed,archive,resources)
     restore_interrupted=scenario.startswith('restore-sigkill-')
     verify_source_snapshot(Path('/opt/pnm'),Path('/opt/pnm-source-hashes.json'))
     result={'passed':True,'checks':passed,'clock_diagnostic':checks.get('time_sync'),'uids_distinct':True,
