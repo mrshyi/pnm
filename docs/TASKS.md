@@ -1,15 +1,16 @@
 # PNM Current Tasks
 
-**Updated:** 2026-10-30. **Phase 3 bounded Debian/Ubuntu acceptance remains pending.
-Phase 4 installed-node Profile main flow is implemented; its bounded real
-systemd cycle/compensation/refusal checks pass on all eight native combinations. Phase 5 local observability is implemented with passing
-local gates; optional external checks remain deferred.
-Phase 6's scoped recovery diagnostics are implemented with passing local gates;
-firewall management remains manual. Phase 7 local regression/release preparation
-is complete; current amd64/arm64 Ubuntu and Debian userspace CI pass; full real acceptance remains pending. No release
-has been published.**
+**Updated:** 2026-10-30. **The bounded managed main flow passes on all eight
+Debian/Ubuntu amd64/arm64 combinations; all four amd64 native KVM integrations
+and real reboots pass. Phase 3's remaining environment limits are Debian ARM64
+native integration and ARM64 kernel reboot, blocked by unavailable KVM hardware.
+Phase 4's actual Profile cycle/compensation/refusal passes on all eight combinations.
+Phase 5 status/resources and Phase 6 read-only recovery diagnostics have real
+managed-guest evidence; firewall management remains manual. Phase 7 release
+preparation gates pass on all eight CI combinations. Public dual-protocol acceptance
+is explicitly separate; no release has been published.**
 
-**Latest fully exercised runtime baseline:** branch `dev`, source commit `a814ce3`, VERSION
+**Latest runtime baseline:** branch `dev`, product source `e9e49bc` (identical to3368820), VERSION
 `0.16.0-rc.1`. Includes the dual-Core lifecycle, installed-node Profiles, optional
 resource/status observations, sanitized recovery diagnostics, native architecture
 asset/digest selection and amd64/arm64 CI.
@@ -17,140 +18,140 @@ Earlier records below remain specific to their own sources and execution layers.
 
 ## Continuation checkpoint
 
-### Non-public release acceptance continuation (2026-10-30)
+### Non-public release acceptance closeout (2026-10-30)
 
-The user authorized commit/push and continued cloud execution. Harness dc5f817
-was published, followed by bounded VM failure summaries in58bad30. At dc5f817,
-Debian13 restore-failure passes22 checks (run41151664632); Ubuntu22 dependency
-passes39 on both architectures (41151669287), and startup-failure passes22 on both
-(41151673308), including actual recovery list/inspect. The old failures below
-remain historical, not outstanding test failures at this newer source.
+Scope: the user authorized commit/push and the remaining finite release acceptance,
+excluding C-01 public REALITY/HY2 client connectivity. This does not authorize a
+version change, tag, release publication or production deployment.
 
-The release-acceptance pilot41151660288 reaches27 successful checks: actual
-installer/wrapper, Profiles, external restart, diagnostics and Xray uninstall.
-Trusted restore between the uninstall subcases refuses78. Source review and
-an offline real-systemd regression reproduce a restore prevalidation defect:
-unit verification checks /usr/local/bin/xray after uninstall removed that file,
-although the approved candidate binary is present in staging. The minimal local
-fix verifies temporary unit copies against private aliases to staged executables;
-canonical/archive units remain unchanged. The regression fails against prior
-code and passes5/0 with the fix, including absent/non-executable candidates and
-staging path metacharacters. Cloud confirmation is pending.
-
-Release-acceptance0698707 on Debian12 amd64 (job124394738405) passes the first
-27 checks, then trusted restore returns69 at service baseline inspection. Older
-systemctl is-enabled returns nonzero with empty stdout for a missing unit; the
-local systemctl249 offline query reproduces this exact shape. The adapter now
-confirms absence with a successful LoadState=not-found query before reporting
-not-found. Unknown state and failed queries, including a failed query emitting
-matching stdout, still refuse. The new lifecycle regression fails with the prior
-adapter and passes10/0 with the fix. Full local release-check and cloud retests
-remain pending for this last production change.
-
-Follow-up at ff4d146: Debian13 release-acceptance41152797809 passes all28
-checks, including both normal uninstalls and the trusted reset restore. Its33-file
-manifest (runtime plus installer) is a12b5e6d50c2f78304acfd5106ecb5f9dacf52be599ddd55461d34b979c6f908.
-Local release-check completes35 suites/478 passed/0 failed. Source0698707 changes
-only test support, bounds inspect to one actual receipt per observed state and
-preserves all diagnostic read-only/credential assertions. Four U-07 eight-way
-runs at ff4d146 and release/TLS eight-way runs at0698707 remain in execution.
-
-Debian12 KVM0698707 run41153379843 pinpoints the native-suite failure: Xray version
-query exit126, noexec=true, permission_denied=true. The fixture executed from
-/run, which the native Debian guest mounts noexec. The test-only correction moves
-its owned directory to /opt; PrivateTmp/network/UID/capability/cleanup guards
-remain intact, and no mount option or production path is changed. The persistent
-private failure directory is retained directly instead of duplicating it under
-/var/tmp. Local refusal guards2/0 and preparation48 total/40 executed/8 skipped
-pass; native cloud confirmation remains pending.
-
-Debian12 KVM58bad30 run41152094473 completes the8-check native systemd suite,
-then fails in the private real-Core suite. Bounded diagnostics are being refined
-to identify only literal source-defined failure labels and numeric counters;
-private configurations/logs remain unexported. Fresh ARM64 KVM run41151734429
-refuses69 for missing /dev/kvm; it remains BLOCKED, with no emulation fallback.
-
-
-User scope: execute the existing release checklist except C-01 public REALITY/HY2
-client connectivity. This is acceptance work, not release/tag/version approval.
-The remote candidate is clean `374c9ad066aafc5be4cb3b4ca1f96a41efa5757a`,
-VERSION0.16.0-rc.1. Runtime files are unchanged from a814ce3/32b68df; the staged32-file
-manifest remains ebcd74c1dcaa3597112078acbf441d83ac05f104fbaa444b9d2a167dcd8798f6.
-Current/previous native asset versions and hashes are pinned in the four existing
+Latest product source: `e9e49bca976cc5804e693551374e4fab258c1f1e`, branch dev,
+VERSION0.16.0-rc.1. Product files are identical to3368820 (git diff checked).
+The32-file runtime manifest is
+`f68dac9384b48d54c2be1a853c142dbe83e5f09fef0aa64437cbf0b45e003a62`;
+the33-file runtime+installer manifest is
+`b16eb56a3c71f8f3161269bc7f40bbd4eb747f88fc8369cbfcad7cee09210320`.
+Every release-acceptance clone verifies the latter and its installed32-file
+runtime. Approved current/previous assets remain in the four existing native
 `tests/integration/{real,previous}_core_versions{,_arm64}.json` manifests:
-Xray v26.10.21/v26.9.30 and HY2 v2.13.0/v2.12.3. No floating production deployment
-or public endpoint preparation was performed.
+Xray v26.10.21/v26.9.30 and HY2 v2.13.0/v2.12.3; their architecture-specific
+sizes/hashes are verified before execution.
 
-Seven fresh Debian13 amd64/nspawn pilots were executed at374c9ad. Six PASS:
-external-ca [41072539509](https://github.com/mrshyi/pnm/actions/runs/41072539509),
-external-ca-mismatch [41072548634](https://github.com/mrshyi/pnm/actions/runs/41072548634),
-core-update [41072557241](https://github.com/mrshyi/pnm/actions/runs/41072557241),
-dependency-refusal [41072567217](https://github.com/mrshyi/pnm/actions/runs/41072567217),
-deployment-startup-failure [41072576301](https://github.com/mrshyi/pnm/actions/runs/41072576301)
-and core-update-failure [41072590352](https://github.com/mrshyi/pnm/actions/runs/41072590352).
-Restore-failure [41072599274](https://github.com/mrshyi/pnm/actions/runs/41072599274)
-is FAIL after19 ordinary checks: fixture expected exit1, actual CLI exit70.
-Source maps restore restart failure to70 and the transaction shows ROLLED_BACK;
-that does not establish all subsequent compensation assertions passed. The local
-fixture now requires70 and the corresponding diagnostic; cloud rerun is pending.
+All56 jobs in the seven fixed functional matrices below PASS. Each uses a fresh
+owned native nspawn clone, actual systemd/services/accounts and official Core
+assets. All report exit0, unchanged host account/package databases during guest
+execution, retired scopes and no remaining fixture mounts. Repeated lifecycle
+assertions are not additional unique coverage. Sources are recorded per cohort;
+these are not claims that every scenario was rerun at the latest Git HEAD.
 
-The six successful pilot scenarios were then dispatched across all eight native
-Debian12/13 and Ubuntu22/24 amd64/arm64 nspawn combinations, each in a fresh owned
-clone. Repeated lifecycle assertions are not additional unique coverage.
+| Release item / scenario | Source | Run | Result |
+|---|---|---|---|
+| U-03 external-ca | 0698707 | [41153388970](https://github.com/mrshyi/pnm/actions/runs/41153388970) | 8/8 PASS19 |
+| U-03 external-ca-mismatch | 0698707 | [41153393422](https://github.com/mrshyi/pnm/actions/runs/41153393422) | 8/8 PASS19 |
+| U-07 dependency-refusal | ff4d146 | [41152808866](https://github.com/mrshyi/pnm/actions/runs/41152808866) | 8/8 PASS39 |
+| U-07 deployment-startup-failure | ff4d146 | [41152812361](https://github.com/mrshyi/pnm/actions/runs/41152812361) | 8/8 PASS22 |
+| U-05/U-07 core-update-failure | ff4d146 | [41152805035](https://github.com/mrshyi/pnm/actions/runs/41152805035) | 8/8 PASS36 |
+| U-07 restore-failure | ff4d146 | [41152801531](https://github.com/mrshyi/pnm/actions/runs/41152801531) | 8/8 PASS22 |
+| R-02/U-02/P-01/U-04/U-06/O-01/X-01 release-acceptance | 3368820 | [41154500407](https://github.com/mrshyi/pnm/actions/runs/41154500407) | 8/8 PASS28 |
 
-| Scenario / release item | Run | Result at last observation |
+The update-failure scenario includes both Cores' distinct approved-version
+update→rollback and unchanged-peer/binary/previous/metadata checks, as well as the
+selected startup refusal and successful retry. Existing dependency/startup
+fixtures include their already-defined cases; no new fault combinations were
+added. Failure scenarios inspect their actual completed/rolled-back receipts.
+Release-acceptance uses the real installed CLI wrapper, observes diagnostics
+during the real dual→reality→hy2→dual cycle, tests external systemctl restart and
+stale-binding refusal/reconfirmation, then normal per-Core uninstall with a
+protected identifiable backup and unchanged peer. Independently trusted restore
+resets the dual baseline between the two uninstall subcases. Receipt inspection
+selects one actual receipt per state; bytes, numeric metadata and identity of all
+receipts remain unchanged. No complete URI or private credential enters artifacts.
+
+| Guest | amd64 release-acceptance job / result | arm64 release-acceptance job / result |
 |---|---|---|
-| external-ca / U-03 | [41075115906](https://github.com/mrshyi/pnm/actions/runs/41075115906) | PASS8/8,19 checks each |
-| external-ca-mismatch / U-03 | [41075136904](https://github.com/mrshyi/pnm/actions/runs/41075136904) | PASS8/8,19 checks each |
-| core-update / U-05 | [41075145210](https://github.com/mrshyi/pnm/actions/runs/41075145210) | PASS8/8,31 checks each |
-| dependency-refusal / U-07 | [41075154719](https://github.com/mrshyi/pnm/actions/runs/41075154719) | PASS6/8,38 checks; Ubuntu22 both FAIL |
-| deployment-startup-failure / U-07 | [41075162810](https://github.com/mrshyi/pnm/actions/runs/41075162810) | PASS6/8,21 checks; Ubuntu22 both FAIL |
-| core-update-failure / U-07 | [41075170367](https://github.com/mrshyi/pnm/actions/runs/41075170367) | PASS8/8,35 checks each |
+| Debian12 | 124398205944 / PASS28 | 124398205661 / PASS28 |
+| Debian13 | 124398206015 / PASS28 | 124398206037 / PASS28 |
+| Ubuntu22.04 | 124398205992 / PASS28 | 124398206115 / PASS28 |
+| Ubuntu24.04 | 124398206007 / PASS28 | 124398205906 / PASS28 |
 
-All48 jobs are completed:44 PASS and4 FAIL. Every result, including failures,
-records unchanged host account/package databases, retired scopes, no remaining
-fixture mounts and the same32-file candidate manifest. The four failed jobs are
-124129256785/124129256900 (dependency) and124129284636/124129284654 (startup).
-No cloud job remains running from this batch.
+Native KVM source e9e49bc passes all four amd64 OS jobs in
+[41154740616](https://github.com/mrshyi/pnm/actions/runs/41154740616).
+Each passes the existing8 systemd and10 real-Core/private-network checks,19
+lifecycle/Profile checks, and7 same-disk reboot checks across two separately
+approved independent kernel boots. Each QEMU process exits0 and host account/
+package databases remain unchanged. These are native kernel results; nspawn or
+service restart does not substitute for reboot.
 
-The four Ubuntu22 failures are AttributeError in the shared test recovery
-fingerprint: hashlib.file_digest requires Python3.11, whereas Ubuntu22 supplies
-Python3.10. The local helper now hashes in bounded1MiB chunks. The pre-fix function
-reproduces the missing API failure; the new regression passes on the actual
-Python3.10.12 ARM64 development host. This changes only test support, preserves
-production permissions and does not turn the failed cloud jobs into PASS.
+| Guest | Job | Result |
+|---|---|---|
+| Debian12 amd64 | 124398946755 | PASS8+10+19+7 |
+| Debian13 amd64 | 124398946677 | PASS8+10+19+7 |
+| Ubuntu22.04 amd64 | 124398946720 | PASS8+10+19+7 |
+| Ubuntu24.04 amd64 | 124398946414 | PASS8+10+19+7 |
 
-Prepared locally, **cloud validation pending**:
-- nspawn `release-acceptance`: actual install.sh/installed wrapper/source hashes/
-  version (R-02), status/resources/Profile observations and real recovery list/
-  inspect with receipt metadata and credential checks (O-01), existing external-
-  restart/runtime binding subcases (U-04), and normal per-Core uninstall with
-  protected backups and unchanged peer (X-01). A trusted restore resets the dual
-  baseline between uninstall cases; no new fault campaign is added.
-- The four selected failure scenarios additionally inspect their actual completed
-  receipts without rewriting them. Ordinary lifecycle counts are preserved.
-- KVM lifecycle reuses the existing8 systemd and10 pinned private-network Core
-  integration checks before installation, recorded separately from19+7. This is
-  the outstanding native Debian R-01 slice; nspawn is not a substitute. ARM64
-  hardware capabilities remain enforced.
+Latest repository [CI41154730250](https://github.com/mrshyi/pnm/actions/runs/41154730250)
+at e9e49bc is **8/8 PASS**. Each check/release-check reports35 suites/479 passed/
+0 failed; privileged CLI/access/TLS/transaction/Profile/recovery suites71/0,
+loopback transport8 and preparation48 total/40 executed/8 skipped pass. Ubuntu
+jobs additionally pass real systemd8, pinned Core10 and refusal/cleanup guards3.
+All Ubuntu78/Debian76 shell summaries report zero failures. Standard ShellCheck
+passes in every job; five ordinary non-root gate skips remain explicit.
+Fresh local release-check exits0:35 suites/479 passed/0 failed; standard
+ShellCheck0.8.0, syntax, security/release scans and diff checks exit0. Local
+preparation48 total/40 executed/8 explicit root-only skips and real-Core refusal/
+cleanup guards3/0 pass on UID1001 Ubuntu22 ARM64, Python3.10.12, Bash5.1.16,
+PID1 codex. Ordinary non-root gate skips remain explicit; privileged CI coverage
+and real integration are separate layers, not development-host root execution.
 
-Fresh local worktree checks: release-check exit0 (including check/security and
-release scan), ShellCheck0.8.0 exit0, preparation47 total/39 executed/8 explicit
-root-only skips, Python3.10 syntax and diff checks exit0. L1 ran as UID1001 on
-Ubuntu22 ARM64, PID1 codex, with private temporary fixtures; no host integration,
-installation, account/service work, mount or reboot occurred. Production files,
-VERSION and CLI interfaces are unchanged. The user explicitly authorized commit/
-push and continuing the remaining cloud acceptance on2026-10-30; the new workflow
-choices must be published before Actions can execute them.
+This execution fixed two reproduced production defects with focused regressions:
+- ff4d146: restore unit verification depended on removed live binaries. It now
+  checks private aliases to staged binaries without publishing candidate units.
+  Old-code regression fails; service suite5/0 passes, including non-executable
+  candidates and staging-path metacharacters. Real restore after uninstall passes.
+- 3368820: older is-enabled reports missing units only on stderr. Absence is now
+  recognized only after a successful LoadState=not-found observation. Failed,
+  unknown or misleading failed queries still refuse. Old-code regression fails;
+  lifecycle suite10/0 and all eight post-uninstall restores pass.
 
-Remaining finite work: run Debian13 amd64 release-
-acceptance and repaired restore pilots, then their eight-combination nspawn
-matrices; repeat the repaired Ubuntu22 failure cases with O-01 receipts; execute
-Debian12/13 amd64 KVM native integration plus real reboot; inspect actual exits,
-skips and cleanup before closure. ARM64 KVM remains BLOCKED by absent /dev/kvm.
-C-01 is explicitly excluded, not PASS. No formal-release decision is justified yet.
+Applicability of earlier cohorts: ff4d146/0698707 product manifest is
+f8217a9da3a13ec7470c0cb0eb81b1945d1b19f867342d0f158bbe06541346ff.
+The only product change after those cohorts is the absent-unit adapter branch;
+successful and recognized enabled/disabled queries used by those installed-Core
+TLS/update/compensation checks are unchanged. The new branch is exercised by
+latest eight-way uninstall/restore, the focused failed-query tests and current
+repository gates. 3368820→e9e49bc changes test support only. Old failures remain
+FAIL at their sources, not silently relabeled: examples are release pilot
+41151660288 (78) before ff4d146, and41153384903 (69) before3368820.
 
-### Current bounded execution evidence
+Test-only repairs also align restore failure expectation with the existing70
+exit, replace Python3.11-only file_digest with bounded hashing for Python3.10,
+and move the owned native Core fixture off noexec /run onto /opt. Its cleanup
+still requires the exact parent/prefix/owner/device/inode; the added regression
+rejects identity drift. Fixed functional assertions never waived cleanup failure.
+Temporary diagnostic runs, known-failing older sources and cancelled superseded
+workflows are not counted as passes. Private logs/images/keys remain ephemeral.
+
+Remaining finite limitations:
+- ARM64 kernel reboot remains BLOCKED: fresh
+  [41151734429](https://github.com/mrshyi/pnm/actions/runs/41151734429), job124389577853,
+  refuses69 because the authorized hosted ARM64 runner lacks /dev/kvm. This also
+  leaves Debian12/13 ARM64's separate native root/systemd/Core layer pending;
+  their nspawn passes are not promoted to native-kernel passes. Ubuntu ARM64's
+  existing native runner suites are reported by CI separately from VM reboot.
+- C-01 public dual-protocol clients are explicitly excluded by user instruction,
+  not PASS. Public ports/firewalls/production nodes were not modified.
+- Release type/version/tag/publication and repository security-reporting settings
+  still require the release process/owner decision. No release has been published.
+
+This bounded execution is complete for the available authorized environments.
+No further features, Profiles expansion or fault campaigns are planned within
+this task. Suitable authorized native ARM64 KVM hardware and the separately
+requested public-client acceptance are the remaining test inputs. This final
+status update changes documentation only; it does not alter the verified product
+snapshot. The documentation-only record commit intentionally skips redundant CI;
+CI41154730250 remains the latest executed eight-way gate at the exact code
+baseline above, not a claim of a new execution for this record commit.
+
+### Earlier bounded execution evidence (a814ce3)
 
 Current runtime/harness source `a814ce3e9f7e1ad6bc735342c6df00f648a7f4b0`
 passes all nine jobs in

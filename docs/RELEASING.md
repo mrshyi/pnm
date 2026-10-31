@@ -22,15 +22,16 @@ Debian 与 Ubuntu 使用相同部署流程、通过条件和停止规则，覆�
 
 | 目标 | 当前证据 | 发布前安排 |
 |---|---|---|
-| Ubuntu22.04 amd64 / arm64 | 两架构 CI、临时 systemd 和真实 Core 检查通过 | 各完成下面同一套有限功能验收 |
-| Ubuntu24.04 amd64 / arm64 | 两架构 CI、临时 systemd 和真实 Core 检查通过 | 各完成下面同一套有限功能验收 |
-| Debian12 amd64 / arm64 | 原生容器用户态及权限检查通过 | 各完成下面同一套有限功能验收；管理服务层已有八组合记录；另行执行原生 systemd/Core 集成套件 |
-| Debian13 amd64 / arm64 | 原生容器用户态及权限检查通过 | 各完成下面同一套有限功能验收；管理服务层已有八组合记录；另行执行原生 systemd/Core 集成套件 |
+| Ubuntu22.04 amd64 / arm64 | 两架构管理主流程/CLI/Profiles/诊断/卸载通过；amd64 原生集成及真实重启通过 | ARM64 真实重启受 KVM 硬件阻塞；具体源码/门禁见 TASKS |
+| Ubuntu24.04 amd64 / arm64 | 两架构管理主流程/CLI/Profiles/诊断/卸载通过；amd64 原生集成及真实重启通过 | ARM64 真实重启受 KVM 硬件阻塞；具体源码/门禁见 TASKS |
+| Debian12 amd64 / arm64 | 两架构管理主流程通过；amd64 原生 systemd/Core 及真实重启通过 | ARM64 原生 Debian/Core 层及真实重启受 KVM 硬件阻塞 |
+| Debian13 amd64 / arm64 | 两架构管理主流程通过；amd64 原生 systemd/Core 及真实重启通过 | ARM64 原生 Debian/Core 层及真实重启受 KVM 硬件阻塞 |
 
 自动准备入口见 [guest mainflow](../tests/integration/GUEST_MAINFLOW.md#automated-disposable-ci-preparation)：
 独立 CI 从官方镜像生成模板，经实际 boot-only 核验后运行现有场景。八组合
-lifecycle/Profile 及四个 amd64 同盘 KVM 重启已有指定源码的通过记录；剩余场景
-仍逐项验收，不据此勾选整份清单。实际 CI 结果
+管理主流程、Profiles、安装/卸载、TLS 和既定补偿场景已有指定源码的通过记录；
+四个 amd64 KVM 的原生集成及同盘重启通过。ARM64 原生 Debian/重启和公网双协议
+仍须独立收口，不据此勾选整份清单。实际 CI 结果
 和失败原因仍须记入 TASKS，不再要求先人工提交旧私有模板才能开展该试跑。
 
 ## 2. 执行清单
