@@ -284,6 +284,11 @@ bytes and permissions are not normalized or changed. Shared lock bookkeeping is
 the only write associated with the diagnostic command. Firewall policy remains
 operator-managed; there is no firewall rule producer or ownership-adoption path.
 
+For missing units, older systemctl versions may return an error with empty
+is-enabled stdout. The adapter reports not-found only after an independently
+successful LoadState=not-found observation; failed or unknown observations remain
+failures. This permits trusted restore after normal uninstall on those versions.
+
 Restore's systemd unit verification uses private executable aliases to the staged
 candidate binaries. It checks their actual executable permissions without requiring
 a previously installed Core to exist. Only temporary verification copies of the

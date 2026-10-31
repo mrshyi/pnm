@@ -83,6 +83,13 @@ pnm_systemd_enabled_state() {
     fi
 
     case "$output" in
+        '')
+            # Older systemctl emits a missing-unit error only on stderr.
+            output="$(pnm_systemd_load_state "$unit")" || return 1
+            [[ "$output" == not-found ]] || return 1
+            printf 'not-found\n'
+            return 0
+            ;;
         disabled | static | indirect | masked | generated | transient | not-found)
             printf '%s\n' "$output"
             return 0

@@ -37,6 +37,16 @@ canonical/archive units remain unchanged. The regression fails against prior
 code and passes5/0 with the fix, including absent/non-executable candidates and
 staging path metacharacters. Cloud confirmation is pending.
 
+Release-acceptance0698707 on Debian12 amd64 (job124394738405) passes the first
+27 checks, then trusted restore returns69 at service baseline inspection. Older
+systemctl is-enabled returns nonzero with empty stdout for a missing unit; the
+local systemctl249 offline query reproduces this exact shape. The adapter now
+confirms absence with a successful LoadState=not-found query before reporting
+not-found. Unknown state and failed queries, including a failed query emitting
+matching stdout, still refuse. The new lifecycle regression fails with the prior
+adapter and passes10/0 with the fix. Full local release-check and cloud retests
+remain pending for this last production change.
+
 Follow-up at ff4d146: Debian13 release-acceptance41152797809 passes all28
 checks, including both normal uninstalls and the trusted reset restore. Its33-file
 manifest (runtime plus installer) is a12b5e6d50c2f78304acfd5106ecb5f9dacf52be599ddd55461d34b979c6f908.

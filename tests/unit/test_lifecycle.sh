@@ -253,6 +253,19 @@ test_verified_stop_normalizes_only_observed_failure() (
     done
 )
 
+test_empty_enabled_output_requires_observed_absence() (
+    local load=not-found query_rc=0
+    pnm_systemd_available() { return 0; }
+    pnm_systemctl() { [[ "$1" == is-enabled ]] && return 1; return 77; }
+    pnm_systemd_load_state() { printf '%s\n' "$load"; return "$query_rc"; }
+    assert_eq not-found "$(pnm_systemd_enabled_state pnm-absent.service)" || return 1
+    for load in loaded unknown ''; do
+        if pnm_systemd_enabled_state pnm-absent.service; then return 1; fi
+    done
+    load=not-found query_rc=1
+    if pnm_systemd_enabled_state pnm-absent.service; then return 1; fi
+)
+
 run_test 'verified stop normalizes failed state and rejects ineffective or failed controls' test_verified_stop_normalizes_only_observed_failure
 run_test 'lifecycle recovery rejects successful controls without effect' test_recovery_rejects_successful_controls_without_effect
 run_test 'lifecycle recovery accepts all exact supported policies' test_recovery_observes_exact_supported_policy_pairs
@@ -262,4 +275,5 @@ run_test 'ineffective lifecycle compensation retains recovery-required' test_ine
 run_test 'Core lifecycle commits independently after health validation' test_lifecycle_success_is_independent
 run_test 'Core lifecycle failure compensates the same Core only' test_lifecycle_failure_restores_previous_state
 run_test 'Core lifecycle dry-run does not mutate systemd state' test_lifecycle_dry_run_does_not_mutate
+run_test 'empty is-enabled output is absent only with a successful not-found observation' test_empty_enabled_output_requires_observed_absence
 finish_tests
