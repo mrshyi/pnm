@@ -18,6 +18,62 @@ Earlier records below remain specific to their own sources and execution layers.
 
 ## Continuation checkpoint
 
+### ARM64 KVM host alignment follow-up (2026-10-30)
+
+User requested parity with amd64: all four ARM64 guest OS releases must pass
+native systemd8, real-Core/private-network10, lifecycle/Profile19 and same-disk
+reboot7 on an actual KVM target. **This goal remains BLOCKED; no ARM64 KVM guest
+acceptance executed in this increment.** Earlier ARM64 nspawn/native-Ubuntu CI
+passes are not reclassified as independent-kernel ARM64 KVM passes.
+
+Workflow92a28c2 adds a closed official host-image choice (`arm64_runner`:
+ubuntu-24.04-arm/default or ubuntu-26.04-arm). Managed targets remain the existing
+four releases. Workflow4d03c54 ensures kmod/udev, attempts the installed native
+KVM module, and triggers only the exact kernel-registered KVM device event when
+sysfs exposes it. Actual device/API/VM-creation, native architecture, disposable
+GitHub-hosted environment and two-boot identity guards remain required. No fake
+device, software accelerator, foreign assets or forged environment marker is used.
+
+Both final fresh probes fail at the host prerequisite, exit69, before guest
+preparation/PNM installation. Both report aarch64, kernel7.0.0-1017-azure and
+`Kernel has not registered a KVM device`, even after explicit kmod/udev setup:
+
+| Official host image | Run / job | Result |
+|---|---|---|
+| ubuntu-24.04-arm | [41162606067](https://github.com/mrshyi/pnm/actions/runs/41162606067) / 124423236490 | BLOCKED69, no kernel KVM device |
+| ubuntu-26.04-arm | [41162610095](https://github.com/mrshyi/pnm/actions/runs/41162610095) / 124423248480 | BLOCKED69, no kernel KVM device |
+
+Earlier same-task device probes41161748535,41162154403 and41162157584 also
+refuse69; changing the host image does not establish different hardware support.
+The repo runner API returns0 self-hosted runners. The development sandbox is
+UID1001/aarch64/PID1 codex; an elevated **read-only** check reaches the actual
+UID1001/aarch64/systemd host, but /dev/kvm and the kernel sysfs KVM registration
+are absent there too. Neither execution environment has a configured cloud CLI/
+account profile or SSH target alias for an authorized disposable KVM controller.
+The development host was not installed, rebooted or used for managed integration.
+
+Verification of the entry-point change: workflow schema/host allowlist, Bash
+syntax, targeted ShellCheck0.8.0 and release scan pass; preparation48 total/
+40 executed/8 root-only skips pass. Product files/VERSION are unchanged from the
+verified e9e49bc snapshot below. [CI41162147321](https://github.com/mrshyi/pnm/actions/runs/41162147321)
+at92a28c2 passes8/8, and default [managed41162147274](https://github.com/mrshyi/pnm/actions/runs/41162147274)
+passes9/9 (eight nspawn lifecycle jobs plus Debian13 **amd64** native KVM).
+4d03c54 changes only host preparation; its two exact workflow-dispatch probes
+above test the new preparation path. The unchanged product matrix was not
+repeated for that commit.
+
+Required next input: an authorized dedicated ARM64 KVM runner/SSH target with
+actual KVM API and VM creation access, or a cloud-account connection plus region
+and spending limit for provisioning such a disposable target. No paid resources
+or repository runner registration were created. Self-hosted access must receive
+an explicit admission path appropriate to that actual target; it must not claim
+to be GitHub-hosted. After successful host admission, run the existing lifecycle
+KVM matrix for Debian12/13 and Ubuntu22/24 arm64, recording exact exits, native
+suite counts, two independent boot proofs and cleanup. Public dual protocols
+remain excluded by the previous scope. No additional functional feature or
+arbitrary fault expansion is authorized by this environment task.
+
+
 ### Non-public release acceptance closeout (2026-10-30)
 
 Scope: the user authorized commit/push and the remaining finite release acceptance,
