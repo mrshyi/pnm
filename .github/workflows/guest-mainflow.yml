@@ -70,10 +70,20 @@ jobs:
           sudo apt-get install --yes systemd-container python3 jq curl unzip
           if [[ "$PNM_CI_BACKEND" == qemu ]]; then
               [[ "$PNM_CI_SCENARIO" == lifecycle ]] || { echo "VM pilot currently accepts lifecycle only"; exit 64; }
+              sudo apt-get install --yes --no-install-recommends kmod udev
               uname -m
               uname -r
-              if [[ ! -c /dev/kvm ]] && command -v modprobe >/dev/null; then
+              if [[ ! -c /dev/kvm ]]; then
                   if ! sudo modprobe kvm; then echo 'KVM module could not be enabled on this runner'; fi
+                  if [[ -r /sys/class/misc/kvm/dev ]]; then
+                      echo 'Kernel registered a KVM device'
+                      if ! sudo udevadm trigger --action=add --subsystem-match=misc --sysname-match=kvm; then
+                          echo 'KVM device event could not be processed'
+                      fi
+                      if ! sudo udevadm settle --timeout=10; then echo 'KVM device event did not settle'; fi
+                  else
+                      echo 'Kernel has not registered a KVM device'
+                  fi
               fi
               [[ -c /dev/kvm ]] || { echo 'KVM unavailable: independent reboot remains unverified'; exit 69; }
               if [[ "$PNM_CI_ARCH" == amd64 ]]; then packages=(qemu-system-x86 seabios); else packages=(qemu-system-arm); fi

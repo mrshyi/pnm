@@ -18,9 +18,10 @@ availability and job success must be checked in GitHub, not inferred from YAML.
 Manual ARM64 runs can select the official GitHub-hosted `ubuntu-24.04-arm` or
 `ubuntu-26.04-arm` host image with `arm64_runner`; the managed guest remains one
 of the existing four Debian/Ubuntu releases. Automatic runs retain the24.04
-host default. KVM preparation attempts the installed native `kvm` module only
-when the device is missing, then still requires the actual device and controller
-KVM API/VM-creation checks. No device is fabricated, no TCG/foreign execution is
+host default. KVM preparation installs kmod/udev on the disposable host and attempts the native
+`kvm` module only when the device is missing. A targeted udev event is sent only
+if sysfs already reports the kernel-registered KVM device. It still requires the
+actual device and controller KVM API/VM-creation checks. No device is fabricated, no TCG/foreign execution is
 accepted, and a different host image alone is not acceptance. A self-hosted label
 is not accepted by this input or by the existing disposable-runner guards.
 
