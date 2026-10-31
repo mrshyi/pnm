@@ -15,8 +15,8 @@ deployment-startup-failure, core-update-failure, restore-failure, runtime-eviden
 and release-acceptance. Dispatch
 availability and job success must be checked in GitHub, not inferred from YAML.
 
-Manual ARM64 runs can select the official GitHub-hosted `ubuntu-24.04-arm` or
-`ubuntu-26.04-arm` host image with `arm64_runner`; the managed guest remains one
+Manual ARM64 runs can select the official GitHub-hosted `ubuntu-22.04-arm`,
+`ubuntu-24.04-arm` or `ubuntu-26.04-arm` host image with `arm64_runner`; the managed guest remains one
 of the existing four Debian/Ubuntu releases. Automatic runs retain the24.04
 host default. KVM preparation installs kmod/udev on the disposable host and attempts the native
 `kvm` module only when the device is missing. A targeted udev event is sent only

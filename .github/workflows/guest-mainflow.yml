@@ -25,7 +25,7 @@ on:
       arm64_runner:
         description: GitHub-hosted ARM64 host image (managed guest OS is selected above)
         type: choice
-        options: [ubuntu-24.04-arm, ubuntu-26.04-arm]
+        options: [ubuntu-22.04-arm, ubuntu-24.04-arm, ubuntu-26.04-arm]
         default: ubuntu-24.04-arm
       backend:
         description: Isolated systemd or independent KVM reboot
