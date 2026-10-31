@@ -22,6 +22,11 @@ on:
         type: choice
         options: [all, amd64, arm64]
         default: all
+      arm64_runner:
+        description: GitHub-hosted ARM64 host image (managed guest OS is selected above)
+        type: choice
+        options: [ubuntu-24.04-arm, ubuntu-26.04-arm]
+        default: ubuntu-24.04-arm
       backend:
         description: Isolated systemd or independent KVM reboot
         type: choice
@@ -46,7 +51,7 @@ jobs:
         backend: ${{ fromJSON(format('["{0}"]', inputs.backend || 'nspawn')) }}
         include: ${{ inputs.backend && fromJSON('[]') || fromJSON('[{"os":"debian13","arch":"amd64","backend":"qemu"}]') }}
         arch: ${{ inputs.arch && inputs.arch != 'all' && fromJSON(format('["{0}"]', inputs.arch)) || fromJSON('["amd64","arm64"]') }}
-    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    runs-on: ${{ matrix.arch == 'arm64' && (inputs.arm64_runner || 'ubuntu-24.04-arm') || 'ubuntu-24.04' }}
     timeout-minutes: 45
     env:
       PNM_CI_OS: ${{ matrix.os }}
@@ -65,6 +70,11 @@ jobs:
           sudo apt-get install --yes systemd-container python3 jq curl unzip
           if [[ "$PNM_CI_BACKEND" == qemu ]]; then
               [[ "$PNM_CI_SCENARIO" == lifecycle ]] || { echo "VM pilot currently accepts lifecycle only"; exit 64; }
+              uname -m
+              uname -r
+              if [[ ! -c /dev/kvm ]] && command -v modprobe >/dev/null; then
+                  if ! sudo modprobe kvm; then echo 'KVM module could not be enabled on this runner'; fi
+              fi
               [[ -c /dev/kvm ]] || { echo 'KVM unavailable: independent reboot remains unverified'; exit 69; }
               if [[ "$PNM_CI_ARCH" == amd64 ]]; then packages=(qemu-system-x86 seabios); else packages=(qemu-system-arm); fi
               sudo apt-get install --yes --no-install-recommends "${packages[@]}" e2fsprogs
