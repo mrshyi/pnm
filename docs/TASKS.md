@@ -37,6 +37,23 @@ canonical/archive units remain unchanged. The regression fails against prior
 code and passes5/0 with the fix, including absent/non-executable candidates and
 staging path metacharacters. Cloud confirmation is pending.
 
+Follow-up at ff4d146: Debian13 release-acceptance41152797809 passes all28
+checks, including both normal uninstalls and the trusted reset restore. Its33-file
+manifest (runtime plus installer) is a12b5e6d50c2f78304acfd5106ecb5f9dacf52be599ddd55461d34b979c6f908.
+Local release-check completes35 suites/478 passed/0 failed. Source0698707 changes
+only test support, bounds inspect to one actual receipt per observed state and
+preserves all diagnostic read-only/credential assertions. Four U-07 eight-way
+runs at ff4d146 and release/TLS eight-way runs at0698707 remain in execution.
+
+Debian12 KVM0698707 run41153379843 pinpoints the native-suite failure: Xray version
+query exit126, noexec=true, permission_denied=true. The fixture executed from
+/run, which the native Debian guest mounts noexec. The test-only correction moves
+its owned directory to /opt; PrivateTmp/network/UID/capability/cleanup guards
+remain intact, and no mount option or production path is changed. The persistent
+private failure directory is retained directly instead of duplicating it under
+/var/tmp. Local refusal guards2/0 and preparation48 total/40 executed/8 skipped
+pass; native cloud confirmation remains pending.
+
 Debian12 KVM58bad30 run41152094473 completes the8-check native systemd suite,
 then fails in the private real-Core suite. Bounded diagnostics are being refined
 to identify only literal source-defined failure labels and numeric counters;

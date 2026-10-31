@@ -15,7 +15,6 @@ import signal
 import stat
 import subprocess
 import sys
-import tempfile
 import time
 import uuid
 from urllib.parse import parse_qs, quote, unquote, urlencode, urlsplit
@@ -90,8 +89,8 @@ class Harness:
         account = pwd.getpwnam("nobody")
         require(account.pw_uid > 0 and account.pw_gid > 0, "nobody must be unprivileged")
         self.uid, self.gid = account.pw_uid, account.pw_gid
-        # PrivateTmp hides /tmp and /var/tmp inside the units; /run stays visible.
-        self.root = Path("/run") / ("pnm-realcore." + uuid.uuid4().hex)
+        # PrivateTmp hides /tmp and /var/tmp; /opt stays visible and /run may be noexec.
+        self.root = Path("/opt") / ("pnm-realcore." + uuid.uuid4().hex)
         self.identity: tuple[int, int] | None = None
         self.prefix = "pnm-realcore-" + str(uuid.uuid4())
         self.units: dict[str, str] = {}
@@ -431,13 +430,7 @@ class Harness:
             shutil.rmtree(self.root)
         else:
             self.root.chmod(0o700)
-            # /run is volatile on WSL shutdown. Retain logs/config privately on
-            # disk as well; verified public binaries already live in the cache.
-            evidence = Path(tempfile.mkdtemp(prefix="pnm-realcore-failed.", dir="/var/tmp"))
-            shutil.copytree(self.root, evidence, dirs_exist_ok=True, symlinks=True,
-                            ignore=shutil.ignore_patterns("bin"))
-            evidence.chmod(0o700)
-            print(f"# private evidence retained={evidence}", file=sys.stderr)
+            print(f"# private evidence retained={self.root}", file=sys.stderr)
         return okay
 
 
