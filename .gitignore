@@ -1,0 +1,10 @@
+*.log
+/.test-tmp/
+/dist/
+/build/
+__pycache__/
+*.pyc
+*.pnm-backup
+*.pnm-backup.tar
+*.pnm-backup.tar.gz
+*.tar.gz

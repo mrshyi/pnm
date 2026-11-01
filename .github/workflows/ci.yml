@@ -1,0 +1,206 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, ubuntu-24.04, ubuntu-22.04-arm, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes make ripgrep shellcheck python3 jq openssl curl zip unzip tar util-linux iproute2 systemd
+
+      - name: Record platform and tool versions
+        run: |
+          cat /etc/os-release
+          uname -m
+          source adapters/platform-linux.sh
+          PNM_OS_RELEASE_FILE=/etc/os-release pnm_platform_supported
+          bash --version | head -n 1
+          python3 --version
+          openssl version
+          curl --version | head -n 1
+          systemd-analyze --version | head -n 1
+
+      - name: Run test and security checks
+        run: make check
+
+      - name: Run ShellCheck
+        run: make shellcheck
+
+      - name: Run main-flow preparation checks without deployment
+        run: python3 -B tests/integration/test_guest_mainflow_guard.py
+
+      - name: Run privileged CLI access and recovery checks
+        run: |
+          sudo bash tests/unit/test_cli.sh
+          sudo bash tests/unit/test_read_access.sh
+          sudo bash tests/unit/test_tls_access.sh
+          sudo bash tests/unit/test_transaction.sh
+          sudo bash tests/unit/test_profile.sh
+          sudo bash tests/unit/test_recovery.sh
+
+      - name: Run loopback asset acquisition checks
+        run: make test-asset-network
+
+      - name: Run release checks
+        run: make release-check
+
+      - name: Run isolated systemd lifecycle checks
+        run: sudo make test-systemd
+
+      - name: Run pinned real-Core checks in private namespaces
+        run: |
+          sudo bash -Eeuo pipefail <<'BASH'
+          umask 077
+          source lib/common.sh
+          source lib/config.sh
+          source adapters/assets.sh
+          cache="$(mktemp -d /tmp/pnm-ci-assets.XXXXXXXX)"
+          trap 'rm -rf -- "$cache"' EXIT
+          case "$(uname -m)" in
+              x86_64) manifest=tests/integration/real_core_versions.json ;;
+              aarch64) manifest=tests/integration/real_core_versions_arm64.json ;;
+              *) exit 78 ;;
+          esac
+          for core in xray hysteria2; do
+              version="$(jq -er --arg core "$core" '.[$core].version' "$manifest")"
+              hash="$(jq -er --arg core "$core" '.[$core].sha256' "$manifest")"
+              case "$core" in
+                  xray) filename=xray.zip ;;
+                  hysteria2) filename=hysteria ;;
+              esac
+              pnm_asset_download_verified "$core" "$version" "$hash" "$cache/$filename"
+          done
+          PNM_REAL_CORE_ASSETS="$cache" make test-real-cores
+          BASH
+
+  debian-checks:
+    name: Debian ${{ matrix.debian }} container (${{ matrix.runner }}) checks
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        debian: ['12', '13']
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    container:
+      image: debian:${{ matrix.debian }}-slim
+    defaults:
+      run:
+        shell: bash
+    env:
+      PNM_CI_DEBIAN_RELEASE: ${{ matrix.debian }}
+      PNM_CI_MACHINE: ${{ matrix.runner == 'ubuntu-24.04-arm' && 'aarch64' || 'x86_64' }}
+    steps:
+      - name: Install container test dependencies
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends \
+            bash git ca-certificates make ripgrep shellcheck python3 jq openssl curl \
+            zip unzip tar util-linux iproute2 systemd passwd
+
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Record Debian identity and tool versions
+        run: |
+          cat /etc/os-release
+          uname -m
+          id
+          printf 'PID 1: '
+          cat /proc/1/comm
+          export PNM_OS_RELEASE_FILE=/etc/os-release
+          source adapters/platform-linux.sh
+          [[ "$(uname -m)" == "$PNM_CI_MACHINE" ]]
+          [[ "$(pnm_platform_id)" == debian ]]
+          [[ "$(pnm_platform_version_id)" == "$PNM_CI_DEBIAN_RELEASE" ]]
+          pnm_platform_supported
+          git -c safe.directory="$GITHUB_WORKSPACE" rev-parse HEAD
+          bash --version | head -n 1
+          python3 --version
+          openssl version
+          curl --version | head -n 1
+          systemd-analyze --version | head -n 1
+          shellcheck --version
+          id nobody
+
+      - name: Prepare private non-root source copy
+        run: |
+          umask 077
+          pnm_ci_source="$(mktemp -d /tmp/pnm-debian-ci.XXXXXXXX)"
+          tar --exclude=.git -cf - . | tar -xf - -C "$pnm_ci_source"
+          chown -R "$(id -u nobody):$(id -g nobody)" "$pnm_ci_source"
+          printf 'PNM_DEBIAN_SOURCE=%s\n' "$pnm_ci_source" >> "$GITHUB_ENV"
+
+      - name: Run non-root test and security checks
+        run: |
+          cd -- "$PNM_DEBIAN_SOURCE"
+          runuser -u nobody -- bash -e -o pipefail -c '
+            umask 077
+            make check
+          '
+
+      - name: Run non-root ShellCheck
+        run: |
+          cd -- "$PNM_DEBIAN_SOURCE"
+          runuser -u nobody -- bash -e -o pipefail -c '
+            umask 077
+            make shellcheck
+          '
+
+      - name: Run non-root main-flow preparation without deployment
+        run: |
+          cd -- "$PNM_DEBIAN_SOURCE"
+          runuser -u nobody -- bash -e -o pipefail -c '
+            umask 077
+            python3 -B tests/integration/test_guest_mainflow_guard.py
+          '
+
+      - name: Run non-root loopback asset acquisition checks
+        run: |
+          cd -- "$PNM_DEBIAN_SOURCE"
+          runuser -u nobody -- bash -e -o pipefail -c '
+            umask 077
+            make test-asset-network
+          '
+
+      - name: Run non-root release checks
+        run: |
+          cd -- "$PNM_DEBIAN_SOURCE"
+          runuser -u nobody -- bash -e -o pipefail -c '
+            umask 077
+            make release-check
+          '
+
+      - name: Run privileged container access and recovery checks
+        run: |
+          umask 077
+          bash tests/unit/test_cli.sh
+          bash tests/unit/test_read_access.sh
+          bash tests/unit/test_tls_access.sh
+          bash tests/unit/test_transaction.sh
+          bash tests/unit/test_profile.sh
+          bash tests/unit/test_recovery.sh
+
+      - name: Record container acceptance boundary
+        run: |
+          printf '%s\n' \
+            'Debian container gates do not establish systemd PID 1, managed installation or reboot acceptance.' \
+            'Real service/Core namespace and VM acceptance remain separate opt-in checks.'
